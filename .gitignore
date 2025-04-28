@@ -1,0 +1,34 @@
+# --- Operating System Files ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# --- IDEs/Editors ---
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.cproject
+.settings/
+
+# --- Temporary Files ---
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# --- Environment Variables ---
+# Ignore all .env files by default
+.env
+.env.*
+# BUT, allow example/template files to be committed
+!.env.example
+!.env.template
+
+# --- Secrets / Credentials (Should ideally never be added, but good to ignore) ---
+*.pem
+*.key
+credentials.*
+secrets.*
