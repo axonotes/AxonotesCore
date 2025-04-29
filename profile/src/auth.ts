@@ -8,6 +8,18 @@ export const {handle, signIn, signOut} = SvelteKitAuth({
     providers: [GitHub, Google],
     session: {strategy: "jwt"},
     secret: AUTH_SECRET,
+    cookies: {
+        sessionToken: {
+            name: `authjs.session-token`,
+            options: {
+                httpOnly: true,
+                sameSite: "lax",
+                path: "/",
+                secure: !inDev(),
+                domain: inDev() ? undefined : ".athena-learning.ch",
+            }
+        }
+    },
     callbacks: {
         async jwt({token, account, profile}) {
             devLog("token: ", token);

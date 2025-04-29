@@ -5,6 +5,7 @@
     import {Button} from "$lib/components/ui/button/index.js";
     import {devLog} from "$lib/utils";
     import {onMount} from "svelte";
+    import {getSpacetimeJWT} from "$lib/auth/spacetime";
 
     async function connectToSpaceTimeDB(jwt: string | null) {
         if (!jwt) {
@@ -12,7 +13,7 @@
             return;
         }
 
-        devLog("Attempting to connect to SpaceTimeDB with JWT: ");
+        devLog("Attempting to connect to SpaceTimeDB");
 
         try {
 
@@ -22,7 +23,14 @@
     }
 
     onMount(async () => {
-        await connectToSpaceTimeDB(page.data.jwt);
+        const {token, error} = await getSpacetimeJWT();
+
+        if (error) {
+            devLog("Error getting JWT: ", error);
+            return;
+        }
+
+        await connectToSpaceTimeDB(token);
     })
 </script>
 
