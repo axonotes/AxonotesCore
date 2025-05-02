@@ -14,7 +14,7 @@ export function inDev() {
 	return PUBLIC_ENVIRONMENT === "dev";
 }
 
-export function devLog(...args: any[]) {
+export function devLog(...args: unknown[]) {
 	if (inDev() && console.log) {
 		console.log(...args);
 	}
