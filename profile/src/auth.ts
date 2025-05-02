@@ -41,7 +41,7 @@ export const {handle, signIn, signOut} = SvelteKitAuth({
             return token;
         },
         async session({session, token}) {
-            if (token && token.sub && token.email && token.accessToken) {
+            if (token && token.sub && token.email) {
                 session.user.id = token.sub;
                 session.user.email = token.email;
                 session.user.image = token.picture;
