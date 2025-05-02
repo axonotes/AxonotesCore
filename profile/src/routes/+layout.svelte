@@ -1,6 +1,12 @@
 <script lang="ts">
 	import '../app.css';
-	let { children } = $props();
+    import {ModeWatcher} from "mode-watcher";
+    import LightSwitch from "$lib/components/ui/lightswitch/LightSwitch.svelte";
+
+    let { children } = $props();
 </script>
 
-{@render children()}
+<ModeWatcher/>
+<div class="absolute top-0 left-0 w-screen h-screen overflow-hidden">
+    {@render children()}
+</div>

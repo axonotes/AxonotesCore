@@ -45,6 +45,8 @@
 	},
 	"dependencies": {
 		"@auth/sveltekit": "^1.9.1",
-		"jsonwebtoken": "^9.0.2"
+		"@lucide/svelte": "^0.507.0",
+		"jsonwebtoken": "^9.0.2",
+		"mode-watcher": "0.5.1"
 	}
 }
