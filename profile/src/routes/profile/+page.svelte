@@ -1,10 +1,12 @@
 <script>
-import {page} from "$app/state";
-import LightSwitch from "$lib/components/ui/lightswitch/LightSwitch.svelte";
+    import {page} from "$app/state";
+    import LightSwitch from "$lib/components/ui/lightswitch/LightSwitch.svelte";
+    import {SignOut} from "@auth/sveltekit/components";
+    import {Button} from "$lib/components/ui/button/index.js";
 
-$: username = page.data.session?.user?.name;
-$: email = page.data.session?.user?.email;
-$: pfp = page.data.session?.user?.image;
+    $: username = page.data.session?.user?.name;
+    $: email = page.data.session?.user?.email;
+    $: pfp = page.data.session?.user?.image;
 </script>
 
 <div class="w-full h-full grid grid-cols-[auto_1fr]">
@@ -15,8 +17,11 @@ $: pfp = page.data.session?.user?.image;
 
             <!-- TODO: Add settings for profile (spacetime is needed for that) -->
         </div>
-        <div class="p-2">
+        <div class="p-2 flex flex-row items-center justify-between pr-4">
             <LightSwitch/>
+            <Button variant="secondary" class="h-8">
+                <SignOut/>
+            </Button>
         </div>
     </div>
 

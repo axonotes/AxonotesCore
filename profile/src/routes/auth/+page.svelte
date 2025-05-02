@@ -2,16 +2,7 @@
     import * as Card from "$lib/components/ui/card/index";
     import {Button} from "$lib/components/ui/button";
     import {SignIn} from "@auth/sveltekit/components";
-    import {onMount} from "svelte";
-    import {page} from "$app/state";
-    import {goto} from "$app/navigation";
     import LightSwitch from "$lib/components/ui/lightswitch/LightSwitch.svelte";
-
-    onMount(() => {
-        if (page.data.session) {
-            goto("/profile")
-        }
-    })
 </script>
 
 <div class="w-full h-full grid items-center">
