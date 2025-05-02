@@ -1,8 +1,8 @@
-use spacetimedb::{ReducerContext, Table};
+use spacetimedb::{Deserialize, Identity, ReducerContext, Serialize, Table, Timestamp};
 
 #[spacetimedb::table(name = person)]
 pub struct Person {
-    name: String
+    name: String,
 }
 
 #[spacetimedb::reducer(init)]
@@ -31,4 +31,18 @@ pub fn say_hello(ctx: &ReducerContext) {
         log::info!("Hello, {}!", person.name);
     }
     log::info!("Hello, World!");
+}
+
+#[derive(Table, Serialize, Deserialize)]
+pub struct User {
+    #[primarykey]
+    pub user_id: u64,
+    #[unique]
+    pub username: String,
+    #[unique]
+    pub email: String,
+    pub role: String, //this should be changed to an enum or fk to a different "Role" table
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    pub profile_picture_url: Option<String>,
 }
