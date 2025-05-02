@@ -8,8 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function inDev() {
 	if (PUBLIC_ENVIRONMENT !== "dev" && PUBLIC_ENVIRONMENT !== "prod") {
-		console.warn("Environment is not set to dev or prod");
-		return;
+		throw new Error("PUBLIC_ENVIRONMENT must be either 'dev' or 'prod'");
 	}
 
 	return PUBLIC_ENVIRONMENT === "dev";
