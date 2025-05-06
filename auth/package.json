@@ -46,6 +46,7 @@
 		"@lucide/svelte": "^0.507.0",
 		"jose": "^6.0.11",
 		"mode-watcher": "0.5.1",
-		"node-cache": "^5.1.2"
+		"node-cache": "^5.1.2",
+		"tweetnacl": "^1.0.3"
 	}
 }

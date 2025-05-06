@@ -2,40 +2,133 @@ import {handle as authHandle, jwtCache, generateSpacetimeDBToken} from './auth';
 import {sequence} from '@sveltejs/kit/hooks';
 import {error, type Handle, redirect} from '@sveltejs/kit';
 import {dev} from '$app/environment';
-import {JWT_CACHE_TTL} from '$env/static/private';
+import {
+    JWT_CACHE_TTL,
+    CLIENT_ED25519_PUBLIC_KEY_B64URL,
+} from '$env/static/private';
+import nacl from 'tweetnacl';
+import {Buffer} from 'buffer';
 
-// Hook 1: Handle initial request_id and set cookie
+export interface CachedState {
+    type: 'PENDING' | 'USER_AUTH_COMPLETED';
+    codeChallenge: string;
+    jwtToken?: string; // Only present in USER_AUTH_COMPLETED
+}
+
+// Helper for TextEncoder
+const textEncoder = new TextEncoder();
+
+function importClientPublicKeyTweetNaCl(base64UrlKey: string): Uint8Array {
+    if (!base64UrlKey) {
+        throw new Error('Client Ed25519 public key (B64URL) is not configured.');
+    }
+    try {
+        const keyBytes = Buffer.from(base64UrlKey, 'base64url');
+        if (keyBytes.length !== nacl.sign.publicKeyLength) {
+            throw new Error(
+                `Invalid public key length. Expected ${nacl.sign.publicKeyLength}, got ${keyBytes.length}`,
+            );
+        }
+        return new Uint8Array(keyBytes); // tweetnacl expects Uint8Array
+    } catch (e: any) {
+        console.error(
+            '[Hook importClientPublicKeyTweetNaCl] Error decoding public key:',
+            e.message,
+        );
+        throw new Error('Failed to decode client public key.');
+    }
+}
+
+// Hook 1: Handle initial request_id, code_challenge, client_signature and set cookie
 const handleInitiation: Handle = async ({event, resolve}) => {
     const {url, cookies} = event;
 
     if (url.pathname === '/auth/initiate') {
-        const requestId = url.searchParams.get('request_id');
-        if (requestId) {
-            console.log(
-                `[Hook handleInitiation] /auth/initiate: Setting app.request-id cookie for ${requestId}`,
-            );
-            cookies.set('app.request-id', requestId, {
-                path: '/',
-                httpOnly: true,
-                secure: !dev,
-                sameSite: 'lax',
-                maxAge: parseInt(JWT_CACHE_TTL || '300'),
-            });
+        const requestId = url.searchParams.get('rid');
+        const codeChallenge = url.searchParams.get('ch');
+        const clientSignatureBase64Url = url.searchParams.get('cs');
 
-            const cacheSuccess = jwtCache.set(requestId, "PENDING");
-            if (!cacheSuccess) {
+        if (!requestId || !codeChallenge || !clientSignatureBase64Url) {
+            console.warn(
+                '[Hook handleInitiation] /auth/initiate called with missing parameters (rid, ch, or cs).',
+            );
+            throw error(400, 'Missing required authentication parameters.');
+        }
+
+        // Verify client_signature using tweetnacl
+        try {
+            if (!CLIENT_ED25519_PUBLIC_KEY_B64URL) {
                 console.error(
-                    `[Hook handleInitiation] Failed to start cache for request_id ${requestId}.`,
+                    '[Hook handleInitiation] Server configuration error: CLIENT_ED25519_PUBLIC_KEY_B64URL is not set.',
                 );
-                throw error(500, 'Failed to store request_id.');
+                throw error(500, 'Server configuration error.');
             }
 
-            throw redirect(302, '/signin');
-        } else {
-            console.warn('[Hook handleInitiation] /auth/initiate called without request_id.');
+            const clientPublicKeyBytes = importClientPublicKeyTweetNaCl(CLIENT_ED25519_PUBLIC_KEY_B64URL);
+            const signatureBytes = Buffer.from(clientSignatureBase64Url, 'base64url');
+            const dataToVerifyBytes = textEncoder.encode(codeChallenge);
+
+            if (signatureBytes.length !== nacl.sign.signatureLength) {
+                console.warn(
+                    `[Hook handleInitiation] Invalid signature length for request_id ${requestId}. Expected ${nacl.sign.signatureLength}, got ${signatureBytes.length}`,
+                );
+                throw error(400, 'Invalid signature format.');
+            }
+
+            const isValid = nacl.sign.detached.verify(
+                dataToVerifyBytes,
+                new Uint8Array(signatureBytes), // Ensure signature is Uint8Array
+                clientPublicKeyBytes,
+            );
+
+            if (!isValid) {
+                console.warn(
+                    `[Hook handleInitiation] Invalid client signature for request_id ${requestId} (tweetnacl).`,
+                );
+                throw error(401, 'Invalid client signature.');
+            }
+            console.log(
+                `[Hook handleInitiation] Client signature verified for request_id ${requestId} (tweetnacl).`,
+            );
+
+        } catch (err: any) {
+            if (err.status) throw err; // Re-throw SvelteKit errors
+            console.error(
+                `[Hook handleInitiation] Error during signature verification for ${requestId} (tweetnacl):`,
+                err.message,
+            );
+            throw error(500, 'Signature verification failed.');
         }
+
+        // Store state if signature is valid
+        const ttlSeconds = parseInt(JWT_CACHE_TTL || '300');
+        const cacheEntry: CachedState = {
+            type: 'PENDING',
+            codeChallenge: codeChallenge,
+        };
+
+        const cacheSuccess = jwtCache.set(requestId, cacheEntry, ttlSeconds);
+        if (!cacheSuccess) {
+            console.error(
+                `[Hook handleInitiation] Failed to cache initiated state for request_id ${requestId}.`,
+            );
+            throw error(500, 'Failed to store request state.');
+        }
+        console.log(
+            `[Hook handleInitiation] /auth/initiate: Stored initiated state for ${requestId}. Setting cookie.`,
+        );
+
+        cookies.set('app.request-id', requestId, {
+            path: '/',
+            httpOnly: true,
+            secure: !dev,
+            sameSite: 'lax',
+            maxAge: ttlSeconds,
+        });
+
+        throw redirect(302, '/signin'); // Proceed to user login
     }
-    return resolve(event); // Pass to next handler
+    return resolve(event);
 };
 
 // Hook 2: Handle the linking after Auth.js authentication
@@ -43,21 +136,17 @@ const handleCompleteLink: Handle = async ({event, resolve}) => {
     if (event.url.pathname === '/auth/complete-link') {
         console.log('[Hook handleCompleteLink] Intercepted /auth/complete-link');
 
-        // 1. Check Auth.js session (populated by authHandle which runs before this)
         const session = await event.locals.auth();
         if (!session?.user) {
             console.warn('[Hook handleCompleteLink] Unauthorized: No active session.');
-            // Redirect to sign-in or an error page
             throw redirect(302, '/signin?error=SessionExpiredForLink');
         }
 
-        // 2. Get the request_id from the cookie
         const requestId = event.cookies.get('app.request-id');
         if (!requestId) {
             console.warn(
                 `[Hook handleCompleteLink] Missing app.request-id cookie for user ${session.user.email}.`,
             );
-            // Redirect to an error page or inform the user
             throw redirect(302, '/error?code=LINK_ID_MISSING');
         }
 
@@ -75,7 +164,21 @@ const handleCompleteLink: Handle = async ({event, resolve}) => {
             }
 
             const spacetimeToken = await generateSpacetimeDBToken(userIdForSpacetime);
-            const cacheSuccess = jwtCache.set(requestId, spacetimeToken);
+            const currentState = jwtCache.get(requestId) as CachedState | undefined;
+            if (!currentState) {
+                console.error(
+                    `[Hook handleCompleteLink] No cache entry found for request_id ${requestId}.`,
+                );
+                throw error(404, 'Request ID not found.');
+            }
+
+            const cacheEntry: CachedState = {
+                type: 'USER_AUTH_COMPLETED',
+                codeChallenge: currentState.codeChallenge,
+                jwtToken: spacetimeToken,
+            }
+
+            const cacheSuccess = jwtCache.set(requestId, cacheEntry);
 
             if (!cacheSuccess) {
                 console.error(
@@ -118,12 +221,6 @@ const notFoundHandler: Handle = async ({event, resolve}) => {
     }
 
     return response;
-}
+};
 
-// IMPORTANT: Hook Order
-// 1. handleInitiation: Sets the cookie if it's the /auth/initiate path.
-// 2. authHandle: Handles all Auth.js specific routes (/signin, /auth/callback/*, etc.)
-//    AND populates `event.locals.getSession()` for subsequent handlers.
-// 3. handleCompleteLink: Acts on /auth/complete-link, relying on the session from authHandle
-//    and the cookie from handleInitiation.
 export const handle = sequence(handleInitiation, authHandle, handleCompleteLink, notFoundHandler);
