@@ -14,7 +14,7 @@ import {
 
 // Initialize the cache for SpacetimeDB JWTs
 export const jwtCache = new NodeCache({
-    stdTTL: parseInt(JWT_CACHE_TTL) || 300,
+    stdTTL: JWT_CACHE_TTL && !isNaN(parseInt(JWT_CACHE_TTL)) ? parseInt(JWT_CACHE_TTL) : 300,
     checkperiod: 60,
     deleteOnExpire: true,
 });
@@ -66,7 +66,7 @@ export const {handle, signIn, signOut} = SvelteKitAuth({
 
     callbacks: {
         // signIn and jwt can be minimal or default, as they are not involved in request_id linking
-        async signIn({user, account, profile}) {
+        async signIn({user, account}) {
             console.log(`[signIn callback] User ${user.id || user.email} signing in via ${account?.provider}.`);
             return true;
         },

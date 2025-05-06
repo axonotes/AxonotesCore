@@ -2,7 +2,6 @@
     import {page} from '$app/state';
     import * as Card from '$lib/components/ui/card';
     import * as Alert from '$lib/components/ui/alert';
-    import {Button} from '$lib/components/ui/button';
     import {AlertTriangle} from "@lucide/svelte";
 
     $: errorCode = page.url.searchParams.get('code');

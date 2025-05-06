@@ -9,7 +9,7 @@
     <Card.Root class="w-full max-w-md text-center">
         <Card.Header>
             <Card.Title class="flex items-center justify-center gap-2 text-2xl">
-                <CheckCircle class="h-6 w-6 text-green-600" />
+                <CheckCircle class="h-6 w-6 text-green-600"/>
                 Authentication Successful!
             </Card.Title>
             <Card.Description>
