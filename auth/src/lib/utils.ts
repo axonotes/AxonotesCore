@@ -7,6 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function maskEmail(email: string): string {
 	if (!email) return '[no-email]';
+	if (!email.includes('@')) return '***@***';
 	const [username, domain] = email.split('@');
 	return `${username.charAt(0)}***@${domain}`;
 }
