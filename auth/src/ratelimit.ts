@@ -27,7 +27,7 @@ interface RateLimitResult {
 const ipRateDataCache = new NodeCache({
     stdTTL: WINDOW_SIZE_IN_SECONDS * 3, // Keep data for 3 window periods
     checkperiod: WINDOW_SIZE_IN_SECONDS,
-    useClones: false,
+    useClones: true,
 });
 
 const WINDOW_SIZE_IN_MILLISECONDS = WINDOW_SIZE_IN_SECONDS * 1000;

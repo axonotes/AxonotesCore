@@ -23,6 +23,7 @@ export const jwtCache = new NodeCache({
     stdTTL: JWT_TLL,
     checkperiod: CACHE_CHECK_PERIOD,
     deleteOnExpire: true,
+    useClones: true,
 });
 
 // Function to generate the SpacetimeDB JWT
