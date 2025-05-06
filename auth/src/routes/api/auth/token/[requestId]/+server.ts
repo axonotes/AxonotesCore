@@ -120,7 +120,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
             console.warn(
                 `[API POST /api/auth/token] PKCE verification failed for ${requestId}. code_verifier did not match stored code_challenge.`,
             );
-            // Potentially delay response or implement rate limiting for failed attempts
             throw error(400, 'Invalid code_verifier.');
         }
         console.log(`[API POST /api/auth/token] PKCE verification successful for ${requestId}.`);
