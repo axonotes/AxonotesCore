@@ -1,6 +1,5 @@
 import * as jose from 'jose';
-// @ts-ignore
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 async function generateKeys(): Promise<void> {
     // --- Auth.js Secret ---
