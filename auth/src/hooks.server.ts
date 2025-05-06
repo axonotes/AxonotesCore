@@ -164,11 +164,11 @@ const handleCompleteLink: Handle = async ({event, resolve}) => {
 
             const spacetimeToken = await generateSpacetimeDBToken(userIdForSpacetime);
             const currentState = jwtCache.get(requestId) as CachedState | undefined;
-            if (!currentState) {
+            if (!currentState || currentState.type !== 'PENDING') {
                 console.error(
-                    `[Hook handleCompleteLink] No cache entry found for request_id ${requestId}.`,
+                    `[Hook handleCompleteLink] Invalid or stale state for request_id ${requestId}.`,
                 );
-                throw error(404, 'Request ID not found.');
+                throw error(409, 'Invalid authentication state.');
             }
 
             const cacheEntry: CachedState = {
