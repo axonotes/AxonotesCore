@@ -16,6 +16,10 @@ export async function GET() {
         }
         return json({
             keys: [jwk], // The JWKS is an object containing a 'keys' array
+        }, {
+            headers: {
+                'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+            }
         });
     } catch (error) {
         console.error('Failed to serve JWKS:', error);
