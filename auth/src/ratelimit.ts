@@ -137,7 +137,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
 
     if (!success) {
-        const headers = new Headers(event.request.headers); // Start with existing headers
+        const headers = new Headers();
         if (retryAfter) {
             headers.set("Retry-After", retryAfter.toString());
         }
