@@ -45,7 +45,7 @@ export async function generateSpacetimeDBToken(
             'EdDSA',
         ); // Algorithm must match key type
 
-        return await new SignJWT({}) // SpacetimeDB often uses claims directly in payload
+        return await new SignJWT({})
             .setProtectedHeader({
                 alg: 'EdDSA', // Algorithm used to sign
                 kid: SPACETIMEDB_KEY_ID, // Key ID for JWKS lookup
@@ -55,7 +55,7 @@ export async function generateSpacetimeDBToken(
             .setIssuer(SPACETIMEDB_ISSUER)
             .setAudience(SPACETIMEDB_AUDIENCE)
             .setIssuedAt()
-            .setExpirationTime(SPACETIMEDB_JWT_EXPIRATION) // e.g., 5 minutes validity
+            .setExpirationTime(SPACETIMEDB_JWT_EXPIRATION)
             .sign(privateKey);
     } catch (error) {
         console.error('Error signing SpacetimeDB JWT:', error);
@@ -63,7 +63,7 @@ export async function generateSpacetimeDBToken(
     }
 }
 
-export const {handle, signIn, signOut} = SvelteKitAuth({
+export const {handle, signIn} = SvelteKitAuth({
     providers: [
         Google
     ],
@@ -79,8 +79,6 @@ export const {handle, signIn, signOut} = SvelteKitAuth({
         async jwt({token}) {
             return token;
         },
-
-        // THIS IS THE KEY CHANGE
         async redirect({baseUrl}) {
             return `${baseUrl}/auth/complete-link`;
         },
