@@ -6,6 +6,7 @@ import {CLIENT_ED25519_PUBLIC_KEY_B64URL,} from '$env/static/private';
 import nacl from 'tweetnacl';
 import {Buffer} from 'buffer';
 import {maskEmail} from "$lib/utils";
+import {handle as rateLimitHandle} from './ratelimit';
 
 export interface CachedState {
     type: 'PENDING' | 'USER_AUTH_COMPLETED';
@@ -222,4 +223,4 @@ const notFoundHandler: Handle = async ({event, resolve}) => {
     return response;
 };
 
-export const handle = sequence(handleInitiation, authHandle, handleCompleteLink, notFoundHandler);
+export const handle = sequence(rateLimitHandle, handleInitiation, authHandle, handleCompleteLink, notFoundHandler);
