@@ -22,6 +22,14 @@ const handleInitiation: Handle = async ({event, resolve}) => {
                 maxAge: parseInt(JWT_CACHE_TTL || '300'),
             });
 
+            const cacheSuccess = jwtCache.set(requestId, "PENDING");
+            if (!cacheSuccess) {
+                console.error(
+                    `[Hook handleInitiation] Failed to start cache for request_id ${requestId}.`,
+                );
+                throw error(500, 'Failed to store request_id.');
+            }
+
             throw redirect(302, '/signin');
         } else {
             console.warn('[Hook handleInitiation] /auth/initiate called without request_id.');

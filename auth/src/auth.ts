@@ -10,6 +10,7 @@ import {
     SPACETIMEDB_ISSUER,
     SPACETIMEDB_KEY_ID,
     SPACETIMEDB_PRIVATE_KEY_PEM,
+    SPACETIMEDB_JWT_EXPIRATION,
 } from '$env/static/private';
 
 // Initialize the cache for SpacetimeDB JWTs
@@ -27,7 +28,8 @@ export async function generateSpacetimeDBToken(
         !SPACETIMEDB_PRIVATE_KEY_PEM ||
         !SPACETIMEDB_ISSUER ||
         !SPACETIMEDB_AUDIENCE ||
-        !SPACETIMEDB_KEY_ID
+        !SPACETIMEDB_KEY_ID ||
+        !SPACETIMEDB_JWT_EXPIRATION
     ) {
         console.error('Missing SpacetimeDB JWT configuration in .env');
         throw new Error('SpacetimeDB JWT configuration incomplete.');
@@ -49,7 +51,7 @@ export async function generateSpacetimeDBToken(
             .setIssuer(SPACETIMEDB_ISSUER)
             .setAudience(SPACETIMEDB_AUDIENCE)
             .setIssuedAt()
-            .setExpirationTime('5m') // e.g., 5 minutes validity
+            .setExpirationTime(SPACETIMEDB_JWT_EXPIRATION) // e.g., 5 minutes validity
             .sign(privateKey);
     } catch (error) {
         console.error('Error signing SpacetimeDB JWT:', error);
