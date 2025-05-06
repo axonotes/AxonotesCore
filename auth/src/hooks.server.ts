@@ -5,6 +5,7 @@ import {dev} from '$app/environment';
 import {CLIENT_ED25519_PUBLIC_KEY_B64URL,} from '$env/static/private';
 import nacl from 'tweetnacl';
 import {Buffer} from 'buffer';
+import {maskEmail} from "$lib/utils";
 
 export interface CachedState {
     type: 'PENDING' | 'USER_AUTH_COMPLETED';
@@ -142,20 +143,20 @@ const handleCompleteLink: Handle = async ({event, resolve}) => {
         const requestId = event.cookies.get('app.request-id');
         if (!requestId) {
             console.warn(
-                `[Hook handleCompleteLink] Missing app.request-id cookie for user ${session.user.email}.`,
+                `[Hook handleCompleteLink] Missing app.request-id cookie for user ${maskEmail(session.user.email || '')}.`,
             );
             throw redirect(302, '/error?code=LINK_ID_MISSING');
         }
 
         console.log(
-            `[Hook handleCompleteLink] User ${session.user.email} authenticated. Found request_id: ${requestId}`,
+            `[Hook handleCompleteLink] User ${maskEmail(session.user.email || '')} authenticated. Found request_id: ${requestId}`,
         );
 
         try {
             const userIdForSpacetime = session.user.id || session.user.email;
             if (!userIdForSpacetime) {
                 console.error(
-                    `[Hook handleCompleteLink] User ID/email missing in session for user ${session.user.email}.`,
+                    `[Hook handleCompleteLink] User ID/email missing in session for user ${maskEmail(session.user.email || '')}.`,
                 );
                 throw error(500, 'User identifier not found in session.');
             }
@@ -209,6 +210,7 @@ const handleCompleteLink: Handle = async ({event, resolve}) => {
     return resolve(event);
 };
 
+// Hook 3: Handle 404 Not Found
 const notFoundHandler: Handle = async ({event, resolve}) => {
     const response = await resolve(event);
 

@@ -12,6 +12,7 @@ import {
     SPACETIMEDB_PRIVATE_KEY_PEM,
     SPACETIMEDB_JWT_EXPIRATION,
 } from '$env/static/private';
+import {maskEmail, maskId} from "$lib/utils";
 
 const DEFAULT_JWT_TTL = 300;
 const CACHE_CHECK_PERIOD = 60;
@@ -73,7 +74,7 @@ export const {handle, signIn} = SvelteKitAuth({
     callbacks: {
         // signIn and jwt can be minimal or default, as they are not involved in request_id linking
         async signIn({user, account}) {
-            console.log(`[signIn callback] User ${user.id || user.email} signing in via ${account?.provider}.`);
+            console.log(`[signIn callback] User ${maskEmail(user.email || '')} signing in via ${account?.provider}.`);
             return true;
         },
         async jwt({token}) {
