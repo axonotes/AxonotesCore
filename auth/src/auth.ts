@@ -13,10 +13,14 @@ import {
     SPACETIMEDB_JWT_EXPIRATION,
 } from '$env/static/private';
 
+const DEFAULT_JWT_TTL = 300;
+const CACHE_CHECK_PERIOD = 60;
+export const JWT_TLL = JWT_CACHE_TTL && !isNaN(parseInt(JWT_CACHE_TTL)) ? parseInt(JWT_CACHE_TTL) : DEFAULT_JWT_TTL
+
 // Initialize the cache for SpacetimeDB JWTs
 export const jwtCache = new NodeCache({
-    stdTTL: JWT_CACHE_TTL && !isNaN(parseInt(JWT_CACHE_TTL)) ? parseInt(JWT_CACHE_TTL) : 300,
-    checkperiod: 60,
+    stdTTL: JWT_TLL,
+    checkperiod: CACHE_CHECK_PERIOD,
     deleteOnExpire: true,
 });
 

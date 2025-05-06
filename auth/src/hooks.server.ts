@@ -1,11 +1,8 @@
-import {handle as authHandle, jwtCache, generateSpacetimeDBToken} from './auth';
+import {generateSpacetimeDBToken, handle as authHandle, JWT_TLL, jwtCache} from './auth';
 import {sequence} from '@sveltejs/kit/hooks';
 import {error, type Handle, redirect} from '@sveltejs/kit';
 import {dev} from '$app/environment';
-import {
-    JWT_CACHE_TTL,
-    CLIENT_ED25519_PUBLIC_KEY_B64URL,
-} from '$env/static/private';
+import {CLIENT_ED25519_PUBLIC_KEY_B64URL,} from '$env/static/private';
 import nacl from 'tweetnacl';
 import {Buffer} from 'buffer';
 
@@ -101,7 +98,7 @@ const handleInitiation: Handle = async ({event, resolve}) => {
         }
 
         // Store state if signature is valid
-        const ttlSeconds = parseInt(JWT_CACHE_TTL || '300');
+        const ttlSeconds = JWT_TLL;
         const cacheEntry: CachedState = {
             type: 'PENDING',
             codeChallenge: codeChallenge,
