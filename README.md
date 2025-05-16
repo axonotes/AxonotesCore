@@ -20,7 +20,7 @@
   <a href="#getting-started">Getting Started</a> •
   <a href="#contributing">Contributing</a> •
   <a href="#stay-connected-with-axonotes">Stay Connected with Axonotes</a> •
-  <a href="#license">License</a>
+  <a href="#license-overview">License Overview</a>
 </p>
 
 [![Status](https://img.shields.io/badge/status-early%20development-orange)](https://github.com/axonotes/AxonotesCore)
@@ -123,7 +123,7 @@ Follow the overall Axonotes project for updates, announcements, and community di
 * **BlueSky:** [@axonotes.bsky.social](https://bsky.app/profile/axonotes.bsky.social)
 * **TikTok:** [@axonotes_ch](https://www.tiktok.com/@axonotes_ch)
 
-### 📜 License Overview
+## 📜 License Overview
 
 AxonotesCore (Version 0.0.0) is licensed under the **Business Source License 1.1 (BSL 1.1)**.
 
