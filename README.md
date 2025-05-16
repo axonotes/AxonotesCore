@@ -140,7 +140,7 @@ full [LICENSE](LICENSE) file in this repository for the complete terms and condi
             * You **cannot** offer the Licensed Work to third parties as a distinct, stand-alone hosted or managed
               service for payment or other commercial benefit primarily derived from providing access to the Licensed
               Work.
-    * **You CANNOT (without a separate commercial license from Oliver Seifert):**
+    * **You CANNOT (without a separate commercial license from Axonotes):**
         * Use the Licensed Work in production beyond the conditions of the "Additional Use Grant" (e.g., self-hosting
           for more than 50 users or offering it as a commercial hosted service).
 * **On or After the Change Date (2030-05-02):**
