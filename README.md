@@ -20,6 +20,7 @@
   <a href="#getting-started">Getting Started</a> •
   <a href="#contributing">Contributing</a> •
   <a href="#stay-connected-with-axonotes">Stay Connected with Axonotes</a> •
+  <a href="#star-history">⭐ Star History</a> •
   <a href="#license-overview">License Overview</a>
 </p>
 
@@ -66,6 +67,16 @@ This `AxonotesCore` repository is a monorepo that houses the foundational code f
 Axonotes and this `AxonotesCore` repository are currently in the **early planning and development phase**. The code here
 represents foundational work and is subject to significant changes as we iterate and refine our vision based on
 community feedback.
+
+## ⭐ Star History
+
+<a href="https://www.star-history.com/#axonotes/AxonotesCore&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=axonotes/AxonotesCore&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=axonotes/AxonotesCore&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=axonotes/AxonotesCore&type=Date" />
+ </picture>
+</a>
 
 ## 🛠️ Tech Stack
 
