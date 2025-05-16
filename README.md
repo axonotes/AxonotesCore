@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/axonotes/.github/refs/heads/main/logo_no_text.png" alt="Axonotes Logo" width="150"/>
+  <img src="assets/logo_no_text.png" alt="Axonotes Logo" width="150"/>
 </p>
 
 <h1 align="center">AxonotesCore 🐙</h1>
@@ -17,11 +17,11 @@
   <a href="#tech-stack">Tech Stack</a> •
   <a href="#getting-started">Getting Started</a> •
   <a href="#contributing">Contributing</a> •
-  <a href="#stay-connected">Stay Connected</a> •
+  <a href="#stay-connected-with-axonotes">Stay Connected with Axonotes</a> •
   <a href="#license">License</a>
 </p>
 
-[![Status](https://img.shields.io/badge/status-early%20development-orange)](https://github.com/axonotes/AxonotesCore) <!-- Replace with actual repo link -->
+[![Status](https://img.shields.io/badge/status-early%20development-orange)](https://github.com/axonotes/AxonotesCore)
 
 ---
 
