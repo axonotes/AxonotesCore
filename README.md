@@ -67,6 +67,16 @@ Axonotes and this `AxonotesCore` repository are currently in the **early plannin
 represents foundational work and is subject to significant changes as we iterate and refine our vision based on
 community feedback.
 
+## Star History
+
+<a href="https://www.star-history.com/#axonotes/AxonotesCore&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=axonotes/AxonotesCore&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=axonotes/AxonotesCore&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=axonotes/AxonotesCore&type=Date" />
+ </picture>
+</a>
+
 ## 🛠️ Tech Stack
 
 * **Client-side (Desktop App):**
