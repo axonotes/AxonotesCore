@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="assets/logo_no_text.png" alt="Axonotes Logo" width="150"/>
+  <a href="./">
+    <img src="assets/logo_no_text.png" alt="Axonotes Logo" width="150"/>
+  </a>
 </p>
 
 <h1 align="center">AxonotesCore 🐙</h1>
@@ -35,8 +37,8 @@ We're building an all-in-one academic suite focused on:
 
 * **Unified Workflow:** Notes, tasks, chat, and learning tools in one place.
 * **Effortless Collaboration:** Real-time co-authoring with features like line-level locking.
-* **Powerful Knowledge Creation:** Flexible note-taking (Markdown, rich text, infinite canvases, pen support), \(
-  \LaTeX \) support, and more.
+* **Powerful Knowledge Creation:** Flexible note-taking (Markdown, rich text, infinite canvases, pen support), `LaTeX` 
+    support, and more.
 * **Smart Organization:** Integrated planning, powerful global search, and knowledge graphs.
 * **Offline-First & Cross-Platform:** Work anywhere, anytime, on any device.
 * **Revolutionary Version History:** Every change saved, powered by SpaceTimeDB.
@@ -57,7 +59,7 @@ This `AxonotesCore` repository is a monorepo that houses the foundational code f
   * Written in **Rust**.
   * Manages real-time collaboration, data persistence, and the detailed version history system.
 
-*(Note: Directory names are placeholders and may evolve.)*
+> **Note:** Directory names are placeholders and may evolve.
 
 ## ⏳ Current Stage
 
@@ -121,45 +123,22 @@ Follow the overall Axonotes project for updates, announcements, and community di
 * **BlueSky:** [@axonotes.bsky.social](https://bsky.app/profile/axonotes.bsky.social)
 * **TikTok:** [@axonotes_ch](https://www.tiktok.com/@axonotes_ch)
 
-## 📜 License
+### 📜 License Overview
 
-**AxonotesCore is licensed under the Business Source License 1.1 (BSL 1.1).**
+AxonotesCore (Version 0.0.0) is licensed under the **Business Source License 1.1 (BSL 1.1)**.
 
-**Please note:** The following is a brief summary and not legal advice. You should always refer to the
-full [LICENSE](LICENSE) file in this repository for the complete terms and conditions.
-
-**Key Points of the BSL 1.1 for AxonotesCore (Version 0.0.0):**
-
-* **Before the Change Date (2030-05-02):**
-  * **You CAN:**
-    * Copy, modify, create derivative works, and redistribute the Licensed Work.
-    * Make non-production use of the Licensed Work.
-    * Make limited production use under the "Additional Use Grant":
-      * Self-host for your own or your organization's internal purposes.
-      * The self-hosted deployment must serve **no more than 50 (fifty) individual users**.
-      * You **cannot** offer the Licensed Work to third parties as a distinct, stand-alone hosted or managed
-        service for payment or other commercial benefit primarily derived from providing access to the Licensed
-        Work.
-  * **You CANNOT (without a separate commercial license from Axonotes):**
-    * Use the Licensed Work in production beyond the conditions of the "Additional Use Grant" (e.g., self-hosting
-      for more than 50 users or offering it as a commercial hosted service).
-* **On or After the Change Date (2030-05-02):**
-  * The license for AxonotesCore (Version 0.0.0) will automatically convert to the **GNU Affero General Public License
-    v3.0 or later (AGPLv3+)**.
-  * The terms of the BSL 1.1 will terminate, and the AGPLv3+ terms will apply.
-* **Copyright:** (c) 2025 Axonotes (Licensor: Oliver Seifert)
+* **Until May 2, 2030 (the "Change Date"):**
+  * You **CAN** copy, modify, create derivative works, and redistribute the software.
+  * You **CAN** use it for non-production purposes.
+  * For **production use**, you can self-host it for internal purposes for **up to 50 individual users**.
+  * You **CANNOT** offer it as a commercial hosted service or exceed the 50-user limit in production without a separate commercial license from Axonotes.
+* **On or After May 2, 2030:**
+  * The license will automatically convert to the **GNU Affero General Public License v3.0 or later (AGPLv3+)**.
 * **Important:**
-  * You must conspicuously display the BSL 1.1 license on each original or modified copy of the Licensed Work.
-  * Any use in violation of the BSL 1.1 will automatically terminate your rights under the license.
-* **Additional Permissions for AGPLv3 (effective after Change Date):**
-  * The license includes additional permissions under GNU GPL version 3 section 7 and GNU AGPL version 3 section 13
-    concerning linking or combining with SpaceTimeDB (which is covered by AGPL v3.0). These permissions address
-    certain obligations when conveying the combined work, particularly regarding the offering of Corresponding Source
-    for network interactions. Please see the full license text for details.
+  * The software is **not considered open-source** until the Change Date.
+  * You must include the BSL 1.1 license text with any distribution.
 
-**This license is not an open-source license until the Change Date.**
-
-For the full terms, conditions, and definitions, please consult the [LICENSE](LICENSE) file.
+This is a brief summary. For full terms and conditions, please see the [LICENSE](LICENSE) file.
 
 ---
 
