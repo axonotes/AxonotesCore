@@ -3,14 +3,23 @@ Business Source License 1.1
 Parameters
 
 Licensor:             Oliver Seifert
-Licensed Work:        Athena Learning 0.0.0
+Licensed Work:        Axonotes 0.0.0
                       The Licensed Work is
-                      (c) 2025 Athena Learning
+                      (c) 2025 Axonotes
 
-Additional Use Grant: You may make production use of the Licensed Work
-                      provided that you do not offer the Licensed Work
-                      to third parties as a hosted or managed service
-                      for payment or other commercial benefit.
+Additional Use Grant: You may make production use of the Licensed Work by
+                      self-hosting it for your own or your organization's
+                      internal purposes, provided that: (i) the self-hosted
+                      deployment serves no more than 50 (fifty) individual
+                      users; and (ii) you do not offer the Licensed Work to
+                      third parties as a distinct, stand-alone hosted or
+                      managed service for payment or other commercial benefit
+                      primarily derived from providing access to the Licensed
+                      Work. Use beyond these conditions, including
+                      self-hosting for more than 50 users or offering it as
+                      a commercial hosted service, requires a separate
+                      commercial license from the Licensor as per the terms
+                      of this License.
 
 Change Date:          2030-05-02
 
@@ -98,7 +107,7 @@ other recipients of the licensed work to be provided by Licensor:
 
 -----------------------------------------------------------------------------
 
-Copyright (C) 2025 Athena Learning
+Copyright (C) 2025 Axonotes
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU Affero General Public License, version 3, as published
