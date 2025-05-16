@@ -20,6 +20,7 @@
   <a href="#getting-started">Getting Started</a> •
   <a href="#contributing">Contributing</a> •
   <a href="#stay-connected-with-axonotes">Stay Connected with Axonotes</a> •
+  <a href="#star-history">⭐ Star History</a> •
   <a href="#license-overview">License Overview</a>
 </p>
 
@@ -67,7 +68,7 @@ Axonotes and this `AxonotesCore` repository are currently in the **early plannin
 represents foundational work and is subject to significant changes as we iterate and refine our vision based on
 community feedback.
 
-## Star History
+## ⭐ Star History
 
 <a href="https://www.star-history.com/#axonotes/AxonotesCore&Date">
  <picture>
