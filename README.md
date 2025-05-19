@@ -121,12 +121,12 @@ product. Formal contribution guidelines (`CONTRIBUTING.md`) will be added as the
 
 Follow the overall Axonotes project for updates, announcements, and community discussion:
 
-* **Website:** [axonotes.ch](https://axonotes.ch) (Coming Soon!)
-* **X (Twitter):** [@axonotes](https://twitter.com/axonotes)
-* **YouTube:** [@axonotes](https://youtube.com/@axonotes)
-* **Instagram:** [@axonotes](https://instagram.com/axonotes)
-* **BlueSky:** [@axonotes.bsky.social](https://bsky.app/profile/axonotes.bsky.social)
-* **TikTok:** [@axonotes_ch](https://www.tiktok.com/@axonotes_ch)
+*   **Website:** [axonotes.ch](https://axonotes.ch) (Coming Soon!)
+*   **Discord Server:** [https://discord.gg/myBMaaDeQu](https://discord.gg/myBMaaDeQu)
+*   **X (Twitter):** [@axonotes](https://twitter.com/axonotes)
+*   **YouTube:** [@axonotes](https://youtube.com/@axonotes)
+*   **Reddit:** [r/axonotes](https://www.reddit.com/r/Axonotes/)
+*   **BlueSky:** [@axonotes.bsky.social](https://bsky.app/profile/axonotes.bsky.social)
 
 ## 📜 License Overview
 
