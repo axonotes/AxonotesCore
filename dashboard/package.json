@@ -11,7 +11,8 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint ."
+		"lint": "prettier --check . && eslint .",
+		"generate": "bun run scripts/generate-keys.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -22,6 +23,7 @@
 		"@sveltejs/kit": "^2.16.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
 		"@tailwindcss/vite": "^4.0.0",
+		"@types/jsonwebtoken": "^9.0.9",
 		"eslint": "^9.18.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
@@ -38,6 +40,8 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^0.513.0",
-		"@workos-inc/node": "^7.54.0"
+		"@workos-inc/node": "^7.54.0",
+		"jose": "^6.0.11",
+		"jsonwebtoken": "^9.0.2"
 	}
 }

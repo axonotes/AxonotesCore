@@ -1,17 +1,20 @@
 import type {Handle} from "@sveltejs/kit";
+import {JWT_COOKIE_NAME} from "$env/static/private";
+import {verifyToken} from "$lib/server/jwt";
 
-export const handle: Handle = async ({ event, resolve }) => {
-    const sessionCookie = event.cookies.get("axonotes_session");
+export const handle: Handle = async ({event, resolve}) => {
+    const token = event.cookies.get(JWT_COOKIE_NAME);
 
-    if (!sessionCookie) {
-        event.locals.user = null;
-        return resolve(event);
-    }
+    event.locals.user = null;
 
-    try {
-        event.locals.user = JSON.parse(sessionCookie);
-    } catch (error) {
-        event.locals.user = null;
+    if (token) {
+        const userPayload = verifyToken(token);
+
+        if (userPayload) {
+            event.locals.user = userPayload;
+        } else {
+            event.cookies.delete(JWT_COOKIE_NAME, {path: "/"});
+        }
     }
 
     return resolve(event);

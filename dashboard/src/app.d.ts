@@ -1,10 +1,12 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
+import type {UserTokenPayload} from "$lib/server/jwt";
+
 declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
-			user: import("@workos-inc/node").User | null;
+			user: UserTokenPayload | null,
 		}
 		// interface PageData {}
 		// interface PageState {}
