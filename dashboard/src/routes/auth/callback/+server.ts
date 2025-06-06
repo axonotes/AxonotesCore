@@ -20,6 +20,7 @@ export async function GET({url, cookies}) {
 
         const tokenPayload: UserTokenPayload = {
             sub: user.id,
+            iss: "https://app.axonotes.ch",
             email: user.email,
             firstName: user.firstName ?? "",
             lastName: user.lastName ?? ""
@@ -49,5 +50,5 @@ export async function GET({url, cookies}) {
         throw redirect(302, "/?error=auth_failed");
     }
 
-    throw redirect(302, "/dashboard");
+    throw redirect(302, "/auth/gate");
 }
