@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import {JWT_PRIVATE_KEY_BASE64, JWT_PUBLIC_KEY_BASE64} from "$env/static/private";
+import {JWT_KEY_ID, JWT_PRIVATE_KEY_BASE64, JWT_PUBLIC_KEY_BASE64} from "$env/static/private";
 
 
 
@@ -20,10 +20,12 @@ const publicKey = Buffer.from(
     "base64"
 ).toString("ascii");
 
+const keyId = JWT_KEY_ID;
+
 const EXPIRES_IN = "7d"; // How long the token is valid for
 const ALGORITHM = "RS256"; // Secure asymmetric algorithm
 
-if (!privateKey || !publicKey) {
+if (!privateKey || !publicKey || !keyId) {
     throw new Error("JWT keys are not set correctly. Please generate them with `bun run generate` and copy them into the .env file");
 }
 
@@ -36,6 +38,7 @@ export function generateToken(payload: UserTokenPayload): string {
     return jwt.sign(payload, privateKey, {
         algorithm: ALGORITHM,
         expiresIn: EXPIRES_IN,
+        keyid: keyId,
     });
 }
 

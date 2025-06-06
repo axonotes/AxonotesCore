@@ -20,9 +20,10 @@ const publicKeyBase64 = Buffer.from(publicKey).toString("base64");
 
 console.log("\n✅ Keys generated successfully!");
 console.log(
-    "\n📋 Copy the following lines into your .env file:\n"
+    "\n📋 Copy the lines between ====== into your .env file:\n"
 );
 console.log("=" .repeat(80));
 console.log(`JWT_PRIVATE_KEY_BASE64="${privateKeyBase64}"`);
 console.log(`JWT_PUBLIC_KEY_BASE64="${publicKeyBase64}"`);
+console.log(`JWT_KEY_ID="axonotes-key-${new Date().toISOString().slice(0, 10)}"`)
 console.log("=" .repeat(80));
