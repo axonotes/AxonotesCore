@@ -3,7 +3,9 @@
 declare global {
 	namespace App {
 		// interface Error {}
-		// interface Locals {}
+		interface Locals {
+			user: import("@workos-inc/node").User | null;
+		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}
