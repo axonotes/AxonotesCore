@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +15,15 @@ const __dirname = path.dirname(__filename);
 // --- Create absolute paths for the key files ---
 const privateKeyPath = path.join(__dirname, PRIVATE_KEY_FILENAME);
 const publicKeyPath = path.join(__dirname, PUBLIC_KEY_FILENAME);
+
+// --- Ensure target directory exists ---
+const keyDir = path.dirname(privateKeyPath);
+try {
+    mkdirSync(keyDir, {recursive: true});
+} catch (error) {
+    console.error("❌ Failed to create key directory:", error);
+    process.exit(1);
+}
 
 // --- Script ---
 console.log(

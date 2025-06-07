@@ -58,10 +58,8 @@ function callSetEncryptionReducer(
                     data.argonSalt,
                 );
 
-                setTimeout(() => {
-                    cleanupAndDisconnect();
-                    resolve();
-                }, 100);
+                cleanupAndDisconnect();
+                resolve();
             })
             .onConnectError((_ctx: ErrorContext, err: Error) => {
                 console.error('Error connecting to SpacetimeDB:', err);

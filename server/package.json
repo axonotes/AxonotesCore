@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "publish": "spacetime publish --project-path . axonotes && spacetime generate --lang typescript --out-dir ../dashboard/src/lib/module_bindings --project-path .",
-    "dev": "spacetime start --jwt-pub-key-path jwt/public_key.pem --jwt-priv-key-path jwt/private_key.pem"
+    "dev": "spacetime start --in-memory"
   }
 }

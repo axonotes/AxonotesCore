@@ -1,8 +1,9 @@
 <!-- src/routes/auth/setup/+page.svelte -->
 <script lang="ts">
-    import { generateMnemonic } from "bip39";
+    import {generateMnemonic} from "bip39";
     import zxcvbn from "zxcvbn";
     import * as crypto from "$lib/client/crypto";
+    import {enhance} from "$app/forms";
 
     let masterPassword = $state("");
     let isLoading = $state(false);
@@ -23,7 +24,7 @@
         errorMessage = "";
 
         try {
-            const { publicKey, privateKey } = await crypto.generateRsaKeyPair();
+            const {publicKey, privateKey} = await crypto.generateRsaKeyPair();
             const backupPassphrase = generateMnemonic(128);
             generatedPassphrase = backupPassphrase;
 
@@ -50,7 +51,7 @@
 
             const response = await fetch("/api/user/setup-keys", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify(payload),
             });
 
@@ -61,6 +62,7 @@
             errorMessage = "An unexpected error occurred. Please try again.";
             console.error(err);
         } finally {
+            masterPassword = "";
             isLoading = false;
         }
     }
@@ -70,7 +72,7 @@
 
 {#if !generatedPassphrase}
     <p>Choose a strong master password. This will be used to encrypt your data.</p>
-    <form onsubmit={handleSetup}>
+    <form onsubmit={handleSetup} use:enhance>
         <input
                 type="password"
                 bind:value={masterPassword}

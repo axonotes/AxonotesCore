@@ -8,6 +8,7 @@ import {
     DbConnection,
     type ErrorContext,
 } from '$lib/module_bindings';
+import {sql} from "$lib/server/spacetime";
 
 const CONNECTION_TIMEOUT_MS = 5000; // 5 seconds
 
@@ -50,7 +51,7 @@ function connectAndSync(token: string): Promise<DbConnection> {
                         clearTimeout(timeoutId); // Don't disconnect, just clear the timeout
                         resolve(conn); // Resolve with the active connection
                     })
-                    .subscribe([`SELECT * FROM user WHERE identity = '${identity.toHexString()}'`]);
+                    .subscribe([sql('SELECT * FROM user WHERE identity = ?', [identity.toHexString()])]);
             })
             .onConnectError((_ctx: ErrorContext, err: Error) => {
                 console.error('Error connecting to SpacetimeDB:', err);

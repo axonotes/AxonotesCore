@@ -8,12 +8,15 @@ import argon2 from "argon2-browser/dist/argon2-bundled.min";
  * Converts an ArrayBuffer to a Base64 string.
  */
 export function arrayBufferToBase64(buffer: ArrayBufferLike): string {
-    let binary = "";
     const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    const chunkSize = 0x8000; // Process in 32KB chunks
+    let binary = '';
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
     }
+
     return window.btoa(binary);
 }
 
