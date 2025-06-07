@@ -1,0 +1,15 @@
+{
+  "name": "scripts",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "generate": "bun run generate-keys.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
