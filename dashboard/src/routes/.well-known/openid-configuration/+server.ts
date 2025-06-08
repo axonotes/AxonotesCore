@@ -1,12 +1,12 @@
-import { json } from "@sveltejs/kit";
-import { JWT_ISSUER } from "$env/static/private";
+import {json} from "@sveltejs/kit";
+import {JWT_ISSUER} from "$env/static/private";
 
 /**
  * OIDC Discovery Endpoint.
  * This provides configuration metadata to clients, telling them where to
  * find the public keys (JWKS).
  */
-export async function GET({ setHeaders }) {
+export async function GET({setHeaders}) {
     const configuration = {
         issuer: JWT_ISSUER,
         jwks_uri: `${JWT_ISSUER}/.well-known/jwks.json`,

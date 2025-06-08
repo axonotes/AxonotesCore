@@ -1,10 +1,10 @@
-import { error, json, type RequestEvent } from '@sveltejs/kit';
+import {error, json, type RequestEvent} from "@sveltejs/kit";
 import {
     PUBLIC_SPACETIME_MODULE_NAME,
     PUBLIC_SPACETIME_WS,
-} from '$env/static/public';
-import { JWT_COOKIE_NAME } from '$env/static/private';
-import { DbConnection, type ErrorContext } from '$lib/module_bindings';
+} from "$env/static/public";
+import {JWT_COOKIE_NAME} from "$env/static/private";
+import {DbConnection, type ErrorContext} from "$lib/module_bindings";
 
 const OPERATION_TIMEOUT_MS = 5000; // 5 seconds
 
@@ -29,14 +29,14 @@ type SetEncryptionPayload = {
  */
 function callSetEncryptionReducer(
     token: string,
-    data: SetEncryptionPayload,
+    data: SetEncryptionPayload
 ): Promise<void> {
     return new Promise((resolve, reject) => {
         let connection: DbConnection | null = null;
 
         const timeoutId = setTimeout(() => {
             connection?.disconnect();
-            reject(new Error('Database operation timed out.'));
+            reject(new Error("Database operation timed out."));
         }, OPERATION_TIMEOUT_MS);
 
         const cleanupAndDisconnect = () => {
@@ -49,20 +49,22 @@ function callSetEncryptionReducer(
             .withModuleName(PUBLIC_SPACETIME_MODULE_NAME)
             .withToken(token)
             .onConnect((conn) => {
-                console.log('SpacetimeDB connection established for reducer call.');
+                console.log(
+                    "SpacetimeDB connection established for reducer call."
+                );
 
                 conn.reducers.setEncryption(
                     data.publicKey,
                     data.encryptedPrivateKey,
                     data.encryptedBackupKey,
-                    data.argonSalt,
+                    data.argonSalt
                 );
 
                 cleanupAndDisconnect();
                 resolve();
             })
             .onConnectError((_ctx: ErrorContext, err: Error) => {
-                console.error('Error connecting to SpacetimeDB:', err);
+                console.error("Error connecting to SpacetimeDB:", err);
                 cleanupAndDisconnect();
                 reject(err);
             })
@@ -74,18 +76,18 @@ function callSetEncryptionReducer(
  * Handles the POST request to set a user's encryption keys in the database.
  * @param {RequestEvent} event - The SvelteKit request event.
  */
-export async function POST({ request, locals, cookies }: RequestEvent) {
+export async function POST({request, locals, cookies}: RequestEvent) {
     if (!locals.user) {
-        throw error(401, 'Not authenticated');
+        throw error(401, "Not authenticated");
     }
 
     const token = cookies.get(JWT_COOKIE_NAME);
     if (!token) {
-        throw error(401, 'Authentication token is missing');
+        throw error(401, "Authentication token is missing");
     }
 
     const body: Partial<SetEncryptionPayload> = await request.json();
-    const { publicKey, encryptedPrivateKey, encryptedBackupKey, argonSalt } =
+    const {publicKey, encryptedPrivateKey, encryptedBackupKey, argonSalt} =
         body;
 
     // Validate that all required fields are present
@@ -95,7 +97,7 @@ export async function POST({ request, locals, cookies }: RequestEvent) {
         !encryptedBackupKey ||
         !argonSalt
     ) {
-        throw error(400, 'Missing required fields');
+        throw error(400, "Missing required fields");
     }
 
     try {
@@ -106,13 +108,13 @@ export async function POST({ request, locals, cookies }: RequestEvent) {
             argonSalt,
         });
 
-        return json({ success: true }, { status: 200 });
+        return json({success: true}, {status: 200});
     } catch (e) {
-        console.error('Failed to execute setEncryption reducer:', e);
+        console.error("Failed to execute setEncryption reducer:", e);
         if (e instanceof Error) {
             throw error(
                 503,
-                `Service Unavailable: Could not update database. ${e.message}`,
+                `Service Unavailable: Could not update database. ${e.message}`
             );
         }
         throw e;

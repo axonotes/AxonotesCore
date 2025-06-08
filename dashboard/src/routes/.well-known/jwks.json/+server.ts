@@ -1,23 +1,19 @@
-import { json } from "@sveltejs/kit";
-import { importSPKI, exportJWK } from "jose";
+import {json} from "@sveltejs/kit";
+import {importSPKI, exportJWK} from "jose";
 import {JWT_KEY_ID, JWT_PUBLIC_KEY_BASE64} from "$env/static/private";
 
-const publicKeyPem = Buffer.from(
-    JWT_PUBLIC_KEY_BASE64,
-    "base64"
-).toString("ascii");
+const publicKeyPem = Buffer.from(JWT_PUBLIC_KEY_BASE64, "base64").toString(
+    "ascii"
+);
 const keyId = JWT_KEY_ID;
 
 /**
  * This endpoint serves the public key in the standard JWKS format.
  * It allows services like SpaceTimeDB to fetch the key for JWT verification.
  */
-export async function GET({ setHeaders }) {
+export async function GET({setHeaders}) {
     if (!publicKeyPem || !keyId) {
-        return json(
-            { error: "Server configuration error" },
-            { status: 500 }
-        );
+        return json({error: "Server configuration error"}, {status: 500});
     }
 
     const publicKey = await importSPKI(publicKeyPem, "ES256");

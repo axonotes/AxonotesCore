@@ -1,5 +1,4 @@
 import {mnemonicToSeedSync} from "bip39";
-// @ts-ignore
 import argon2 from "argon2-browser/dist/argon2-bundled.min";
 
 // --- Helper Functions for data conversion ---
@@ -10,7 +9,7 @@ import argon2 from "argon2-browser/dist/argon2-bundled.min";
 export function arrayBufferToBase64(buffer: ArrayBufferLike): string {
     const bytes = new Uint8Array(buffer);
     const chunkSize = 0x8000; // Process in 32KB chunks
-    let binary = '';
+    let binary = "";
 
     for (let i = 0; i < bytes.length; i += chunkSize) {
         const chunk = bytes.subarray(i, i + chunkSize);
@@ -43,16 +42,16 @@ export async function generateRsaKeyPair() {
             hash: "SHA-256",
         },
         true,
-        ["encrypt", "decrypt"],
+        ["encrypt", "decrypt"]
     );
 
     const publicKey = await window.crypto.subtle.exportKey(
         "spki",
-        keyPair.publicKey,
+        keyPair.publicKey
     );
     const privateKey = await window.crypto.subtle.exportKey(
         "pkcs8",
-        keyPair.privateKey,
+        keyPair.privateKey
     );
 
     return {
@@ -70,9 +69,9 @@ export async function encryptWithAes(data: string, key: Uint8Array) {
     const cryptoKey = await window.crypto.subtle.importKey(
         "raw",
         key,
-        { name: "AES-GCM" },
+        {name: "AES-GCM"},
         false,
-        ["encrypt"],
+        ["encrypt"]
     );
 
     const encryptedData = await window.crypto.subtle.encrypt(
@@ -81,7 +80,7 @@ export async function encryptWithAes(data: string, key: Uint8Array) {
             iv: iv,
         },
         cryptoKey,
-        encodedData,
+        encodedData
     );
 
     return {

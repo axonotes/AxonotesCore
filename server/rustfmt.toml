@@ -1,0 +1,5 @@
+tab_spaces = 4
+max_width = 80
+struct_lit_single_line = false
+chain_width = 60
+hard_tabs = false

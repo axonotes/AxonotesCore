@@ -14,11 +14,11 @@ export interface UserTokenPayload {
 }
 
 const privateKey = Buffer.from(JWT_PRIVATE_KEY_BASE64, "base64").toString(
-    "ascii",
+    "ascii"
 );
 
 const publicKey = Buffer.from(JWT_PUBLIC_KEY_BASE64, "base64").toString(
-    "ascii",
+    "ascii"
 );
 
 const keyId = JWT_KEY_ID;
@@ -28,7 +28,7 @@ const ALGORITHM = "ES256"; // Elliptic Curve algorithm
 
 if (!privateKey || !publicKey || !keyId) {
     throw new Error(
-        "JWT keys are not set correctly. Please generate them with `bun run generate` and copy them into the .env file",
+        "JWT keys are not set correctly. Please generate them with `bun run generate` and copy them into the .env file"
     );
 }
 

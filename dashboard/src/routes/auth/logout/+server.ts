@@ -1,5 +1,8 @@
 import {redirect} from "@sveltejs/kit";
-import {JWT_COOKIE_NAME, WORKOS_SESSION_ID_COOKIE_NAME} from "$env/static/private";
+import {
+    JWT_COOKIE_NAME,
+    WORKOS_SESSION_ID_COOKIE_NAME,
+} from "$env/static/private";
 import {workos} from "$lib/server/workos";
 
 export async function POST({cookies}) {

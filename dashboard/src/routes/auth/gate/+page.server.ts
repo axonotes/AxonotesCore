@@ -1,13 +1,10 @@
-import { error, redirect } from '@sveltejs/kit';
-import { JWT_COOKIE_NAME } from '$env/static/private';
+import {error, redirect} from "@sveltejs/kit";
+import {JWT_COOKIE_NAME} from "$env/static/private";
 import {
     PUBLIC_SPACETIME_MODULE_NAME,
     PUBLIC_SPACETIME_WS,
-} from '$env/static/public';
-import {
-    DbConnection,
-    type ErrorContext,
-} from '$lib/module_bindings';
+} from "$env/static/public";
+import {DbConnection, type ErrorContext} from "$lib/module_bindings";
 import {sql} from "$lib/server/spacetime";
 
 const CONNECTION_TIMEOUT_MS = 5000; // 5 seconds
@@ -29,8 +26,8 @@ function connectAndSync(token: string): Promise<DbConnection> {
             connection?.disconnect();
             reject(
                 new Error(
-                    'Timed out while waiting for SpacetimeDB connection and data sync.',
-                ),
+                    "Timed out while waiting for SpacetimeDB connection and data sync."
+                )
             );
         }, CONNECTION_TIMEOUT_MS);
 
@@ -44,17 +41,23 @@ function connectAndSync(token: string): Promise<DbConnection> {
             .withModuleName(PUBLIC_SPACETIME_MODULE_NAME)
             .withToken(token)
             .onConnect((conn, identity) => {
-                console.log('SpacetimeDB connection established.');
+                console.log("SpacetimeDB connection established.");
                 conn.subscriptionBuilder()
                     .onApplied(() => {
-                        console.log('Subscription applied. User data is now available.');
+                        console.log(
+                            "Subscription applied. User data is now available."
+                        );
                         clearTimeout(timeoutId); // Don't disconnect, just clear the timeout
                         resolve(conn); // Resolve with the active connection
                     })
-                    .subscribe([sql('SELECT * FROM user WHERE identity = ?', [identity.toHexString()])]);
+                    .subscribe([
+                        sql("SELECT * FROM user WHERE identity = ?", [
+                            identity.toHexString(),
+                        ]),
+                    ]);
             })
             .onConnectError((_ctx: ErrorContext, err: Error) => {
-                console.error('Error connecting to SpacetimeDB:', err);
+                console.error("Error connecting to SpacetimeDB:", err);
                 cleanup();
                 reject(err);
             })
@@ -66,16 +69,16 @@ function connectAndSync(token: string): Promise<DbConnection> {
  * Server-side load function. It authenticates the user, connects to the
  * database, and redirects them based on their account setup status.
  */
-export async function load({ locals, cookies }) {
+export async function load({locals, cookies}) {
     if (!locals.user) {
-        throw redirect(302, '/login');
+        throw redirect(302, "/login");
     }
 
     const token = cookies.get(JWT_COOKIE_NAME);
     if (!token) {
         // Clear a potentially stale cookie and redirect to login
-        cookies.delete(JWT_COOKIE_NAME, { path: '/' });
-        throw redirect(302, '/login');
+        cookies.delete(JWT_COOKIE_NAME, {path: "/"});
+        throw redirect(302, "/login");
     }
 
     let connection: DbConnection | null = null;
@@ -87,19 +90,19 @@ export async function load({ locals, cookies }) {
 
         // db.user should only contain 1 user because of our sync call
         const currentUser = Array.from(connection.db.user.iter()).find((user) =>
-            user.identity.isEqual(connection!.identity!),
+            user.identity.isEqual(connection!.identity!)
         );
 
         if (currentUser?.publicKey) {
             // User has a public key, so they need to unlock their account.
-            throw redirect(302, '/auth/unlock');
+            throw redirect(302, "/auth/unlock");
         } else {
             // User needs to complete the initial encryption setup.
-            throw redirect(302, '/auth/setup');
+            throw redirect(302, "/auth/setup");
         }
     } catch (e) {
         if (e instanceof Error) {
-            console.error('Caught an error during SpacetimeDB sync:', e);
+            console.error("Caught an error during SpacetimeDB sync:", e);
             throw error(503, {
                 message: `Service Unavailable: Could not sync with database. ${e.message}`,
             });
@@ -109,7 +112,7 @@ export async function load({ locals, cookies }) {
         throw e;
     } finally {
         if (connection) {
-            console.log('Disconnecting from SpacetimeDB.');
+            console.log("Disconnecting from SpacetimeDB.");
             connection.disconnect();
         }
     }

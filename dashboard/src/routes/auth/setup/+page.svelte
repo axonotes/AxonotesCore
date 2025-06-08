@@ -10,14 +10,15 @@
     let errorMessage = $state("");
     let generatedPassphrase = $state("");
 
-    let passwordStrength = $derived(
-        masterPassword ? zxcvbn(masterPassword).score : 0,
+    const passwordStrength = $derived(
+        masterPassword ? zxcvbn(masterPassword).score : 0
     );
 
     async function handleSetup(event: SubmitEvent) {
         event.preventDefault();
         if (passwordStrength < 3) {
-            errorMessage = "Password is too weak. Please choose a stronger one.";
+            errorMessage =
+                "Password is too weak. Please choose a stronger one.";
             return;
         }
         isLoading = true;
@@ -29,17 +30,20 @@
             generatedPassphrase = backupPassphrase;
 
             const salt = crypto.generateSalt(16);
-            const passwordHash = await crypto.hashPassword(masterPassword, salt);
+            const passwordHash = await crypto.hashPassword(
+                masterPassword,
+                salt
+            );
 
             const encryptedPrivateKey = await crypto.encryptWithAes(
                 privateKey,
-                passwordHash,
+                passwordHash
             );
 
             const backupKey = crypto.getKeyFromMnemonic(backupPassphrase);
             const encryptedBackupKey = await crypto.encryptWithAes(
                 privateKey,
-                backupKey,
+                backupKey
             );
 
             const payload = {
@@ -71,12 +75,14 @@
 <h1>Set Up Your Secure Account</h1>
 
 {#if !generatedPassphrase}
-    <p>Choose a strong master password. This will be used to encrypt your data.</p>
+    <p>
+        Choose a strong master password. This will be used to encrypt your data.
+    </p>
     <form onsubmit={handleSetup} use:enhance>
         <input
-                type="password"
-                bind:value={masterPassword}
-                placeholder="Master Password"
+            type="password"
+            bind:value={masterPassword}
+            placeholder="Master Password"
         />
         <progress value={passwordStrength} max="4"></progress>
         <button type="submit" disabled={isLoading || passwordStrength < 3}>
