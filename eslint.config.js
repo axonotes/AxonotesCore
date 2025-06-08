@@ -31,30 +31,11 @@ export default tseslint.config(
     {
         files: ["**/*.ts"],
         extends: [...tseslint.configs.recommended],
-        rules: {
-            "@typescript-eslint/no-unused-vars": [
-                "error",
-                {
-                    argsIgnorePattern: "^_",
-                    varsIgnorePattern: "^_",
-                    caughtErrorsIgnorePattern: "^_",
-                },
-            ],
-        },
-    },
-
-    // 4. SVELTE CONFIG: Apply Svelte parser, which then uses the TS parser
-    // for the <script> blocks.
-    {
-        files: ["**/*.svelte"],
-        extends: [
-            ...sveltePlugin.configs.recommended,
-            ...tseslint.configs.recommended,
-        ],
         languageOptions: {
-            parser: svelteParser,
             parserOptions: {
-                parser: tseslint.parser,
+                project: true,
+                tsconfigRootDir: import.meta.dirname,
+                extraFileExtensions: [".svelte"],
             },
         },
         rules: {
@@ -69,6 +50,20 @@ export default tseslint.config(
         },
     },
 
-    // 5. Must be the VERY LAST entry to disable conflicting style rules.
+    // 4. SVELTE-SPECIFIC CONFIG
+    // This block layers Svelte-specific parsing and rules on top.
+    // It inherits the type-aware settings from the block above.
+    {
+        files: ["**/*.svelte"],
+        extends: [...sveltePlugin.configs.recommended],
+        languageOptions: {
+            parser: svelteParser,
+            parserOptions: {
+                parser: tseslint.parser,
+            },
+        },
+    },
+
+    // 5. PRETTIER: Must be the VERY LAST entry.
     prettier
 );
