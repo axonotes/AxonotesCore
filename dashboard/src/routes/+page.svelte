@@ -1,7 +1,5 @@
-<h1>Welcome to SvelteKit</h1>
 <p>
-    Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the
-    documentation
+    <!-- TODO: redirect to login/dashboard -->
+    This is the currently empty landing page of the dashboard. In the future this
+    should automatically redirect to the login/dashboard page.
 </p>
-
-<button class="btn preset-filled-primary-500"> Test </button>

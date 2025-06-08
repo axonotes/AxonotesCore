@@ -32,8 +32,16 @@ export function base64ToUint8Array(base64: string): Uint8Array {
 
 // --- Core Crypto Functions ---
 
+export interface EncryptedData {
+    iv: string;
+    data: string;
+}
+
 /** Generates a 4096-bit RSA-OAEP key pair. */
-export async function generateRsaKeyPair() {
+export async function generateRsaKeyPair(): Promise<{
+    publicKey: string;
+    privateKey: string;
+}> {
     const keyPair = await window.crypto.subtle.generateKey(
         {
             name: "RSA-OAEP",
@@ -61,7 +69,10 @@ export async function generateRsaKeyPair() {
 }
 
 /** Encrypts data using AES-256-GCM with the Web Crypto API. */
-export async function encryptWithAes(data: string, key: Uint8Array) {
+export async function encryptWithAes(
+    data: string,
+    key: Uint8Array
+): Promise<EncryptedData> {
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const encoder = new TextEncoder();
     const encodedData = encoder.encode(data);
@@ -89,8 +100,40 @@ export async function encryptWithAes(data: string, key: Uint8Array) {
     };
 }
 
+/** Decrypts data using AES-256-GCM with the Web Crypto API. */
+export async function decryptWithAes(
+    encrypted: EncryptedData,
+    key: Uint8Array
+): Promise<string> {
+    const iv = base64ToUint8Array(encrypted.iv);
+    const data = base64ToUint8Array(encrypted.data);
+
+    const cryptoKey = await window.crypto.subtle.importKey(
+        "raw",
+        key,
+        {name: "AES-GCM"},
+        false,
+        ["decrypt"]
+    );
+
+    const decryptedData = await window.crypto.subtle.decrypt(
+        {
+            name: "AES-GCM",
+            iv: iv,
+        },
+        cryptoKey,
+        data
+    );
+
+    const decoder = new TextDecoder();
+    return decoder.decode(decryptedData);
+}
+
 /** Hashes a password with Argon2id. */
-export async function hashPassword(password: string, salt: Uint8Array) {
+export async function hashPassword(
+    password: string,
+    salt: Uint8Array
+): Promise<Uint8Array<ArrayBufferLike>> {
     const hashResult = await argon2.hash({
         pass: password,
         salt: salt,
@@ -113,4 +156,25 @@ export function getKeyFromMnemonic(mnemonic: string): Uint8Array {
 /** Generates a cryptographically secure random salt. */
 export function generateSalt(byteLength = 16): Uint8Array {
     return window.crypto.getRandomValues(new Uint8Array(byteLength));
+}
+
+/**
+ * Imports a raw private key into the browser's crypto engine as a
+ * non-extractable CryptoKey object.
+ * @param rawPrivateKey The private key in BufferSource format.
+ * @returns A non-extractable CryptoKey handle.
+ */
+export async function importPrivateKey(
+    rawPrivateKey: BufferSource
+): Promise<CryptoKey> {
+    return await window.crypto.subtle.importKey(
+        "pkcs8", // Private key format
+        rawPrivateKey,
+        {
+            name: "RSA-OAEP",
+            hash: "SHA-256",
+        },
+        false, // VERY IMPORTANT
+        ["decrypt"] // Key usage
+    );
 }

@@ -4,7 +4,7 @@ import {
     PUBLIC_SPACETIME_MODULE_NAME,
     PUBLIC_SPACETIME_WS,
 } from "$env/static/public";
-import {DbConnection, type ErrorContext} from "$lib/module_bindings";
+import {DbConnection} from "$lib/module_bindings";
 import {sql} from "$lib/server/spacetime";
 
 const CONNECTION_TIMEOUT_MS = 5000; // 5 seconds
@@ -31,11 +31,6 @@ function connectAndSync(token: string): Promise<DbConnection> {
             );
         }, CONNECTION_TIMEOUT_MS);
 
-        const cleanup = () => {
-            clearTimeout(timeoutId);
-            connection?.disconnect();
-        };
-
         connection = DbConnection.builder()
             .withUri(PUBLIC_SPACETIME_WS)
             .withModuleName(PUBLIC_SPACETIME_MODULE_NAME)
@@ -44,9 +39,6 @@ function connectAndSync(token: string): Promise<DbConnection> {
                 console.log("SpacetimeDB connection established.");
                 conn.subscriptionBuilder()
                     .onApplied(() => {
-                        console.log(
-                            "Subscription applied. User data is now available."
-                        );
                         clearTimeout(timeoutId); // Don't disconnect, just clear the timeout
                         resolve(conn); // Resolve with the active connection
                     })
@@ -55,11 +47,6 @@ function connectAndSync(token: string): Promise<DbConnection> {
                             identity.toHexString(),
                         ]),
                     ]);
-            })
-            .onConnectError((_ctx: ErrorContext, err: Error) => {
-                console.error("Error connecting to SpacetimeDB:", err);
-                cleanup();
-                reject(err);
             })
             .build();
     });
@@ -85,8 +72,6 @@ export async function load({locals, cookies}) {
     try {
         // Await the helper, pausing execution until the DB is connected and synced.
         connection = await connectAndSync(token);
-
-        console.log(`User table count: ${connection.db.user.count()}`);
 
         // db.user should only contain 1 user because of our sync call
         const currentUser = Array.from(connection.db.user.iter()).find((user) =>
