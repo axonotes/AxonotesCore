@@ -7,158 +7,232 @@
 /* tslint:disable */
 // @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  SubscriptionBuilderImpl,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-  type CallReducerFlags,
-  type DbContext,
-  type ErrorContextInterface,
-  type Event,
-  type EventContextInterface,
-  type ReducerEventContextInterface,
-  type SubscriptionEventContextInterface,
+    AlgebraicType,
+    AlgebraicValue,
+    BinaryReader,
+    BinaryWriter,
+    ConnectionId,
+    DbConnectionBuilder,
+    DbConnectionImpl,
+    Identity,
+    ProductType,
+    ProductTypeElement,
+    SubscriptionBuilderImpl,
+    SumType,
+    SumTypeVariant,
+    TableCache,
+    TimeDuration,
+    Timestamp,
+    deepEqual,
+    type CallReducerFlags,
+    type DbContext,
+    type ErrorContextInterface,
+    type Event,
+    type EventContextInterface,
+    type ReducerEventContextInterface,
+    type SubscriptionEventContextInterface,
 } from "@clockworklabs/spacetimedb-sdk";
 
 // Import and reexport all reducer arg types
-import { ClientConnected } from "./client_connected_reducer.ts";
-export { ClientConnected };
-import { SetEncryption } from "./set_encryption_reducer.ts";
-export { SetEncryption };
+import {ClientConnected} from "./client_connected_reducer.ts";
+export {ClientConnected};
+import {SetEncryption} from "./set_encryption_reducer.ts";
+export {SetEncryption};
 
 // Import and reexport all table handle types
-import { UserTableHandle } from "./user_table.ts";
-export { UserTableHandle };
+import {UserTableHandle} from "./user_table.ts";
+export {UserTableHandle};
 
 // Import and reexport all types
-import { User } from "./user_type.ts";
-export { User };
+import {User} from "./user_type.ts";
+export {User};
 
 const REMOTE_MODULE = {
-  tables: {
-    user: {
-      tableName: "user",
-      rowType: User.getTypeScriptAlgebraicType(),
-      primaryKey: "identity",
-      primaryKeyInfo: {
-        colName: "identity",
-        colType: User.getTypeScriptAlgebraicType().product.elements[0].algebraicType,
-      },
+    tables: {
+        user: {
+            tableName: "user",
+            rowType: User.getTypeScriptAlgebraicType(),
+            primaryKey: "identity",
+            primaryKeyInfo: {
+                colName: "identity",
+                colType:
+                    User.getTypeScriptAlgebraicType().product.elements[0]
+                        .algebraicType,
+            },
+        },
     },
-  },
-  reducers: {
-    client_connected: {
-      reducerName: "client_connected",
-      argsType: ClientConnected.getTypeScriptAlgebraicType(),
+    reducers: {
+        client_connected: {
+            reducerName: "client_connected",
+            argsType: ClientConnected.getTypeScriptAlgebraicType(),
+        },
+        set_encryption: {
+            reducerName: "set_encryption",
+            argsType: SetEncryption.getTypeScriptAlgebraicType(),
+        },
     },
-    set_encryption: {
-      reducerName: "set_encryption",
-      argsType: SetEncryption.getTypeScriptAlgebraicType(),
+    versionInfo: {
+        cliVersion: "1.2.0",
     },
-  },
-  versionInfo: {
-    cliVersion: "1.2.0",
-  },
-  // Constructors which are used by the DbConnectionImpl to
-  // extract type information from the generated RemoteModule.
-  //
-  // NOTE: This is not strictly necessary for `eventContextConstructor` because
-  // all we do is build a TypeScript object which we could have done inside the
-  // SDK, but if in the future we wanted to create a class this would be
-  // necessary because classes have methods, so we'll keep it.
-  eventContextConstructor: (imp: DbConnectionImpl, event: Event<Reducer>) => {
-    return {
-      ...(imp as DbConnection),
-      event
-    }
-  },
-  dbViewConstructor: (imp: DbConnectionImpl) => {
-    return new RemoteTables(imp);
-  },
-  reducersConstructor: (imp: DbConnectionImpl, setReducerFlags: SetReducerFlags) => {
-    return new RemoteReducers(imp, setReducerFlags);
-  },
-  setReducerFlagsConstructor: () => {
-    return new SetReducerFlags();
-  }
-}
+    // Constructors which are used by the DbConnectionImpl to
+    // extract type information from the generated RemoteModule.
+    //
+    // NOTE: This is not strictly necessary for `eventContextConstructor` because
+    // all we do is build a TypeScript object which we could have done inside the
+    // SDK, but if in the future we wanted to create a class this would be
+    // necessary because classes have methods, so we'll keep it.
+    eventContextConstructor: (imp: DbConnectionImpl, event: Event<Reducer>) => {
+        return {
+            ...(imp as DbConnection),
+            event,
+        };
+    },
+    dbViewConstructor: (imp: DbConnectionImpl) => {
+        return new RemoteTables(imp);
+    },
+    reducersConstructor: (
+        imp: DbConnectionImpl,
+        setReducerFlags: SetReducerFlags
+    ) => {
+        return new RemoteReducers(imp, setReducerFlags);
+    },
+    setReducerFlagsConstructor: () => {
+        return new SetReducerFlags();
+    },
+};
 
 // A type representing all the possible variants of a reducer.
-export type Reducer = never
-| { name: "ClientConnected", args: ClientConnected }
-| { name: "SetEncryption", args: SetEncryption }
-;
+export type Reducer =
+    | never
+    | {name: "ClientConnected"; args: ClientConnected}
+    | {name: "SetEncryption"; args: SetEncryption};
 
 export class RemoteReducers {
-  constructor(private connection: DbConnectionImpl, private setCallReducerFlags: SetReducerFlags) {}
+    constructor(
+        private connection: DbConnectionImpl,
+        private setCallReducerFlags: SetReducerFlags
+    ) {}
 
-  onClientConnected(callback: (ctx: ReducerEventContext) => void) {
-    this.connection.onReducer("client_connected", callback);
-  }
+    onClientConnected(callback: (ctx: ReducerEventContext) => void) {
+        this.connection.onReducer("client_connected", callback);
+    }
 
-  removeOnClientConnected(callback: (ctx: ReducerEventContext) => void) {
-    this.connection.offReducer("client_connected", callback);
-  }
+    removeOnClientConnected(callback: (ctx: ReducerEventContext) => void) {
+        this.connection.offReducer("client_connected", callback);
+    }
 
-  setEncryption(publicKey: string, encryptedPrivateKey: string, encryptedBackupKey: string, argonSalt: string) {
-    const __args = { publicKey, encryptedPrivateKey, encryptedBackupKey, argonSalt };
-    let __writer = new BinaryWriter(1024);
-    SetEncryption.getTypeScriptAlgebraicType().serialize(__writer, __args);
-    let __argsBuffer = __writer.getBuffer();
-    this.connection.callReducer("set_encryption", __argsBuffer, this.setCallReducerFlags.setEncryptionFlags);
-  }
+    setEncryption(
+        publicKey: string,
+        encryptedPrivateKey: string,
+        encryptedBackupKey: string,
+        argonSalt: string
+    ) {
+        const __args = {
+            publicKey,
+            encryptedPrivateKey,
+            encryptedBackupKey,
+            argonSalt,
+        };
+        let __writer = new BinaryWriter(1024);
+        SetEncryption.getTypeScriptAlgebraicType().serialize(__writer, __args);
+        let __argsBuffer = __writer.getBuffer();
+        this.connection.callReducer(
+            "set_encryption",
+            __argsBuffer,
+            this.setCallReducerFlags.setEncryptionFlags
+        );
+    }
 
-  onSetEncryption(callback: (ctx: ReducerEventContext, publicKey: string, encryptedPrivateKey: string, encryptedBackupKey: string, argonSalt: string) => void) {
-    this.connection.onReducer("set_encryption", callback);
-  }
+    onSetEncryption(
+        callback: (
+            ctx: ReducerEventContext,
+            publicKey: string,
+            encryptedPrivateKey: string,
+            encryptedBackupKey: string,
+            argonSalt: string
+        ) => void
+    ) {
+        this.connection.onReducer("set_encryption", callback);
+    }
 
-  removeOnSetEncryption(callback: (ctx: ReducerEventContext, publicKey: string, encryptedPrivateKey: string, encryptedBackupKey: string, argonSalt: string) => void) {
-    this.connection.offReducer("set_encryption", callback);
-  }
-
+    removeOnSetEncryption(
+        callback: (
+            ctx: ReducerEventContext,
+            publicKey: string,
+            encryptedPrivateKey: string,
+            encryptedBackupKey: string,
+            argonSalt: string
+        ) => void
+    ) {
+        this.connection.offReducer("set_encryption", callback);
+    }
 }
 
 export class SetReducerFlags {
-  setEncryptionFlags: CallReducerFlags = 'FullUpdate';
-  setEncryption(flags: CallReducerFlags) {
-    this.setEncryptionFlags = flags;
-  }
-
+    setEncryptionFlags: CallReducerFlags = "FullUpdate";
+    setEncryption(flags: CallReducerFlags) {
+        this.setEncryptionFlags = flags;
+    }
 }
 
 export class RemoteTables {
-  constructor(private connection: DbConnectionImpl) {}
+    constructor(private connection: DbConnectionImpl) {}
 
-  get user(): UserTableHandle {
-    return new UserTableHandle(this.connection.clientCache.getOrCreateTable<User>(REMOTE_MODULE.tables.user));
-  }
+    get user(): UserTableHandle {
+        return new UserTableHandle(
+            this.connection.clientCache.getOrCreateTable<User>(
+                REMOTE_MODULE.tables.user
+            )
+        );
+    }
 }
 
-export class SubscriptionBuilder extends SubscriptionBuilderImpl<RemoteTables, RemoteReducers, SetReducerFlags> { }
+export class SubscriptionBuilder extends SubscriptionBuilderImpl<
+    RemoteTables,
+    RemoteReducers,
+    SetReducerFlags
+> {}
 
-export class DbConnection extends DbConnectionImpl<RemoteTables, RemoteReducers, SetReducerFlags> {
-  static builder = (): DbConnectionBuilder<DbConnection, ErrorContext, SubscriptionEventContext> => {
-    return new DbConnectionBuilder<DbConnection, ErrorContext, SubscriptionEventContext>(REMOTE_MODULE, (imp: DbConnectionImpl) => imp as DbConnection);
-  }
-  subscriptionBuilder = (): SubscriptionBuilder => {
-    return new SubscriptionBuilder(this);
-  }
+export class DbConnection extends DbConnectionImpl<
+    RemoteTables,
+    RemoteReducers,
+    SetReducerFlags
+> {
+    static builder = (): DbConnectionBuilder<
+        DbConnection,
+        ErrorContext,
+        SubscriptionEventContext
+    > => {
+        return new DbConnectionBuilder<
+            DbConnection,
+            ErrorContext,
+            SubscriptionEventContext
+        >(REMOTE_MODULE, (imp: DbConnectionImpl) => imp as DbConnection);
+    };
+    subscriptionBuilder = (): SubscriptionBuilder => {
+        return new SubscriptionBuilder(this);
+    };
 }
 
-export type EventContext = EventContextInterface<RemoteTables, RemoteReducers, SetReducerFlags, Reducer>;
-export type ReducerEventContext = ReducerEventContextInterface<RemoteTables, RemoteReducers, SetReducerFlags, Reducer>;
-export type SubscriptionEventContext = SubscriptionEventContextInterface<RemoteTables, RemoteReducers, SetReducerFlags>;
-export type ErrorContext = ErrorContextInterface<RemoteTables, RemoteReducers, SetReducerFlags>;
+export type EventContext = EventContextInterface<
+    RemoteTables,
+    RemoteReducers,
+    SetReducerFlags,
+    Reducer
+>;
+export type ReducerEventContext = ReducerEventContextInterface<
+    RemoteTables,
+    RemoteReducers,
+    SetReducerFlags,
+    Reducer
+>;
+export type SubscriptionEventContext = SubscriptionEventContextInterface<
+    RemoteTables,
+    RemoteReducers,
+    SetReducerFlags
+>;
+export type ErrorContext = ErrorContextInterface<
+    RemoteTables,
+    RemoteReducers,
+    SetReducerFlags
+>;

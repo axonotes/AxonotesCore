@@ -7,65 +7,77 @@
 /* tslint:disable */
 // @ts-nocheck
 import {
-  AlgebraicType,
-  AlgebraicValue,
-  BinaryReader,
-  BinaryWriter,
-  ConnectionId,
-  DbConnectionBuilder,
-  DbConnectionImpl,
-  Identity,
-  ProductType,
-  ProductTypeElement,
-  SubscriptionBuilderImpl,
-  SumType,
-  SumTypeVariant,
-  TableCache,
-  TimeDuration,
-  Timestamp,
-  deepEqual,
-  type CallReducerFlags,
-  type DbContext,
-  type ErrorContextInterface,
-  type Event,
-  type EventContextInterface,
-  type ReducerEventContextInterface,
-  type SubscriptionEventContextInterface,
+    AlgebraicType,
+    AlgebraicValue,
+    BinaryReader,
+    BinaryWriter,
+    ConnectionId,
+    DbConnectionBuilder,
+    DbConnectionImpl,
+    Identity,
+    ProductType,
+    ProductTypeElement,
+    SubscriptionBuilderImpl,
+    SumType,
+    SumTypeVariant,
+    TableCache,
+    TimeDuration,
+    Timestamp,
+    deepEqual,
+    type CallReducerFlags,
+    type DbContext,
+    type ErrorContextInterface,
+    type Event,
+    type EventContextInterface,
+    type ReducerEventContextInterface,
+    type SubscriptionEventContextInterface,
 } from "@clockworklabs/spacetimedb-sdk";
 export type User = {
-  identity: Identity,
-  publicKey: string | undefined,
-  encryptedPrivateKey: string | undefined,
-  encryptedBackupKey: string | undefined,
-  argonSalt: string | undefined,
+    identity: Identity;
+    publicKey: string | undefined;
+    encryptedPrivateKey: string | undefined;
+    encryptedBackupKey: string | undefined;
+    argonSalt: string | undefined;
 };
 
 /**
  * A namespace for generated helper functions.
  */
 export namespace User {
-  /**
-  * A function which returns this type represented as an AlgebraicType.
-  * This function is derived from the AlgebraicType used to generate this type.
-  */
-  export function getTypeScriptAlgebraicType(): AlgebraicType {
-    return AlgebraicType.createProductType([
-      new ProductTypeElement("identity", AlgebraicType.createIdentityType()),
-      new ProductTypeElement("publicKey", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-      new ProductTypeElement("encryptedPrivateKey", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-      new ProductTypeElement("encryptedBackupKey", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-      new ProductTypeElement("argonSalt", AlgebraicType.createOptionType(AlgebraicType.createStringType())),
-    ]);
-  }
+    /**
+     * A function which returns this type represented as an AlgebraicType.
+     * This function is derived from the AlgebraicType used to generate this type.
+     */
+    export function getTypeScriptAlgebraicType(): AlgebraicType {
+        return AlgebraicType.createProductType([
+            new ProductTypeElement(
+                "identity",
+                AlgebraicType.createIdentityType()
+            ),
+            new ProductTypeElement(
+                "publicKey",
+                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+            ),
+            new ProductTypeElement(
+                "encryptedPrivateKey",
+                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+            ),
+            new ProductTypeElement(
+                "encryptedBackupKey",
+                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+            ),
+            new ProductTypeElement(
+                "argonSalt",
+                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+            ),
+        ]);
+    }
 
-  export function serialize(writer: BinaryWriter, value: User): void {
-    User.getTypeScriptAlgebraicType().serialize(writer, value);
-  }
+    export function serialize(writer: BinaryWriter, value: User): void {
+        User.getTypeScriptAlgebraicType().serialize(writer, value);
+    }
 
-  export function deserialize(reader: BinaryReader): User {
-    return User.getTypeScriptAlgebraicType().deserialize(reader);
-  }
-
+    export function deserialize(reader: BinaryReader): User {
+        return User.getTypeScriptAlgebraicType().deserialize(reader);
+    }
 }
-
-
