@@ -191,7 +191,7 @@ export async function getSpacetimeUser(
 ): Promise<User | null> {
     if (!browser) return null;
 
-    const handle = await ensureSpacetimeConnected();
+    const handle = await ensureSpacetimeConnected(timeoutMs);
     if (!handle.connection) {
         console.error("Error, no handle was provided");
         return null;
@@ -204,6 +204,10 @@ export async function getSpacetimeUser(
     if (
         !currentUser?.publicKey ||
         !currentUser.encryptedPrivateKey ||
+        !currentUser.encryptedBackupKey ||
+        !currentUser.publicSigningKey ||
+        !currentUser.encryptedPrivateSigningKey ||
+        !currentUser.encryptedPrivateBackupSigningKey ||
         !currentUser.argonSalt
     ) {
         await goto("/auth/setup");

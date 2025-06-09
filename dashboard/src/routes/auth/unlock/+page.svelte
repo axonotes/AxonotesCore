@@ -3,12 +3,7 @@
     import {unlockVaultWithPassword} from "$lib/client/cryptoStore";
     import {base64ToUint8Array} from "$lib/client/crypto";
     import {onMount} from "svelte";
-    import {
-        connectToSpacetime,
-        ensureSpacetimeConnected,
-        getSpacetimeUser,
-        spacetime,
-    } from "$lib/client/spacetime";
+    import {connectToSpacetime, getSpacetimeUser} from "$lib/client/spacetime";
 
     let password = $state("");
     let isLoading = $state(false);
@@ -24,40 +19,43 @@
 
         const currentUser = await getSpacetimeUser();
         if (!currentUser) {
-            console.error("Error getting spacetime user");
+            errorMessage =
+                "Could not load user data. Please check your connection.";
+            isLoading = false;
             return;
         }
+
         if (
-            !currentUser?.publicKey ||
             !currentUser.encryptedPrivateKey ||
+            !currentUser.encryptedPrivateSigningKey ||
             !currentUser.argonSalt
         ) {
             await goto("/auth/setup");
-            return null;
+            return;
         }
 
         try {
-            // The salt is a Base64 string from the server; convert it to a Uint8Array.
             const saltBytes = base64ToUint8Array(currentUser.argonSalt);
 
+            // Call the updated unlock function with both encrypted keys.
             const success = await unlockVaultWithPassword(
                 JSON.parse(currentUser.encryptedPrivateKey),
+                JSON.parse(currentUser.encryptedPrivateSigningKey),
                 password,
                 saltBytes
             );
 
             if (success) {
-                // On successful unlock, the cryptoStore is now populated.
-                // Navigate the user to their main dashboard.
+                // On successful unlock, the vaultStore is now populated with both keys.
                 await goto("/dashboard");
             } else {
                 errorMessage = "Invalid password. Please try again.";
             }
         } catch (err) {
             console.error("An unexpected error occurred during unlock:", err);
-            errorMessage = "An unexpected error occurred. Please try again.";
+            // The most common error here is a bad password causing a decrypt failure.
+            errorMessage = "Invalid password. Please try again.";
         } finally {
-            // Clear password field for security, regardless of outcome.
             password = "";
             isLoading = false;
         }
@@ -78,10 +76,7 @@
                 <p class="mb-8 text-center">
                     Enter your master password to decrypt your data.
                 </p>
-                <form
-                    on:submit|preventDefault={handleUnlock}
-                    class="flex flex-col"
-                >
+                <form onsubmit={handleUnlock} class="flex flex-col">
                     <label for="password" class="mb-2">Master Password</label>
                     <input
                         id="password"

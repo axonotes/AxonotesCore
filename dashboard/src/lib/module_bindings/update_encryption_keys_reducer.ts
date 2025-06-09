@@ -33,17 +33,17 @@ import {
     type SubscriptionEventContextInterface,
 } from "@clockworklabs/spacetimedb-sdk";
 
-export type SetEncryption = {
-    publicKey: string;
-    encryptedPrivateKey: string;
-    encryptedBackupKey: string;
-    argonSalt: string;
+export type UpdateEncryptionKeys = {
+    newEncryptedPrivateKey: string;
+    newEncryptedPrivateSigningKey: string;
+    newArgonSalt: string;
+    signatureBase64: string;
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace SetEncryption {
+export namespace UpdateEncryptionKeys {
     /**
      * A function which returns this type represented as an AlgebraicType.
      * This function is derived from the AlgebraicType used to generate this type.
@@ -51,19 +51,19 @@ export namespace SetEncryption {
     export function getTypeScriptAlgebraicType(): AlgebraicType {
         return AlgebraicType.createProductType([
             new ProductTypeElement(
-                "publicKey",
+                "newEncryptedPrivateKey",
                 AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
-                "encryptedPrivateKey",
+                "newEncryptedPrivateSigningKey",
                 AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
-                "encryptedBackupKey",
+                "newArgonSalt",
                 AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
-                "argonSalt",
+                "signatureBase64",
                 AlgebraicType.createStringType()
             ),
         ]);
@@ -71,12 +71,17 @@ export namespace SetEncryption {
 
     export function serialize(
         writer: BinaryWriter,
-        value: SetEncryption
+        value: UpdateEncryptionKeys
     ): void {
-        SetEncryption.getTypeScriptAlgebraicType().serialize(writer, value);
+        UpdateEncryptionKeys.getTypeScriptAlgebraicType().serialize(
+            writer,
+            value
+        );
     }
 
-    export function deserialize(reader: BinaryReader): SetEncryption {
-        return SetEncryption.getTypeScriptAlgebraicType().deserialize(reader);
+    export function deserialize(reader: BinaryReader): UpdateEncryptionKeys {
+        return UpdateEncryptionKeys.getTypeScriptAlgebraicType().deserialize(
+            reader
+        );
     }
 }

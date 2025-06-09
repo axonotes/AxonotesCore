@@ -36,8 +36,10 @@ import {
 // Import and reexport all reducer arg types
 import {ClientConnected} from "./client_connected_reducer.ts";
 export {ClientConnected};
-import {SetEncryption} from "./set_encryption_reducer.ts";
-export {SetEncryption};
+import {InitEncryptionAndSigning} from "./init_encryption_and_signing_reducer.ts";
+export {InitEncryptionAndSigning};
+import {UpdateEncryptionKeys} from "./update_encryption_keys_reducer.ts";
+export {UpdateEncryptionKeys};
 
 // Import and reexport all table handle types
 import {UserTableHandle} from "./user_table.ts";
@@ -66,9 +68,13 @@ const REMOTE_MODULE = {
             reducerName: "client_connected",
             argsType: ClientConnected.getTypeScriptAlgebraicType(),
         },
-        set_encryption: {
-            reducerName: "set_encryption",
-            argsType: SetEncryption.getTypeScriptAlgebraicType(),
+        init_encryption_and_signing: {
+            reducerName: "init_encryption_and_signing",
+            argsType: InitEncryptionAndSigning.getTypeScriptAlgebraicType(),
+        },
+        update_encryption_keys: {
+            reducerName: "update_encryption_keys",
+            argsType: UpdateEncryptionKeys.getTypeScriptAlgebraicType(),
         },
     },
     versionInfo: {
@@ -105,7 +111,8 @@ const REMOTE_MODULE = {
 export type Reducer =
     | never
     | {name: "ClientConnected"; args: ClientConnected}
-    | {name: "SetEncryption"; args: SetEncryption};
+    | {name: "InitEncryptionAndSigning"; args: InitEncryptionAndSigning}
+    | {name: "UpdateEncryptionKeys"; args: UpdateEncryptionKeys};
 
 export class RemoteReducers {
     constructor(
@@ -121,57 +128,126 @@ export class RemoteReducers {
         this.connection.offReducer("client_connected", callback);
     }
 
-    setEncryption(
+    initEncryptionAndSigning(
         publicKey: string,
         encryptedPrivateKey: string,
         encryptedBackupKey: string,
+        publicSigningKey: string,
+        encryptedPrivateSigningKey: string,
+        encryptedPrivateBackupSigningKey: string,
         argonSalt: string
     ) {
         const __args = {
             publicKey,
             encryptedPrivateKey,
             encryptedBackupKey,
+            publicSigningKey,
+            encryptedPrivateSigningKey,
+            encryptedPrivateBackupSigningKey,
             argonSalt,
         };
         let __writer = new BinaryWriter(1024);
-        SetEncryption.getTypeScriptAlgebraicType().serialize(__writer, __args);
+        InitEncryptionAndSigning.getTypeScriptAlgebraicType().serialize(
+            __writer,
+            __args
+        );
         let __argsBuffer = __writer.getBuffer();
         this.connection.callReducer(
-            "set_encryption",
+            "init_encryption_and_signing",
             __argsBuffer,
-            this.setCallReducerFlags.setEncryptionFlags
+            this.setCallReducerFlags.initEncryptionAndSigningFlags
         );
     }
 
-    onSetEncryption(
+    onInitEncryptionAndSigning(
         callback: (
             ctx: ReducerEventContext,
             publicKey: string,
             encryptedPrivateKey: string,
             encryptedBackupKey: string,
+            publicSigningKey: string,
+            encryptedPrivateSigningKey: string,
+            encryptedPrivateBackupSigningKey: string,
             argonSalt: string
         ) => void
     ) {
-        this.connection.onReducer("set_encryption", callback);
+        this.connection.onReducer("init_encryption_and_signing", callback);
     }
 
-    removeOnSetEncryption(
+    removeOnInitEncryptionAndSigning(
         callback: (
             ctx: ReducerEventContext,
             publicKey: string,
             encryptedPrivateKey: string,
             encryptedBackupKey: string,
+            publicSigningKey: string,
+            encryptedPrivateSigningKey: string,
+            encryptedPrivateBackupSigningKey: string,
             argonSalt: string
         ) => void
     ) {
-        this.connection.offReducer("set_encryption", callback);
+        this.connection.offReducer("init_encryption_and_signing", callback);
+    }
+
+    updateEncryptionKeys(
+        newEncryptedPrivateKey: string,
+        newEncryptedPrivateSigningKey: string,
+        newArgonSalt: string,
+        signatureBase64: string
+    ) {
+        const __args = {
+            newEncryptedPrivateKey,
+            newEncryptedPrivateSigningKey,
+            newArgonSalt,
+            signatureBase64,
+        };
+        let __writer = new BinaryWriter(1024);
+        UpdateEncryptionKeys.getTypeScriptAlgebraicType().serialize(
+            __writer,
+            __args
+        );
+        let __argsBuffer = __writer.getBuffer();
+        this.connection.callReducer(
+            "update_encryption_keys",
+            __argsBuffer,
+            this.setCallReducerFlags.updateEncryptionKeysFlags
+        );
+    }
+
+    onUpdateEncryptionKeys(
+        callback: (
+            ctx: ReducerEventContext,
+            newEncryptedPrivateKey: string,
+            newEncryptedPrivateSigningKey: string,
+            newArgonSalt: string,
+            signatureBase64: string
+        ) => void
+    ) {
+        this.connection.onReducer("update_encryption_keys", callback);
+    }
+
+    removeOnUpdateEncryptionKeys(
+        callback: (
+            ctx: ReducerEventContext,
+            newEncryptedPrivateKey: string,
+            newEncryptedPrivateSigningKey: string,
+            newArgonSalt: string,
+            signatureBase64: string
+        ) => void
+    ) {
+        this.connection.offReducer("update_encryption_keys", callback);
     }
 }
 
 export class SetReducerFlags {
-    setEncryptionFlags: CallReducerFlags = "FullUpdate";
-    setEncryption(flags: CallReducerFlags) {
-        this.setEncryptionFlags = flags;
+    initEncryptionAndSigningFlags: CallReducerFlags = "FullUpdate";
+    initEncryptionAndSigning(flags: CallReducerFlags) {
+        this.initEncryptionAndSigningFlags = flags;
+    }
+
+    updateEncryptionKeysFlags: CallReducerFlags = "FullUpdate";
+    updateEncryptionKeys(flags: CallReducerFlags) {
+        this.updateEncryptionKeysFlags = flags;
     }
 }
 

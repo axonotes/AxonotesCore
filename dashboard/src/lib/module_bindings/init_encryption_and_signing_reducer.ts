@@ -32,21 +32,21 @@ import {
     type ReducerEventContextInterface,
     type SubscriptionEventContextInterface,
 } from "@clockworklabs/spacetimedb-sdk";
-export type User = {
-    identity: Identity;
-    publicKey: string | undefined;
-    encryptedPrivateKey: string | undefined;
-    encryptedBackupKey: string | undefined;
-    publicSigningKey: string | undefined;
-    encryptedPrivateSigningKey: string | undefined;
-    encryptedPrivateBackupSigningKey: string | undefined;
-    argonSalt: string | undefined;
+
+export type InitEncryptionAndSigning = {
+    publicKey: string;
+    encryptedPrivateKey: string;
+    encryptedBackupKey: string;
+    publicSigningKey: string;
+    encryptedPrivateSigningKey: string;
+    encryptedPrivateBackupSigningKey: string;
+    argonSalt: string;
 };
 
 /**
  * A namespace for generated helper functions.
  */
-export namespace User {
+export namespace InitEncryptionAndSigning {
     /**
      * A function which returns this type represented as an AlgebraicType.
      * This function is derived from the AlgebraicType used to generate this type.
@@ -54,45 +54,51 @@ export namespace User {
     export function getTypeScriptAlgebraicType(): AlgebraicType {
         return AlgebraicType.createProductType([
             new ProductTypeElement(
-                "identity",
-                AlgebraicType.createIdentityType()
-            ),
-            new ProductTypeElement(
                 "publicKey",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
                 "encryptedPrivateKey",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
                 "encryptedBackupKey",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
                 "publicSigningKey",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
                 "encryptedPrivateSigningKey",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
                 "encryptedPrivateBackupSigningKey",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
             new ProductTypeElement(
                 "argonSalt",
-                AlgebraicType.createOptionType(AlgebraicType.createStringType())
+                AlgebraicType.createStringType()
             ),
         ]);
     }
 
-    export function serialize(writer: BinaryWriter, value: User): void {
-        User.getTypeScriptAlgebraicType().serialize(writer, value);
+    export function serialize(
+        writer: BinaryWriter,
+        value: InitEncryptionAndSigning
+    ): void {
+        InitEncryptionAndSigning.getTypeScriptAlgebraicType().serialize(
+            writer,
+            value
+        );
     }
 
-    export function deserialize(reader: BinaryReader): User {
-        return User.getTypeScriptAlgebraicType().deserialize(reader);
+    export function deserialize(
+        reader: BinaryReader
+    ): InitEncryptionAndSigning {
+        return InitEncryptionAndSigning.getTypeScriptAlgebraicType().deserialize(
+            reader
+        );
     }
 }

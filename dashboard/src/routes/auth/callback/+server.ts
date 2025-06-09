@@ -43,11 +43,6 @@ export async function GET({url, cookies}) {
         const axonotesAccessToken = generateAccessToken(tokenPayload);
         const axonotesRefreshToken = generateRefreshToken(tokenPayload);
 
-        console.log("AccessToken");
-        console.log(axonotesAccessToken);
-        console.log("RefreshToken");
-        console.log(axonotesRefreshToken);
-
         const {payload} = await jwtVerify(accessToken, workos_jwks);
 
         if (!payload.sid || typeof payload.sid !== "string") {

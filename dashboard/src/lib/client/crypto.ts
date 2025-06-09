@@ -178,3 +178,72 @@ export async function importPrivateKey(
         ["decrypt"] // Key usage
     );
 }
+
+/** Generates a Ed25519 key pair for signing. */
+export async function generateEd25519KeyPair(): Promise<{
+    publicKey: string;
+    privateKey: string;
+}> {
+    const keyPair = await window.crypto.subtle.generateKey(
+        {
+            name: "Ed25519",
+        },
+        true, // Can be exported
+        ["sign", "verify"]
+    );
+
+    const publicKey = await window.crypto.subtle.exportKey(
+        "raw",
+        keyPair.publicKey
+    );
+    const privateKey = await window.crypto.subtle.exportKey(
+        "pkcs8",
+        keyPair.privateKey
+    );
+
+    return {
+        publicKey: arrayBufferToBase64(publicKey),
+        privateKey: arrayBufferToBase64(privateKey),
+    };
+}
+
+/**
+ * Imports a raw Ed25519 private key for signing.
+ * @param rawPrivateKey The private key in BufferSource format.
+ * @returns A non-extractable CryptoKey handle for signing.
+ */
+export async function importEd25519PrivateKey(
+    rawPrivateKey: BufferSource
+): Promise<CryptoKey> {
+    return await window.crypto.subtle.importKey(
+        "pkcs8",
+        rawPrivateKey,
+        {
+            name: "Ed25519",
+        },
+        false, // Non-extractable
+        ["sign"]
+    );
+}
+
+/**
+ * Signs data with a given Ed25519 private key.
+ * @param privateKey The CryptoKey handle for the private signing key.
+ * @param data The string data to sign.
+ * @returns The signature as a Base64 string.
+ */
+export async function signData(
+    privateKey: CryptoKey,
+    data: string
+): Promise<string> {
+    const encoder = new TextEncoder();
+    const encodedData = encoder.encode(data);
+
+    const signature = await window.crypto.subtle.sign(
+        "Ed25519",
+        privateKey,
+        encodedData
+    );
+
+    return arrayBufferToBase64(signature);
+}

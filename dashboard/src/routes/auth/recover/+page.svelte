@@ -4,20 +4,21 @@
     import * as crypto from "$lib/client/crypto";
     import {unlockVaultWithPassword} from "$lib/client/cryptoStore";
     import {Progress} from "@skeletonlabs/skeleton-svelte";
-    import {onMount} from "svelte";
     import {
         connectToSpacetime,
         ensureSpacetimeConnected,
         getSpacetimeUser,
     } from "$lib/client/spacetime";
+    import {onMount} from "svelte";
 
-    let recoveryStep = $state(1); // 1: Enter passphrase, 2: Set new password
+    let recoveryStep = $state(1);
     let isLoading = $state(false);
     let errorMessage = $state("");
 
     // Step 1 state
     let passphrase = $state("");
-    let recoveredPrivateKey = $state(""); // Will hold the raw private key string
+    let recoveredRsaPrivateKey = $state("");
+    let recoveredEd25519PrivateKey = $state("");
 
     // Step 2 state
     let newPassword = $state("");
@@ -27,34 +28,40 @@
     const passwordStrength = $derived(zxcvbnResult ? zxcvbnResult.score : 0);
 
     /**
-     * Step 1: User submits their backup passphrase. We use it to decrypt the
-     * backup key and recover the raw private key.
+     * Step 1: User submits their backup passphrase. We use it to decrypt BOTH
+     * the main private key and the private signing key from their respective backups.
      */
     async function handlePassphraseSubmit() {
         isLoading = true;
         errorMessage = "";
 
         const currentUser = await getSpacetimeUser();
-        if (!currentUser) {
-            console.error("Error getting spacetime user");
-            return;
-        }
         if (
-            !currentUser?.publicKey ||
-            !currentUser.encryptedBackupKey ||
-            !currentUser.argonSalt
+            !currentUser?.encryptedBackupKey ||
+            !currentUser.encryptedPrivateBackupSigningKey
         ) {
-            await goto("/auth/setup");
-            return null;
+            errorMessage = "Account backup data is missing. Cannot recover.";
+            isLoading = false;
+            return;
         }
 
         try {
+            // Derive the single backup key from the user's mnemonic
             const backupKey = crypto.getKeyFromMnemonic(passphrase);
-            recoveredPrivateKey = await crypto.decryptWithAes(
+
+            // Decrypt the RSA private key using the backup key
+            recoveredRsaPrivateKey = await crypto.decryptWithAes(
                 JSON.parse(currentUser.encryptedBackupKey),
                 backupKey
             );
-            recoveryStep = 2; // Move to the next step
+
+            // Decrypt the Ed25519 private key using the backup key
+            recoveredEd25519PrivateKey = await crypto.decryptWithAes(
+                JSON.parse(currentUser.encryptedPrivateBackupSigningKey),
+                backupKey
+            );
+
+            recoveryStep = 2;
         } catch (err) {
             console.error("Failed to decrypt with passphrase", err);
             errorMessage =
@@ -65,8 +72,8 @@
     }
 
     /**
-     * Step 2: User sets a new master password. We use it to re-encrypt the
-     * recovered private key and update the server.
+     * Step 2: User sets a new master password. This logic is now correct because
+     * we successfully recovered the signing key in Step 1.
      */
     async function handleNewPasswordSubmit() {
         if (newPassword !== confirmPassword) {
@@ -81,42 +88,55 @@
         isLoading = true;
         errorMessage = "";
 
-        const currentUser = await getSpacetimeUser();
-        if (!currentUser) {
-            console.error("Error getting spacetime user");
-            return;
-        }
-        if (
-            !currentUser?.publicKey ||
-            !currentUser.encryptedBackupKey ||
-            !currentUser.argonSalt
-        ) {
-            await goto("/auth/setup");
-            return null;
-        }
-
         try {
             const newSalt = crypto.generateSalt(16);
             const newPasswordHash = await crypto.hashPassword(
                 newPassword,
                 newSalt
             );
+
             const newEncryptedPrivateKey = await crypto.encryptWithAes(
-                recoveredPrivateKey,
+                recoveredRsaPrivateKey,
+                newPasswordHash
+            );
+            const newEncryptedPrivateSigningKey = await crypto.encryptWithAes(
+                recoveredEd25519PrivateKey,
                 newPasswordHash
             );
 
-            const handle = await ensureSpacetimeConnected();
-            handle.connection!.reducers.setEncryption(
-                currentUser.publicKey,
-                JSON.stringify(newEncryptedPrivateKey),
-                currentUser.encryptedBackupKey,
-                crypto.arrayBufferToBase64(newSalt.buffer)
+            const newEncryptedPrivateKeyJson = JSON.stringify(
+                newEncryptedPrivateKey
+            );
+            const newEncryptedPrivateSigningKeyJson = JSON.stringify(
+                newEncryptedPrivateSigningKey
+            );
+            const newSaltBase64 = crypto.arrayBufferToBase64(newSalt.buffer);
+
+            const messageToSign = `${newEncryptedPrivateKeyJson}${newEncryptedPrivateSigningKeyJson}${newSaltBase64}`;
+
+            const signingKeyBytes = crypto.base64ToUint8Array(
+                recoveredEd25519PrivateKey
+            );
+            const signingKeyHandle =
+                await crypto.importEd25519PrivateKey(signingKeyBytes);
+            const signature = await crypto.signData(
+                signingKeyHandle,
+                messageToSign
             );
 
-            // Now that the server is updated, unlock the vault for the current session.
+            console.log(messageToSign);
+
+            const handle = await ensureSpacetimeConnected();
+            handle.connection!.reducers.updateEncryptionKeys(
+                newEncryptedPrivateKeyJson,
+                newEncryptedPrivateSigningKeyJson,
+                newSaltBase64,
+                signature
+            );
+
             const success = await unlockVaultWithPassword(
                 newEncryptedPrivateKey,
+                newEncryptedPrivateSigningKey,
                 newPassword,
                 newSalt
             );
@@ -124,12 +144,13 @@
             if (success) {
                 await goto("/dashboard");
             } else {
-                // This should theoretically not fail, but handle it just in case.
                 throw new Error("Failed to unlock vault with new password.");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("An error occurred during password reset:", err);
-            errorMessage = "An unexpected error occurred. Please try again.";
+            errorMessage =
+                err.message ||
+                "An unexpected error occurred. Please try again.";
         } finally {
             isLoading = false;
         }

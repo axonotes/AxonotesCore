@@ -3,12 +3,17 @@ import * as crypto from "$lib/client/crypto";
 import * as persistentKeyStore from "$lib/client/persistentKeyStore";
 import {browser} from "$app/environment";
 
+export type VaultKeys = {
+    decryptionKey: CryptoKey; // RSA-OAEP private key
+    signingKey: CryptoKey; // Ed25519 private key
+};
+
 /**
  * This Svelte store holds the client-side cryptographic key.
  * It is initialized to `null`, representing a "locked" state.
  * The value will be a non-extractable `CryptoKey` handle when "unlocked".
  */
-const {subscribe, set} = writable<CryptoKey | null>(null);
+const {subscribe, set} = writable<VaultKeys | null>(null);
 
 /**
  * On application startup, this code block executes immediately.
@@ -28,9 +33,20 @@ if (browser) {
  * The public interface for the crypto store.
  * Components can subscribe to this to react to lock/unlock state changes.
  */
-export const privateKeyStore = {
+export const vaultStore = {
     subscribe,
 };
+
+/**
+ * Directly sets the vault keys in the Svelte store and persists them
+ * to IndexedDB. This is used during the initial account setup.
+ * @param keys The VaultKeys object containing the non-extractable key handles.
+ */
+export async function setAndStoreVaultKeys(keys: VaultKeys) {
+    await persistentKeyStore.storeKey(keys);
+    set(keys);
+    console.log("Vault keys set and stored during initial setup.");
+}
 
 /**
  * Unlocks the vault using the user's master password.
@@ -39,12 +55,14 @@ export const privateKeyStore = {
  * and stores it in both IndexedDB and the in-memory Svelte store.
  *
  * @param encryptedPrivateKey The encrypted private key object from the server.
+ * @param encryptedPrivateSigningKey The encrypted private key object for signing.
  * @param password The user's master password.
  * @param salt The salt used to hash the password.
  * @returns A boolean indicating if the unlock was successful.
  */
 export async function unlockVaultWithPassword(
     encryptedPrivateKey: crypto.EncryptedData,
+    encryptedPrivateSigningKey: crypto.EncryptedData,
     password: string,
     salt: Uint8Array
 ): Promise<boolean> {
@@ -55,12 +73,29 @@ export async function unlockVaultWithPassword(
             encryptedPrivateKey,
             passwordHash
         );
+        const privateSigningKeyString = await crypto.decryptWithAes(
+            encryptedPrivateSigningKey,
+            passwordHash
+        );
 
         const privateKeyBytes = crypto.base64ToUint8Array(privateKeyString);
-        const keyHandle = await crypto.importPrivateKey(privateKeyBytes);
-        await persistentKeyStore.storeKey(keyHandle);
+        const decryptionKeyHandle =
+            await crypto.importPrivateKey(privateKeyBytes);
 
-        set(keyHandle);
+        const privateSigningKeyBytes = crypto.base64ToUint8Array(
+            privateSigningKeyString
+        );
+        const signingKeyHandle = await crypto.importEd25519PrivateKey(
+            privateSigningKeyBytes
+        );
+
+        const keys: VaultKeys = {
+            decryptionKey: decryptionKeyHandle,
+            signingKey: signingKeyHandle,
+        };
+
+        await persistentKeyStore.storeKey(keys);
+        set(keys);
         return true;
     } catch (error) {
         console.error("Failed to decrypt key. Invalid password.", error);

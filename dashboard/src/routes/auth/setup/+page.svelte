@@ -3,7 +3,6 @@
     import zxcvbn from "zxcvbn";
     import * as crypto from "$lib/client/crypto";
     import {enhance} from "$app/forms";
-    import * as persistentKeyStore from "$lib/client/persistentKeyStore";
     import {Progress} from "@skeletonlabs/skeleton-svelte";
     import {copy} from "$lib/actions/copy";
     import {TriangleAlert} from "@lucide/svelte";
@@ -11,30 +10,33 @@
     import {
         connectToSpacetime,
         ensureSpacetimeConnected,
-        spacetime,
     } from "$lib/client/spacetime";
+    import {
+        setAndStoreVaultKeys,
+        type VaultKeys,
+    } from "$lib/client/cryptoStore";
 
     let masterPassword = $state("");
     let isLoading = $state(false);
     let errorMessage = $state("");
     let generatedPassphrase = $state("");
-
     let confirmedSaved = $state(false);
 
     const zxcvbnResult = $derived(
         masterPassword ? zxcvbn(masterPassword) : null
     );
-
     const passwordStrength = $derived(zxcvbnResult ? zxcvbnResult.score : 0);
-
     const passwordStrengthFeedback = $derived(
         zxcvbnResult ? zxcvbnResult.feedback : null
     );
 
-    type SetEncryptionPayload = {
+    type InitPayload = {
         publicKey: string;
         encryptedPrivateKey: string;
         encryptedBackupKey: string;
+        publicSigningKey: string;
+        encryptedPrivateSigningKey: string;
+        encryptedPrivateBackupSigningKey: string;
         argonSalt: string;
     };
 
@@ -49,40 +51,82 @@
         errorMessage = "";
 
         try {
-            const {publicKey, privateKey} = await crypto.generateRsaKeyPair();
-            const backupPassphrase = generateMnemonic(128);
-            generatedPassphrase = backupPassphrase;
+            // 1. Generate BOTH key pairs: RSA for encryption, Ed25519 for signing
+            const rsaKeys = await crypto.generateRsaKeyPair();
+            const ed25519Keys = await crypto.generateEd25519KeyPair();
 
+            // 2. Generate the single recovery phrase and its derived AES key
+            const backupPassphrase = generateMnemonic(128); // 12 words
+            const backupAesKey = crypto.getKeyFromMnemonic(backupPassphrase);
+
+            // 3. Hash the master password with a new salt
             const salt = crypto.generateSalt(16);
             const passwordHash = await crypto.hashPassword(
                 masterPassword,
                 salt
             );
 
+            // 4. Encrypt both private keys with the password hash
             const encryptedPrivateKey = await crypto.encryptWithAes(
-                privateKey,
+                rsaKeys.privateKey,
+                passwordHash
+            );
+            const encryptedPrivateSigningKey = await crypto.encryptWithAes(
+                ed25519Keys.privateKey,
                 passwordHash
             );
 
-            const backupKey = crypto.getKeyFromMnemonic(backupPassphrase);
-            const encryptedBackupKey = await crypto.encryptWithAes(
-                privateKey,
-                backupKey
+            // 5. Encrypt both private keys with the backup key
+            const encryptedPrivateKeyByBackup = await crypto.encryptWithAes(
+                rsaKeys.privateKey,
+                backupAesKey
             );
+            const encryptedPrivateSigningKeyByBackup =
+                await crypto.encryptWithAes(
+                    ed25519Keys.privateKey,
+                    backupAesKey
+                );
 
-            const payload: SetEncryptionPayload = {
-                publicKey,
+            // 6. Assemble the complete payload for the new reducer
+            const payload: InitPayload = {
+                publicKey: rsaKeys.publicKey,
                 encryptedPrivateKey: JSON.stringify(encryptedPrivateKey),
-                encryptedBackupKey: JSON.stringify(encryptedBackupKey),
+                publicSigningKey: ed25519Keys.publicKey,
+                encryptedPrivateSigningKey: JSON.stringify(
+                    encryptedPrivateSigningKey
+                ),
+                encryptedBackupKey: JSON.stringify(encryptedPrivateKeyByBackup),
+                encryptedPrivateBackupSigningKey: JSON.stringify(
+                    encryptedPrivateSigningKeyByBackup
+                ),
                 argonSalt: crypto.arrayBufferToBase64(salt.buffer),
             };
 
-            await callSetEncryptReducer(payload);
+            // 7. Call the new reducer on the server
+            await callInitReducer(payload);
 
-            const privateKeyBytes = crypto.base64ToUint8Array(privateKey);
-            const nonExtractableKey =
+            // 8. Import keys and store them locally in the vault
+            const privateKeyBytes = crypto.base64ToUint8Array(
+                rsaKeys.privateKey
+            );
+            const decryptionKeyHandle =
                 await crypto.importPrivateKey(privateKeyBytes);
-            await persistentKeyStore.storeKey(nonExtractableKey);
+
+            const privateSigningKeyBytes = crypto.base64ToUint8Array(
+                ed25519Keys.privateKey
+            );
+            const signingKeyHandle = await crypto.importEd25519PrivateKey(
+                privateSigningKeyBytes
+            );
+
+            const keysToStore: VaultKeys = {
+                decryptionKey: decryptionKeyHandle,
+                signingKey: signingKeyHandle,
+            };
+            await setAndStoreVaultKeys(keysToStore);
+
+            // 9. Show the user their recovery phrase
+            generatedPassphrase = backupPassphrase;
         } catch (err) {
             errorMessage = "An unexpected error occurred. Please try again.";
             console.error(err);
@@ -92,18 +136,19 @@
         }
     }
 
-    async function callSetEncryptReducer(payload: SetEncryptionPayload) {
+    async function callInitReducer(payload: InitPayload) {
         const handle = await ensureSpacetimeConnected();
-
         if (!handle.connection) {
-            console.error("Error, no handle was provided");
-            return;
+            throw new Error("SpacetimeDB connection failed.");
         }
 
-        handle.connection.reducers.setEncryption(
+        handle.connection.reducers.initEncryptionAndSigning(
             payload.publicKey,
             payload.encryptedPrivateKey,
             payload.encryptedBackupKey,
+            payload.publicSigningKey,
+            payload.encryptedPrivateSigningKey,
+            payload.encryptedPrivateBackupSigningKey,
             payload.argonSalt
         );
     }
