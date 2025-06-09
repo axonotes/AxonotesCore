@@ -7,6 +7,12 @@
     import {Progress} from "@skeletonlabs/skeleton-svelte";
     import {copy} from "$lib/actions/copy";
     import {TriangleAlert} from "@lucide/svelte";
+    import {onMount} from "svelte";
+    import {
+        connectToSpacetime,
+        ensureSpacetimeConnected,
+        spacetime,
+    } from "$lib/client/spacetime";
 
     let masterPassword = $state("");
     let isLoading = $state(false);
@@ -24,6 +30,13 @@
     const passwordStrengthFeedback = $derived(
         zxcvbnResult ? zxcvbnResult.feedback : null
     );
+
+    type SetEncryptionPayload = {
+        publicKey: string;
+        encryptedPrivateKey: string;
+        encryptedBackupKey: string;
+        argonSalt: string;
+    };
 
     async function handleSetup(event: SubmitEvent) {
         event.preventDefault();
@@ -57,22 +70,14 @@
                 backupKey
             );
 
-            const payload = {
+            const payload: SetEncryptionPayload = {
                 publicKey,
                 encryptedPrivateKey: JSON.stringify(encryptedPrivateKey),
                 encryptedBackupKey: JSON.stringify(encryptedBackupKey),
                 argonSalt: crypto.arrayBufferToBase64(salt.buffer),
             };
 
-            const response = await fetch("/api/user/setup-keys", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                throw new Error("Failed to save keys to the server.");
-            }
+            await callSetEncryptReducer(payload);
 
             const privateKeyBytes = crypto.base64ToUint8Array(privateKey);
             const nonExtractableKey =
@@ -86,6 +91,26 @@
             isLoading = false;
         }
     }
+
+    async function callSetEncryptReducer(payload: SetEncryptionPayload) {
+        const handle = await ensureSpacetimeConnected();
+
+        if (!handle.connection) {
+            console.error("Error, no handle was provided");
+            return;
+        }
+
+        handle.connection.reducers.setEncryption(
+            payload.publicKey,
+            payload.encryptedPrivateKey,
+            payload.encryptedBackupKey,
+            payload.argonSalt
+        );
+    }
+
+    onMount(() => {
+        connectToSpacetime();
+    });
 </script>
 
 <div class="grid w-full items-center lg:mt-24">

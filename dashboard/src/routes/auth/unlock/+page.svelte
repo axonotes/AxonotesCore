@@ -2,8 +2,13 @@
     import {goto} from "$app/navigation";
     import {unlockVaultWithPassword} from "$lib/client/cryptoStore";
     import {base64ToUint8Array} from "$lib/client/crypto";
-
-    let {data} = $props();
+    import {onMount} from "svelte";
+    import {
+        connectToSpacetime,
+        ensureSpacetimeConnected,
+        getSpacetimeUser,
+        spacetime,
+    } from "$lib/client/spacetime";
 
     let password = $state("");
     let isLoading = $state(false);
@@ -17,12 +22,26 @@
         isLoading = true;
         errorMessage = "";
 
+        const currentUser = await getSpacetimeUser();
+        if (!currentUser) {
+            console.error("Error getting spacetime user");
+            return;
+        }
+        if (
+            !currentUser?.publicKey ||
+            !currentUser.encryptedPrivateKey ||
+            !currentUser.argonSalt
+        ) {
+            await goto("/auth/setup");
+            return null;
+        }
+
         try {
             // The salt is a Base64 string from the server; convert it to a Uint8Array.
-            const saltBytes = base64ToUint8Array(data.argonSalt);
+            const saltBytes = base64ToUint8Array(currentUser.argonSalt);
 
             const success = await unlockVaultWithPassword(
-                data.encryptedPrivateKey,
+                JSON.parse(currentUser.encryptedPrivateKey),
                 password,
                 saltBytes
             );
@@ -43,6 +62,10 @@
             isLoading = false;
         }
     }
+
+    onMount(() => {
+        connectToSpacetime();
+    });
 </script>
 
 <div class="grid w-full items-center lg:mt-24">

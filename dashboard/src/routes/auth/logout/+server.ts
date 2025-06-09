@@ -1,9 +1,10 @@
 import {redirect} from "@sveltejs/kit";
 import {
-    JWT_COOKIE_NAME,
+    REFRESH_TOKEN_COOKIE_NAME,
     WORKOS_SESSION_ID_COOKIE_NAME,
 } from "$env/static/private";
 import {workos} from "$lib/server/workos";
+import {PUBLIC_ACCESS_TOKEN_COOKIE_NAME} from "$env/static/public";
 
 export async function POST({cookies}) {
     // revoke WorkOS session
@@ -18,7 +19,8 @@ export async function POST({cookies}) {
         }
     }
 
-    cookies.delete(JWT_COOKIE_NAME, {path: "/"});
+    cookies.delete(PUBLIC_ACCESS_TOKEN_COOKIE_NAME, {path: "/"});
+    cookies.delete(REFRESH_TOKEN_COOKIE_NAME, {path: "/"});
     cookies.delete(WORKOS_SESSION_ID_COOKIE_NAME, {path: "/"});
 
     throw redirect(302, "/");

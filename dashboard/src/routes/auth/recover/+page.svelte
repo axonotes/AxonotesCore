@@ -4,8 +4,12 @@
     import * as crypto from "$lib/client/crypto";
     import {unlockVaultWithPassword} from "$lib/client/cryptoStore";
     import {Progress} from "@skeletonlabs/skeleton-svelte";
-
-    let {data} = $props();
+    import {onMount} from "svelte";
+    import {
+        connectToSpacetime,
+        ensureSpacetimeConnected,
+        getSpacetimeUser,
+    } from "$lib/client/spacetime";
 
     let recoveryStep = $state(1); // 1: Enter passphrase, 2: Set new password
     let isLoading = $state(false);
@@ -29,13 +33,27 @@
     async function handlePassphraseSubmit() {
         isLoading = true;
         errorMessage = "";
+
+        const currentUser = await getSpacetimeUser();
+        if (!currentUser) {
+            console.error("Error getting spacetime user");
+            return;
+        }
+        if (
+            !currentUser?.publicKey ||
+            !currentUser.encryptedBackupKey ||
+            !currentUser.argonSalt
+        ) {
+            await goto("/auth/setup");
+            return null;
+        }
+
         try {
             const backupKey = crypto.getKeyFromMnemonic(passphrase);
-            const privateKeyString = await crypto.decryptWithAes(
-                data.encryptedBackupKey,
+            recoveredPrivateKey = await crypto.decryptWithAes(
+                JSON.parse(currentUser.encryptedBackupKey),
                 backupKey
             );
-            recoveredPrivateKey = privateKeyString;
             recoveryStep = 2; // Move to the next step
         } catch (err) {
             console.error("Failed to decrypt with passphrase", err);
@@ -63,6 +81,20 @@
         isLoading = true;
         errorMessage = "";
 
+        const currentUser = await getSpacetimeUser();
+        if (!currentUser) {
+            console.error("Error getting spacetime user");
+            return;
+        }
+        if (
+            !currentUser?.publicKey ||
+            !currentUser.encryptedBackupKey ||
+            !currentUser.argonSalt
+        ) {
+            await goto("/auth/setup");
+            return null;
+        }
+
         try {
             const newSalt = crypto.generateSalt(16);
             const newPasswordHash = await crypto.hashPassword(
@@ -74,26 +106,13 @@
                 newPasswordHash
             );
 
-            // We reuse the setup-keys endpoint to update the user's record.
-            // The public key and encrypted backup key remain unchanged.
-            const payload = {
-                publicKey: data.publicKey,
-                encryptedPrivateKey: JSON.stringify(newEncryptedPrivateKey),
-                encryptedBackupKey: JSON.stringify(data.encryptedBackupKey),
-                argonSalt: crypto.arrayBufferToBase64(newSalt.buffer),
-            };
-
-            const response = await fetch("/api/user/setup-keys", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                throw new Error(
-                    "Failed to save new key details to the server."
-                );
-            }
+            const handle = await ensureSpacetimeConnected();
+            handle.connection!.reducers.setEncryption(
+                currentUser.publicKey,
+                JSON.stringify(newEncryptedPrivateKey),
+                currentUser.encryptedBackupKey,
+                crypto.arrayBufferToBase64(newSalt.buffer)
+            );
 
             // Now that the server is updated, unlock the vault for the current session.
             const success = await unlockVaultWithPassword(
@@ -115,6 +134,10 @@
             isLoading = false;
         }
     }
+
+    onMount(() => {
+        connectToSpacetime();
+    });
 </script>
 
 <div class="grid w-full items-center lg:mt-24">
