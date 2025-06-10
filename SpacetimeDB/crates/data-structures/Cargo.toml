@@ -1,0 +1,17 @@
+[package]
+name = "spacetimedb-data-structures"
+version.workspace = true
+edition.workspace = true
+license-file = "LICENSE"
+description = "Assorted data structures used in spacetimedb"
+
+[features]
+serde = ["dep:serde", "hashbrown/serde"]
+
+[dependencies]
+ahash.workspace = true
+hashbrown.workspace = true
+nohash-hasher.workspace = true
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+smallvec.workspace = true
