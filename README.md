@@ -1,6 +1,6 @@
 <p align="center">
   <a href="./">
-    <img src="assets/logo_no_text.png" alt="Axonotes Logo" width="150"/>
+    <img src="assets/logo.png" alt="Axonotes Logo" width="150"/>
   </a>
 </p>
 
