@@ -54,6 +54,7 @@ Follow these steps to get the project configured on your local machine.
     ```
 
     This command will:
+
     - Generate `axonotes.toml` configuration file with sensible defaults
     - Check and generate cryptographic keys for JWT authentication
     - Install dashboard dependencies automatically
@@ -63,6 +64,7 @@ Follow these steps to get the project configured on your local machine.
 5.  **Configure WorkOS (Required for Authentication)**
 
     **WorkOS Setup for Testing:**
+
     1. Create a free WorkOS account: https://workos.com/signin
     2. Get your credentials from the dashboard:
         - Navigate to "API Keys" section
@@ -71,10 +73,10 @@ Follow these steps to get the project configured on your local machine.
         - Go to "Redirects" section in dashboard
         - Add: `http://localhost:5173/auth/callback`
     4. Fill out your `dashboard/.env` file with your credentials:
-       ```env
-       WORKOS_CLIENT_ID="your_client_id_here"
-       WORKOS_API_KEY="your_api_key_here"
-       ```
+        ```env
+        WORKOS_CLIENT_ID="your_client_id_here"
+        WORKOS_API_KEY="your_api_key_here"
+        ```
 
     **Note:** The CLI will have generated other required keys automatically. Only WorkOS credentials need manual setup.
 
@@ -101,6 +103,7 @@ axonotes server dev
 ```
 
 **Smart Features:**
+
 - Auto-builds SpacetimeDB CLI if missing
 - Auto-generates keys if missing
 - Runs in-memory by default (use `--persist` for persistent database)
@@ -116,6 +119,7 @@ axonotes server publish
 ```
 
 **Smart Features:**
+
 - Auto-builds CLI if missing
 - Checks server compilation before publishing
 - Auto-generates TypeScript bindings
@@ -131,6 +135,7 @@ axonotes dashboard dev
 ```
 
 **Smart Features:**
+
 - Auto-installs dependencies if missing
 - Auto-generates missing environment keys
 - Auto-generates TypeScript bindings if missing
@@ -174,33 +179,33 @@ You can modify these settings as needed for your development environment.
 
 The `axonotes` CLI provides smart, self-healing commands:
 
-| Command                           | Description                                                |
-| :-------------------------------- |:-----------------------------------------------------------|
-| `axonotes setup`                  | Smart project setup with health checks and auto-fixes      |
-| `axonotes server dev`             | Start development server (auto-builds CLI, generates keys) |
-| `axonotes server dev --persist`   | Start with persistent database                             |
-| `axonotes server dev --auth`      | Start with forced authentication                           |
-| `axonotes server publish`         | Publish server and generate TypeScript bindings            |
-| `axonotes dashboard dev`          | Start dashboard (auto-installs deps, generates bindings)   |
-| `axonotes sdb build`              | Build SpacetimeDB CLI tools                                |
-| `axonotes sdb login`              | Login to SpacetimeDB                                       |
-| `axonotes sdb logout`             | Logout from SpacetimeDB                                    |
-| `axonotes format`                 | Format all code (TypeScript, Rust)                         |
-| `axonotes format --check`         | Check code formatting without applying changes             |
-| `axonotes dev clean`              | Clean all build artifacts (with confirmation)              |
+| Command                         | Description                                                |
+| :------------------------------ | :--------------------------------------------------------- |
+| `axonotes setup`                | Smart project setup with health checks and auto-fixes      |
+| `axonotes server dev`           | Start development server (auto-builds CLI, generates keys) |
+| `axonotes server dev --persist` | Start with persistent database                             |
+| `axonotes server dev --auth`    | Start with forced authentication                           |
+| `axonotes server publish`       | Publish server and generate TypeScript bindings            |
+| `axonotes dashboard dev`        | Start dashboard (auto-installs deps, generates bindings)   |
+| `axonotes sdb build`            | Build SpacetimeDB CLI tools                                |
+| `axonotes sdb login`            | Login to SpacetimeDB                                       |
+| `axonotes sdb logout`           | Logout from SpacetimeDB                                    |
+| `axonotes format`               | Format all code (TypeScript, Rust)                         |
+| `axonotes format --check`       | Check code formatting without applying changes             |
+| `axonotes dev clean`            | Clean all build artifacts (with confirmation)              |
 
 ## 6. Legacy Package.json Scripts
 
 Some legacy scripts are still available but will redirect you to use the CLI:
 
-| Script              | Command               | Description                                                      |
-| :------------------ | :-------------------- | :--------------------------------------------------------------- |
-| **CLI Management**  | `bun run cli:install`| Build and install the CLI globally                              |
-| **CLI Development** | `bun run cli:dev`     | Run CLI in development mode                                      |
-| **Setup**           | `bun run setup`       | Redirects to `axonotes setup`                                    |
-| **Format**          | `bun run format`      | Redirects to `axonotes format`                                   |
-| **Server Logs**     | `bun run srv:logs`    | View server logs                                                 |
-| **Dashboard Build** | `bun run dash:build`  | Build dashboard for production                                   |
+| Script              | Command               | Description                        |
+| :------------------ | :-------------------- | :--------------------------------- |
+| **CLI Management**  | `bun run cli:install` | Build and install the CLI globally |
+| **CLI Development** | `bun run cli:dev`     | Run CLI in development mode        |
+| **Setup**           | `bun run setup`       | Redirects to `axonotes setup`      |
+| **Format**          | `bun run format`      | Redirects to `axonotes format`     |
+| **Server Logs**     | `bun run srv:logs`    | View server logs                   |
+| **Dashboard Build** | `bun run dash:build`  | Build dashboard for production     |
 
 ## 7. Troubleshooting
 

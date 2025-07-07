@@ -9,7 +9,10 @@ pub fn validate_base64(input: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate_key_length(key: &str, expected_length: usize) -> Result<(), String> {
+pub fn validate_key_length(
+    key: &str,
+    expected_length: usize,
+) -> Result<(), String> {
     use base64::engine::general_purpose;
     use base64::Engine;
 

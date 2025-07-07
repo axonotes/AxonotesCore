@@ -1,13 +1,13 @@
 use spacetimedb::{reducer, ReducerContext, Table};
 
 // Module declarations
-mod tables;
 mod reducers;
+mod tables;
 mod utils;
 
 // Re-export important items for easy access
-pub use tables::*;
 pub use reducers::*;
+pub use tables::*;
 pub use utils::*;
 
 pub use tables::user::user;

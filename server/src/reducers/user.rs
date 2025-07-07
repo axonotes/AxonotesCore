@@ -1,6 +1,6 @@
-use spacetimedb::{reducer, ReducerContext};
 use crate::tables::User;
 use crate::user;
+use spacetimedb::{reducer, ReducerContext};
 
 /// Reducer for the initial setup of a user's encryption and signing keys.
 /// This should only be called once when the user has no keys yet.
