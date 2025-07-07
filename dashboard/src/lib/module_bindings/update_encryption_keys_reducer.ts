@@ -7,81 +7,63 @@
 /* tslint:disable */
 // @ts-nocheck
 import {
-    AlgebraicType,
-    AlgebraicValue,
-    BinaryReader,
-    BinaryWriter,
-    ConnectionId,
-    DbConnectionBuilder,
-    DbConnectionImpl,
-    Identity,
-    ProductType,
-    ProductTypeElement,
-    SubscriptionBuilderImpl,
-    SumType,
-    SumTypeVariant,
-    TableCache,
-    TimeDuration,
-    Timestamp,
-    deepEqual,
-    type CallReducerFlags,
-    type DbContext,
-    type ErrorContextInterface,
-    type Event,
-    type EventContextInterface,
-    type ReducerEventContextInterface,
-    type SubscriptionEventContextInterface,
+  AlgebraicType,
+  AlgebraicValue,
+  BinaryReader,
+  BinaryWriter,
+  ConnectionId,
+  DbConnectionBuilder,
+  DbConnectionImpl,
+  Identity,
+  ProductType,
+  ProductTypeElement,
+  SubscriptionBuilderImpl,
+  SumType,
+  SumTypeVariant,
+  TableCache,
+  TimeDuration,
+  Timestamp,
+  deepEqual,
+  type CallReducerFlags,
+  type DbContext,
+  type ErrorContextInterface,
+  type Event,
+  type EventContextInterface,
+  type ReducerEventContextInterface,
+  type SubscriptionEventContextInterface,
 } from "@clockworklabs/spacetimedb-sdk";
 
 export type UpdateEncryptionKeys = {
-    newEncryptedPrivateKey: string;
-    newEncryptedPrivateSigningKey: string;
-    newArgonSalt: string;
-    signatureBase64: string;
+  newEncryptedPrivateKey: string,
+  newEncryptedPrivateSigningKey: string,
+  newArgonSalt: string,
+  signatureBase64: string,
 };
 
 /**
  * A namespace for generated helper functions.
  */
 export namespace UpdateEncryptionKeys {
-    /**
-     * A function which returns this type represented as an AlgebraicType.
-     * This function is derived from the AlgebraicType used to generate this type.
-     */
-    export function getTypeScriptAlgebraicType(): AlgebraicType {
-        return AlgebraicType.createProductType([
-            new ProductTypeElement(
-                "newEncryptedPrivateKey",
-                AlgebraicType.createStringType()
-            ),
-            new ProductTypeElement(
-                "newEncryptedPrivateSigningKey",
-                AlgebraicType.createStringType()
-            ),
-            new ProductTypeElement(
-                "newArgonSalt",
-                AlgebraicType.createStringType()
-            ),
-            new ProductTypeElement(
-                "signatureBase64",
-                AlgebraicType.createStringType()
-            ),
-        ]);
-    }
+  /**
+  * A function which returns this type represented as an AlgebraicType.
+  * This function is derived from the AlgebraicType used to generate this type.
+  */
+  export function getTypeScriptAlgebraicType(): AlgebraicType {
+    return AlgebraicType.createProductType([
+      new ProductTypeElement("newEncryptedPrivateKey", AlgebraicType.createStringType()),
+      new ProductTypeElement("newEncryptedPrivateSigningKey", AlgebraicType.createStringType()),
+      new ProductTypeElement("newArgonSalt", AlgebraicType.createStringType()),
+      new ProductTypeElement("signatureBase64", AlgebraicType.createStringType()),
+    ]);
+  }
 
-    export function serialize(
-        writer: BinaryWriter,
-        value: UpdateEncryptionKeys
-    ): void {
-        UpdateEncryptionKeys.getTypeScriptAlgebraicType().serialize(
-            writer,
-            value
-        );
-    }
+  export function serialize(writer: BinaryWriter, value: UpdateEncryptionKeys): void {
+    UpdateEncryptionKeys.getTypeScriptAlgebraicType().serialize(writer, value);
+  }
 
-    export function deserialize(reader: BinaryReader): UpdateEncryptionKeys {
-        return UpdateEncryptionKeys.getTypeScriptAlgebraicType().deserialize(
-            reader
-        );
-    }
+  export function deserialize(reader: BinaryReader): UpdateEncryptionKeys {
+    return UpdateEncryptionKeys.getTypeScriptAlgebraicType().deserialize(reader);
+  }
+
 }
+
