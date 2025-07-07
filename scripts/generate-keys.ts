@@ -178,5 +178,6 @@ const generateAndSaveKeys = (privateKeyPath: string, publicKeyPath: string) => {
         process.exit(1);
     } finally {
         rl.close();
+        process.exit(0);
     }
 })();
