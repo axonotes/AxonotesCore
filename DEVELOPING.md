@@ -26,8 +26,8 @@ Follow these steps to get the project configured on your local machine.
     Clone the `axonotesCore` repository to your local machine.
 
     ```sh
-    git clone https://github.com/axonotes/axonotesCore.git
-    cd axonotesCore
+    git clone https://github.com/axonotes/AxonotesCore.git
+    cd AxonotesCore
     ```
 
 2.  **Install Root Dependencies**
