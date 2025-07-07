@@ -107,7 +107,11 @@ pub fn compile_query_with_hashes(
     let tx = SchemaViewer::new(tx, auth);
     let (plans, has_param) = SubscriptionPlan::compile(input, &tx, auth)?;
 
-    if has_param {
+    if auth.is_owner() || has_param {
+        // Note that when generating hashes for queries from owners,
+        // we always treat them as if they were parameterized by :sender.
+        // This is because RLS is not applicable to owners.
+        // Hence owner hashes must never overlap with client hashes.
         return Ok(Plan::new(plans, hash_with_param, input.to_owned()));
     }
     Ok(Plan::new(plans, hash, input.to_owned()))
@@ -162,10 +166,10 @@ mod tests {
     use spacetimedb_lib::error::ResultTest;
     use spacetimedb_lib::identity::AuthCtx;
     use spacetimedb_lib::metrics::ExecutionMetrics;
-    use spacetimedb_lib::relation::FieldName;
     use spacetimedb_lib::Identity;
     use spacetimedb_primitives::{ColId, TableId};
     use spacetimedb_sats::{product, AlgebraicType, ProductType, ProductValue};
+    use spacetimedb_schema::relation::FieldName;
     use spacetimedb_schema::schema::*;
     use spacetimedb_vm::eval::run_ast;
     use spacetimedb_vm::eval::test_helpers::{mem_table, mem_table_without_table_name, scalar};

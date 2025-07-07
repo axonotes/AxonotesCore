@@ -35,11 +35,12 @@ use itertools::Either;
 use spacetimedb_client_api_messages::websocket::{Compression, WebsocketFormat};
 use spacetimedb_data_structures::map::HashSet;
 use spacetimedb_lib::db::auth::{StAccess, StTableType};
-use spacetimedb_lib::db::error::AuthError;
 use spacetimedb_lib::identity::AuthCtx;
-use spacetimedb_lib::relation::DbTable;
-use spacetimedb_lib::{Identity, ProductValue};
+use spacetimedb_lib::Identity;
 use spacetimedb_primitives::TableId;
+use spacetimedb_sats::ProductValue;
+use spacetimedb_schema::def::error::AuthError;
+use spacetimedb_schema::relation::DbTable;
 use spacetimedb_subscription::SubscriptionPlan;
 use spacetimedb_vm::expr::{self, AuthAccess, IndexJoin, Query, QueryExpr, SourceExpr, SourceProvider, SourceSet};
 use spacetimedb_vm::rel_ops::RelOps;
@@ -614,13 +615,25 @@ pub(crate) fn get_all(relational_db: &RelationalDB, tx: &Tx, auth: &AuthCtx) -> 
         .get_all_tables(tx)?
         .iter()
         .map(Deref::deref)
-        .filter(|t| {
-            t.table_type == StTableType::User && (auth.owner == auth.caller || t.table_access == StAccess::Public)
-        })
+        .filter(|t| t.table_type == StTableType::User && (auth.is_owner() || t.table_access == StAccess::Public))
         .map(|schema| {
             let sql = format!("SELECT * FROM {}", schema.table_name);
-            SubscriptionPlan::compile(&sql, &SchemaViewer::new(tx, auth), auth)
-                .map(|(plans, has_param)| Plan::new(plans, QueryHash::from_string(&sql, auth.caller, has_param), sql))
+            let tx = SchemaViewer::new(tx, auth);
+            SubscriptionPlan::compile(&sql, &tx, auth).map(|(plans, has_param)| {
+                Plan::new(
+                    plans,
+                    QueryHash::from_string(
+                        &sql,
+                        auth.caller,
+                        // Note that when generating hashes for queries from owners,
+                        // we always treat them as if they were parameterized by :sender.
+                        // This is because RLS is not applicable to owners.
+                        // Hence owner hashes must never overlap with client hashes.
+                        auth.is_owner() || has_param,
+                    ),
+                    sql,
+                )
+            })
         })
         .collect::<Result<_, _>>()?)
 }
@@ -638,9 +651,7 @@ pub(crate) fn legacy_get_all(
         .get_all_tables(tx)?
         .iter()
         .map(Deref::deref)
-        .filter(|t| {
-            t.table_type == StTableType::User && (auth.owner == auth.caller || t.table_access == StAccess::Public)
-        })
+        .filter(|t| t.table_type == StTableType::User && (auth.is_owner() || t.table_access == StAccess::Public))
         .map(|src| SupportedQuery {
             kind: query::Supported::Select,
             expr: QueryExpr::new(src),
@@ -654,9 +665,9 @@ mod tests {
     use super::*;
     use crate::db::relational_db::tests_utils::{begin_tx, TestDB};
     use crate::sql::compiler::compile_sql;
-    use spacetimedb_lib::relation::DbTable;
     use spacetimedb_lib::{error::ResultTest, identity::AuthCtx};
     use spacetimedb_sats::{product, AlgebraicType};
+    use spacetimedb_schema::relation::DbTable;
     use spacetimedb_vm::expr::{CrudExpr, IndexJoin, Query, SourceExpr};
 
     #[test]

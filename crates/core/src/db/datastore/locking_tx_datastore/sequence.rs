@@ -1,10 +1,10 @@
 use spacetimedb_data_structures::map::IntMap;
 use spacetimedb_primitives::SequenceId;
+use spacetimedb_sats::memory_usage::MemoryUsage;
 use spacetimedb_schema::schema::SequenceSchema;
-use spacetimedb_table::MemoryUsage;
 
 #[derive(Debug, PartialEq)]
-pub(super) struct Sequence {
+pub(crate) struct Sequence {
     schema: SequenceSchema,
     pub(super) value: i128,
 }
