@@ -1,8 +1,10 @@
 use super::{ArgsTuple, InvalidReducerArguments, ReducerArgs, ReducerCallResult, ReducerId, ReducerOutcome, Scheduler};
+use crate::client::messages::{OneOffQueryResponseMessage, SerializableMessage};
 use crate::client::{ClientActorId, ClientConnectionSender};
 use crate::database_logger::{LogLevel, Record};
 use crate::db::datastore::locking_tx_datastore::MutTxId;
 use crate::db::datastore::traits::{IsolationLevel, Program, TxData};
+use crate::db::relational_db::RelationalDB;
 use crate::energy::EnergyQuanta;
 use crate::error::DBError;
 use crate::estimation::estimate_rows_scanned;
@@ -32,6 +34,7 @@ use spacetimedb_data_structures::map::{HashCollectionExt as _, IntMap};
 use spacetimedb_execution::pipelined::PipelinedProject;
 use spacetimedb_lib::db::raw_def::v9::Lifecycle;
 use spacetimedb_lib::identity::{AuthCtx, RequestId};
+use spacetimedb_lib::metrics::ExecutionMetrics;
 use spacetimedb_lib::ConnectionId;
 use spacetimedb_lib::Timestamp;
 use spacetimedb_primitives::TableId;
@@ -39,7 +42,7 @@ use spacetimedb_query::compile_subscription;
 use spacetimedb_sats::ProductValue;
 use spacetimedb_schema::auto_migrate::AutoMigrateError;
 use spacetimedb_schema::def::deserialize::ReducerArgsDeserializeSeed;
-use spacetimedb_schema::def::{ModuleDef, ReducerDef};
+use spacetimedb_schema::def::{ModuleDef, ReducerDef, TableDef};
 use spacetimedb_schema::schema::{Schema, TableSchema};
 use spacetimedb_vm::relation::RelValue;
 use std::fmt;
@@ -183,7 +186,6 @@ pub struct ModuleEvent {
 }
 
 /// Information about a running module.
-#[derive(Debug)]
 pub struct ModuleInfo {
     /// The definition of the module.
     /// Loaded by loading the module's program from the system tables, extracting its definition,
@@ -201,6 +203,17 @@ pub struct ModuleInfo {
     pub subscriptions: ModuleSubscriptions,
     /// Metrics handles for this module.
     pub metrics: ModuleMetrics,
+}
+
+impl fmt::Debug for ModuleInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ModuleInfo")
+            .field("module_def", &self.module_def)
+            .field("owner_identity", &self.owner_identity)
+            .field("database_identity", &self.database_identity)
+            .field("module_hash", &self.module_hash)
+            .finish()
+    }
 }
 
 #[derive(Debug)]
@@ -319,6 +332,19 @@ pub trait ModuleInstance: Send + 'static {
     fn call_reducer(&mut self, tx: Option<MutTxId>, params: CallReducerParams) -> ReducerCallResult;
 }
 
+/// Creates the table for `table_def` in `stdb`.
+pub fn create_table_from_def(
+    stdb: &RelationalDB,
+    tx: &mut MutTxId,
+    module_def: &ModuleDef,
+    table_def: &TableDef,
+) -> anyhow::Result<()> {
+    let schema = TableSchema::from_module_def(module_def, table_def, (), TableId::SENTINEL);
+    stdb.create_table(tx, schema)
+        .with_context(|| format!("failed to create table {}", &table_def.name))?;
+    Ok(())
+}
+
 /// If the module instance's replica_ctx is uninitialized, initialize it.
 fn init_database(
     replica_ctx: &ReplicaContext,
@@ -339,11 +365,8 @@ fn init_database(
             table_defs.sort_by(|a, b| a.name.cmp(&b.name));
 
             for def in table_defs {
-                let table_name = &def.name;
-                logger.info(&format!("Creating table `{table_name}`"));
-                let schema = TableSchema::from_module_def(module_def, def, (), TableId::SENTINEL);
-                stdb.create_table(tx, schema)
-                    .with_context(|| format!("failed to create table {table_name}"))?;
+                logger.info(&format!("Creating table `{}`", &def.name));
+                create_table_from_def(stdb, tx, module_def, def)?;
             }
             // Insert the late-bound row-level security expressions.
             for rls in module_def.row_level_security() {
@@ -366,7 +389,7 @@ fn init_database(
     let rcr = match module_def.lifecycle_reducer(Lifecycle::Init) {
         None => {
             if let Some((tx_data, tx_metrics, reducer)) = stdb.commit_tx(tx)? {
-                stdb.report(&reducer, &tx_metrics, Some(&tx_data));
+                stdb.report_mut_tx_metrics(reducer, tx_metrics, Some(tx_data));
             }
             None
         }
@@ -575,6 +598,13 @@ impl ModuleHost {
                 .with_label_values(&self.info.database_identity)
                 .observe(queue_length as f64);
         }
+        // Ensure that we always decrement the gauge.
+        let timer_guard = scopeguard::guard((), move |_| {
+            // Decrement the queue length gauge when we're done.
+            // This is done in a defer so that it happens even if the reducer call panics.
+            queue_length_gauge.dec();
+            queue_timer.stop_and_record();
+        });
 
         // Operations on module instances (e.g. calling reducers) is blocking,
         // partially because the computation can potentialyl take a long time
@@ -591,8 +621,7 @@ impl ModuleHost {
         });
         self.job_tx
             .run(move |inst| {
-                queue_timer.stop_and_record();
-                queue_length_gauge.dec();
+                drop(timer_guard);
                 f(inst)
             })
             .await
@@ -993,60 +1022,106 @@ impl ModuleHost {
         )
     }
 
+    /// Execute a one-off query and send the results to the given client.
+    /// This only returns an error if there is a db-level problem.
+    /// An error with the query itself will be sent to the client.
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn one_off_query<F: WebsocketFormat>(
+    pub async fn one_off_query<F: WebsocketFormat>(
         &self,
         caller_identity: Identity,
         query: String,
-    ) -> Result<OneOffTable<F>, anyhow::Error> {
+        client: Arc<ClientConnectionSender>,
+        message_id: Vec<u8>,
+        timer: Instant,
+        // We take this because we only have a way to convert with the concrete types (Bsatn and Json)
+        into_message: impl FnOnce(OneOffQueryResponseMessage<F>) -> SerializableMessage + Send + 'static,
+    ) -> Result<(), anyhow::Error> {
         let replica_ctx = self.replica_ctx();
-        let db = &replica_ctx.relational_db;
+        let db = replica_ctx.relational_db.clone();
+        let subscriptions = replica_ctx.subscriptions.clone();
         let auth = AuthCtx::new(replica_ctx.owner_identity, caller_identity);
         log::debug!("One-off query: {query}");
+        let metrics = asyncify(move || {
+            db.with_read_only(Workload::Sql, |tx| {
+                // We wrap the actual query in a closure so we can use ? to handle errors without making
+                // the entire transaction abort with an error.
+                let result: Result<(OneOffTable<F>, ExecutionMetrics), anyhow::Error> = (|| {
+                    let tx = SchemaViewer::new(tx, &auth);
 
-        let (rows, metrics) = db.with_read_only(Workload::Sql, |tx| {
-            let tx = SchemaViewer::new(tx, &auth);
+                    let (
+                        // A query may compile down to several plans.
+                        // This happens when there are multiple RLS rules per table.
+                        // The original query is the union of these plans.
+                        plans,
+                        _,
+                        table_name,
+                        _,
+                    ) = compile_subscription(&query, &tx, &auth)?;
 
-            let (
-                // A query may compile down to several plans.
-                // This happens when there are multiple RLS rules per table.
-                // The original query is the union of these plans.
-                plans,
-                _,
-                table_name,
-                _,
-            ) = compile_subscription(&query, &tx, &auth)?;
+                    // Optimize each fragment
+                    let optimized = plans
+                        .into_iter()
+                        .map(|plan| plan.optimize())
+                        .collect::<Result<Vec<_>, _>>()?;
 
-            // Optimize each fragment
-            let optimized = plans
-                .into_iter()
-                .map(|plan| plan.optimize())
-                .collect::<Result<Vec<_>, _>>()?;
+                    check_row_limit(
+                        &optimized,
+                        &db,
+                        &tx,
+                        // Estimate the number of rows this query will scan
+                        |plan, tx| estimate_rows_scanned(tx, plan),
+                        &auth,
+                    )?;
 
-            check_row_limit(
-                &optimized,
-                db,
-                &tx,
-                // Estimate the number of rows this query will scan
-                |plan, tx| estimate_rows_scanned(tx, plan),
-                &auth,
-            )?;
+                    let optimized = optimized
+                        .into_iter()
+                        // Convert into something we can execute
+                        .map(PipelinedProject::from)
+                        .collect::<Vec<_>>();
 
-            let optimized = optimized
-                .into_iter()
-                // Convert into something we can execute
-                .map(PipelinedProject::from)
-                .collect::<Vec<_>>();
+                    // Execute the union and return the results
+                    execute_plan::<_, F>(&optimized, &DeltaTx::from(&*tx))
+                        .map(|(rows, _, metrics)| (OneOffTable { table_name, rows }, metrics))
+                        .context("One-off queries are not allowed to modify the database")
+                })();
 
-            // Execute the union and return the results
-            execute_plan::<_, F>(&optimized, &DeltaTx::from(&*tx))
-                .map(|(rows, _, metrics)| (OneOffTable { table_name, rows }, metrics))
-                .context("One-off queries are not allowed to modify the database")
-        })?;
+                let total_host_execution_duration = timer.elapsed().into();
+                let (message, metrics): (SerializableMessage, Option<ExecutionMetrics>) = match result {
+                    Ok((rows, metrics)) => (
+                        into_message(OneOffQueryResponseMessage {
+                            message_id,
+                            error: None,
+                            results: vec![rows],
+                            total_host_execution_duration,
+                        }),
+                        Some(metrics),
+                    ),
+                    Err(err) => (
+                        into_message(OneOffQueryResponseMessage {
+                            message_id,
+                            error: Some(format!("{}", err)),
+                            results: vec![],
+                            total_host_execution_duration,
+                        }),
+                        None,
+                    ),
+                };
 
-        db.exec_counters_for(WorkloadType::Sql).record(&metrics);
+                subscriptions.send_client_message(client, message, tx)?;
+                Ok::<Option<ExecutionMetrics>, anyhow::Error>(metrics)
+            })
+        })
+        .await?;
 
-        Ok(rows)
+        if let Some(metrics) = metrics {
+            // Record the metrics for the one-off query
+            replica_ctx
+                .relational_db
+                .exec_counters_for(WorkloadType::Sql)
+                .record(&metrics);
+        }
+
+        Ok(())
     }
 
     /// FIXME(jgilles): this is a temporary workaround for deleting not currently being supported

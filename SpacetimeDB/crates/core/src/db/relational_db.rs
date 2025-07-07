@@ -17,7 +17,8 @@ use super::datastore::{
     traits::TxData,
 };
 use super::db_metrics::DB_METRICS;
-use crate::db::datastore::system_tables::{StModuleRow, WASM_MODULE};
+use crate::db::datastore::system_tables::StModuleRow;
+use crate::db::MetricsRecorderQueue;
 use crate::error::{DBError, DatabaseError, RestoreSnapshotError};
 use crate::execution_context::{ReducerContext, Workload, WorkloadType};
 use crate::messages::control_db::HostType;
@@ -39,14 +40,16 @@ use spacetimedb_lib::Identity;
 use spacetimedb_paths::server::{CommitLogDir, ReplicaDir, SnapshotsPath};
 use spacetimedb_primitives::*;
 use spacetimedb_sats::algebraic_type::fmt::fmt_algebraic_type;
+use spacetimedb_sats::memory_usage::MemoryUsage;
 use spacetimedb_sats::{AlgebraicType, AlgebraicValue, ProductType, ProductValue};
 use spacetimedb_schema::def::{ModuleDef, TableDef};
-use spacetimedb_schema::schema::{IndexSchema, RowLevelSecuritySchema, Schema, SequenceSchema, TableSchema};
+use spacetimedb_schema::schema::{
+    ColumnSchema, IndexSchema, RowLevelSecuritySchema, Schema, SequenceSchema, TableSchema,
+};
 use spacetimedb_snapshot::{ReconstructedSnapshot, SnapshotError, SnapshotRepository};
 use spacetimedb_table::indexes::RowPointer;
 use spacetimedb_table::page_pool::PagePool;
 use spacetimedb_table::table::RowRef;
-use spacetimedb_table::MemoryUsage;
 use spacetimedb_vm::errors::{ErrorType, ErrorVm};
 use spacetimedb_vm::ops::parse;
 use std::borrow::Cow;
@@ -108,14 +111,17 @@ pub struct RelationalDB {
     /// `Some` if `durability` is `Some`, `None` otherwise.
     disk_size_fn: Option<DiskSizeFn>,
 
+    /// A map from workload types to their cached prometheus counters.
+    workload_type_to_exec_counters: Arc<EnumMap<WorkloadType, ExecutionCounters>>,
+
+    /// An async queue for recording transaction metrics off the main thread
+    metrics_recorder_queue: Option<MetricsRecorderQueue>,
+
     // DO NOT ADD FIELDS AFTER THIS.
     // By default, fields are dropped in declaration order.
     // We want to release the file lock last.
     // TODO(noa): is this lockfile still necessary now that we have data-dir?
     _lock: LockFile,
-
-    /// A map from workload types to their cached prometheus counters.
-    workload_type_to_exec_counters: Arc<EnumMap<WorkloadType, ExecutionCounters>>,
 }
 
 #[derive(Clone)]
@@ -229,6 +235,7 @@ impl RelationalDB {
         inner: Locking,
         durability: Option<(Arc<Durability>, DiskSizeFn)>,
         snapshot_repo: Option<Arc<SnapshotRepository>>,
+        metrics_recorder_queue: Option<MetricsRecorderQueue>,
     ) -> Self {
         let (durability, disk_size_fn) = durability.unzip();
         let snapshot_worker =
@@ -247,8 +254,10 @@ impl RelationalDB {
             row_count_fn: default_row_count_fn(database_identity),
             disk_size_fn,
 
-            _lock: lock,
             workload_type_to_exec_counters,
+            metrics_recorder_queue,
+
+            _lock: lock,
         }
     }
 
@@ -322,6 +331,10 @@ impl RelationalDB {
     ///   If restoring from an existing database, the `snapshot_repo` must
     ///   store views of the same sequence of TXes as the `history`.
     ///
+    /// - `metrics_recorder_queue`
+    ///
+    ///   The send side of a queue for recording transaction metrics.
+    ///
     /// # Return values
     ///
     /// Alongside `Self`, [`ConnectedClients`] is returned, which is the set of
@@ -331,6 +344,7 @@ impl RelationalDB {
     /// gracefully. The caller is responsible for disconnecting the clients.
     ///
     /// [ModuleHost]: crate::host::module_host::ModuleHost
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         root: &ReplicaDir,
         database_identity: Identity,
@@ -338,6 +352,7 @@ impl RelationalDB {
         history: impl durability::History<TxData = Txdata>,
         durability: Option<(Arc<Durability>, DiskSizeFn)>,
         snapshot_repo: Option<Arc<SnapshotRepository>>,
+        metrics_recorder_queue: Option<MetricsRecorderQueue>,
         page_pool: PagePool,
     ) -> Result<(Self, ConnectedClients), DBError> {
         log::trace!("[{}] DATABASE: OPEN", database_identity);
@@ -371,6 +386,7 @@ impl RelationalDB {
             inner,
             durability,
             snapshot_repo,
+            metrics_recorder_queue,
         );
 
         if let Some(meta) = db.metadata()? {
@@ -427,9 +443,7 @@ impl RelationalDB {
             database_identity: self.database_identity.into(),
             owner_identity: self.owner_identity.into(),
 
-            program_kind: match host_type {
-                HostType::Wasm => WASM_MODULE,
-            },
+            program_kind: host_type.into(),
             program_hash: program.hash,
             program_bytes: program.bytes,
             module_version: ONLY_MODULE_VERSION.into(),
@@ -473,10 +487,7 @@ impl RelationalDB {
     /// - the `__init__` reducer contained in the module has been executed
     ///   within the transactional context `tx`.
     pub fn update_program(&self, tx: &mut MutTx, host_type: HostType, program: Program) -> Result<(), DBError> {
-        let program_kind = match host_type {
-            HostType::Wasm => WASM_MODULE,
-        };
-        Ok(self.inner.update_program(tx, program_kind, program)?)
+        Ok(self.inner.update_program(tx, host_type.into(), program)?)
     }
 
     fn restore_from_snapshot_or_bootstrap(
@@ -752,6 +763,11 @@ impl RelationalDB {
         Ok(AlgebraicValue::decode(col_ty, &mut &*bytes)?)
     }
 
+    /// Returns the execution counters for this database.
+    pub fn exec_counter_map(&self) -> Arc<EnumMap<WorkloadType, ExecutionCounters>> {
+        self.workload_type_to_exec_counters.clone()
+    }
+
     /// Returns the execution counters for `workload_type` for this database.
     pub fn exec_counters_for(&self, workload_type: WorkloadType) -> &ExecutionCounters {
         &self.workload_type_to_exec_counters[workload_type]
@@ -991,7 +1007,7 @@ impl RelationalDB {
         let mut tx = self.begin_tx(workload);
         let res = f(&mut tx);
         let (tx_metrics, reducer) = self.release_tx(tx);
-        self.report_tx_metricses(&reducer, None, None, &tx_metrics);
+        self.report_read_tx_metrics(reducer, tx_metrics);
         res
     }
 
@@ -1002,11 +1018,11 @@ impl RelationalDB {
     {
         if res.is_err() {
             let (tx_metrics, reducer) = self.rollback_mut_tx(tx);
-            self.report(&reducer, &tx_metrics, None);
+            self.report_mut_tx_metrics(reducer, tx_metrics, None);
         } else {
             match self.commit_tx(tx).map_err(E::from)? {
                 Some((tx_data, tx_metrics, reducer)) => {
-                    self.report(&reducer, &tx_metrics, Some(&tx_data));
+                    self.report_mut_tx_metrics(reducer, tx_metrics, Some(tx_data));
                 }
                 None => panic!("TODO: retry?"),
             }
@@ -1021,7 +1037,7 @@ impl RelationalDB {
         match res {
             Err(e) => {
                 let (tx_metrics, reducer) = self.rollback_mut_tx(tx);
-                self.report(&reducer, &tx_metrics, None);
+                self.report_mut_tx_metrics(reducer, tx_metrics, None);
 
                 Err(e)
             }
@@ -1029,24 +1045,38 @@ impl RelationalDB {
         }
     }
 
-    pub(crate) fn alter_table_access(&self, tx: &mut MutTx, name: Box<str>, access: StAccess) -> Result<(), DBError> {
+    pub(crate) fn alter_table_access(&self, tx: &mut MutTx, name: &str, access: StAccess) -> Result<(), DBError> {
         Ok(self.inner.alter_table_access_mut_tx(tx, name, access)?)
+    }
+
+    pub(crate) fn alter_table_row_type(
+        &self,
+        tx: &mut MutTx,
+        table_id: TableId,
+        column_schemas: Vec<ColumnSchema>,
+    ) -> Result<(), DBError> {
+        Ok(self.inner.alter_table_row_type_mut_tx(tx, table_id, column_schemas)?)
     }
 
     /// Reports the `TxMetrics`s passed.
     ///
     /// Should only be called after the tx lock has been fully released.
-    pub(crate) fn report_tx_metricses(
+    pub(crate) fn report_tx_metrics(
         &self,
-        reducer: &str,
-        tx_data: Option<&TxData>,
-        metrics_mut: Option<&TxMetrics>,
-        metrics_read: &TxMetrics,
+        reducer: String,
+        tx_data: Option<Arc<TxData>>,
+        metrics_for_writer: Option<TxMetrics>,
+        metrics_for_reader: Option<TxMetrics>,
     ) {
-        if let Some(metrics_mut) = metrics_mut {
-            self.report(reducer, metrics_mut, tx_data);
+        if let Some(recorder) = &self.metrics_recorder_queue {
+            recorder.send_metrics(
+                reducer,
+                metrics_for_writer,
+                metrics_for_reader,
+                tx_data,
+                self.exec_counter_map(),
+            );
         }
-        self.report(reducer, metrics_read, None);
     }
 }
 
@@ -1397,8 +1427,13 @@ impl RelationalDB {
     }
 
     /// Reports the metrics for `reducer`, using counters provided by `db`.
-    pub fn report(&self, reducer: &str, metrics: &TxMetrics, tx_data: Option<&TxData>) {
-        metrics.report(tx_data, reducer, |wl: WorkloadType| self.exec_counters_for(wl));
+    pub fn report_mut_tx_metrics(&self, reducer: String, metrics: TxMetrics, tx_data: Option<TxData>) {
+        self.report_tx_metrics(reducer, tx_data.map(Arc::new), Some(metrics), None);
+    }
+
+    /// Reports subscription metrics for `reducer`, using counters provided by `db`.
+    pub fn report_read_tx_metrics(&self, reducer: String, metrics: TxMetrics) {
+        self.report_tx_metrics(reducer, None, None, Some(metrics));
     }
 
     /// Read the value of [ST_VARNAME_ROW_LIMIT] from `st_var`
@@ -1773,7 +1808,7 @@ pub mod tests_utils {
             expected_num_clients: usize,
         ) -> Result<Self, DBError> {
             let dir = TempReplicaDir::new()?;
-            let db = Self::open_db(&dir, history, None, None, expected_num_clients)?;
+            let db = Self::open_db(&dir, history, None, None, None, expected_num_clients)?;
             Ok(Self {
                 db,
                 durable: None,
@@ -1864,7 +1899,7 @@ pub mod tests_utils {
         }
 
         fn in_memory_internal(root: &ReplicaDir) -> Result<RelationalDB, DBError> {
-            Self::open_db(root, EmptyHistory::new(), None, None, 0)
+            Self::open_db(root, EmptyHistory::new(), None, None, None, 0)
         }
 
         fn durable_internal(
@@ -1878,7 +1913,7 @@ pub mod tests_utils {
             let snapshot_repo = want_snapshot_repo
                 .then(|| open_snapshot_repo(root.snapshots(), Identity::ZERO, 0))
                 .transpose()?;
-            let db = Self::open_db(root, history, Some((durability, disk_size_fn)), snapshot_repo, 0)?;
+            let db = Self::open_db(root, history, Some((durability, disk_size_fn)), snapshot_repo, None, 0)?;
 
             Ok((db, local))
         }
@@ -1888,6 +1923,7 @@ pub mod tests_utils {
             history: impl durability::History<TxData = Txdata>,
             durability: Option<(Arc<Durability>, DiskSizeFn)>,
             snapshot_repo: Option<Arc<SnapshotRepository>>,
+            metrics_recorder_queue: Option<MetricsRecorderQueue>,
             expected_num_clients: usize,
         ) -> Result<RelationalDB, DBError> {
             let (db, connected_clients) = RelationalDB::open(
@@ -1897,6 +1933,7 @@ pub mod tests_utils {
                 history,
                 durability,
                 snapshot_repo,
+                metrics_recorder_queue,
                 PagePool::new_for_test(),
             )?;
             assert_eq!(connected_clients.len(), expected_num_clients);
@@ -2143,6 +2180,7 @@ mod tests {
             Identity::ZERO,
             Identity::ZERO,
             EmptyHistory::new(),
+            None,
             None,
             None,
             PagePool::new_for_test(),

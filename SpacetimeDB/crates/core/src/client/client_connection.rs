@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::ops::Deref;
+use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
 use std::time::Instant;
@@ -19,7 +21,7 @@ use futures::prelude::*;
 use prometheus::{Histogram, IntCounter, IntGauge};
 use spacetimedb_client_api_messages::websocket::{
     BsatnFormat, CallReducerFlags, Compression, FormatSwitch, JsonFormat, SubscribeMulti, SubscribeSingle, Unsubscribe,
-    UnsubscribeMulti, WebsocketFormat,
+    UnsubscribeMulti,
 };
 use spacetimedb_lib::identity::RequestId;
 use spacetimedb_lib::metrics::ExecutionMetrics;
@@ -132,7 +134,7 @@ pub enum ClientSendError {
 }
 
 impl ClientConnectionSender {
-    pub fn dummy_with_channel(id: ClientActorId, config: ClientConfig) -> (Self, mpsc::Receiver<SerializableMessage>) {
+    pub fn dummy_with_channel(id: ClientActorId, config: ClientConfig) -> (Self, MeteredReceiver<SerializableMessage>) {
         let (sendtx, rx) = mpsc::channel(1);
         // just make something up, it doesn't need to be attached to a real task
         let abort_handle = match tokio::runtime::Handle::try_current() {
@@ -140,6 +142,7 @@ impl ClientConnectionSender {
             Err(_) => tokio::runtime::Runtime::new().unwrap().spawn(async {}).abort_handle(),
         };
 
+        let rx = MeteredReceiver::new(rx);
         let cancelled = AtomicBool::new(false);
         let sender = Self {
             id,
@@ -154,6 +157,10 @@ impl ClientConnectionSender {
 
     pub fn dummy(id: ClientActorId, config: ClientConfig) -> Self {
         Self::dummy_with_channel(id, config).0
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
     }
 
     /// Send a message to the client. For data-related messages, you should probably use
@@ -173,7 +180,7 @@ impl ClientConnectionSender {
                 // the channel, so forcibly kick the client
                 tracing::warn!(identity = %self.id.identity, connection_id = %self.id.connection_id, "client channel capacity exceeded");
                 self.abort_handle.abort();
-                self.cancelled.store(true, Relaxed);
+                self.cancelled.store(true, Ordering::Relaxed);
                 return Err(ClientSendError::Cancelled);
             }
             Err(mpsc::error::TrySendError::Closed(_)) => return Err(ClientSendError::Disconnected),
@@ -234,16 +241,136 @@ impl From<Vec<u8>> for DataMessage {
 }
 
 impl DataMessage {
+    /// Returns the number of bytes this message consists of.
     pub fn len(&self) -> usize {
         match self {
-            DataMessage::Text(s) => s.len(),
-            DataMessage::Binary(b) => b.len(),
+            Self::Text(s) => s.len(),
+            Self::Binary(b) => b.len(),
         }
     }
 
+    /// Is the message empty?
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Returns a handle to the underlying allocation of the message without consuming it.
+    pub fn allocation(&self) -> Bytes {
+        match self {
+            DataMessage::Text(alloc) => alloc.as_bytes().clone(),
+            DataMessage::Binary(alloc) => alloc.clone(),
+        }
+    }
+}
+
+/// Wraps a [VecDeque] with a gauge for tracking its size.
+/// We subtract its size from the gauge on drop to avoid leaking the metric.
+pub struct MeteredDeque<T> {
+    inner: VecDeque<T>,
+    gauge: IntGauge,
+}
+
+impl<T> MeteredDeque<T> {
+    pub fn new(gauge: IntGauge) -> Self {
+        Self {
+            inner: VecDeque::new(),
+            gauge,
+        }
+    }
+
+    pub fn pop_front(&mut self) -> Option<T> {
+        self.inner.pop_front().inspect(|_| {
+            self.gauge.dec();
+        })
+    }
+
+    pub fn pop_back(&mut self) -> Option<T> {
+        self.inner.pop_back().inspect(|_| {
+            self.gauge.dec();
+        })
+    }
+
+    pub fn push_front(&mut self, value: T) {
+        self.gauge.inc();
+        self.inner.push_front(value);
+    }
+
+    pub fn push_back(&mut self, value: T) {
+        self.gauge.inc();
+        self.inner.push_back(value);
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+
+impl<T> Drop for MeteredDeque<T> {
+    fn drop(&mut self) {
+        // Record the number of elements still in the deque on drop
+        self.gauge.sub(self.inner.len() as _);
+    }
+}
+
+/// Wraps the receiving end of a channel with a gauge for tracking the size of the channel.
+/// We subtract the size of the channel from the gauge on drop to avoid leaking the metric.
+pub struct MeteredReceiver<T> {
+    inner: mpsc::Receiver<T>,
+    gauge: Option<IntGauge>,
+}
+
+impl<T> MeteredReceiver<T> {
+    pub fn new(inner: mpsc::Receiver<T>) -> Self {
+        Self { inner, gauge: None }
+    }
+
+    pub fn with_gauge(inner: mpsc::Receiver<T>, gauge: IntGauge) -> Self {
+        Self {
+            inner,
+            gauge: Some(gauge),
+        }
+    }
+
+    pub async fn recv(&mut self) -> Option<T> {
+        self.inner.recv().await.inspect(|_| {
+            if let Some(gauge) = &self.gauge {
+                gauge.dec();
+            }
+        })
+    }
+
+    pub async fn recv_many(&mut self, buf: &mut Vec<T>, max: usize) -> usize {
+        let n = self.inner.recv_many(buf, max).await;
+        if let Some(gauge) = &self.gauge {
+            gauge.sub(n as _);
+        }
+        n
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    pub fn close(&mut self) {
+        self.inner.close();
+    }
+}
+
+impl<T> Drop for MeteredReceiver<T> {
+    fn drop(&mut self) {
+        // Record the number of elements still in the channel on drop
+        if let Some(gauge) = &self.gauge {
+            gauge.sub(self.inner.len() as _);
+        }
     }
 }
 
@@ -259,7 +386,7 @@ impl ClientConnection {
         config: ClientConfig,
         replica_id: u64,
         mut module_rx: watch::Receiver<ModuleHost>,
-        actor: impl FnOnce(ClientConnection, mpsc::Receiver<SerializableMessage>) -> Fut,
+        actor: impl FnOnce(ClientConnection, MeteredReceiver<SerializableMessage>) -> Fut,
     ) -> Result<ClientConnection, ClientConnectedError>
     where
         Fut: Future<Output = ()> + Send + 'static,
@@ -282,13 +409,19 @@ impl ClientConnection {
 
             let _gauge_guard = module_info.metrics.connected_clients.inc_scope();
             module_info.metrics.ws_clients_spawned.inc();
-            scopeguard::defer!(module_info.metrics.ws_clients_aborted.inc());
+            scopeguard::defer! {
+                let database_identity = module_info.database_identity;
+                let client_identity = id.identity;
+                log::warn!("websocket connection aborted for client identity `{client_identity}` and database identity `{database_identity}`");
+                module_info.metrics.ws_clients_aborted.inc();
+            };
 
             fut.await
         })
         .abort_handle();
 
         let metrics = ClientConnectionMetrics::new(database_identity, config.protocol);
+        let sendrx = MeteredReceiver::with_gauge(sendrx, metrics.sendtx_queue_size.clone());
 
         let sender = Arc::new(ClientConnectionSender {
             id,
@@ -440,41 +573,40 @@ impl ClientConnection {
         .await
     }
 
-    pub fn one_off_query_json(&self, query: &str, message_id: &[u8], timer: Instant) -> Result<(), anyhow::Error> {
-        let response = self.one_off_query::<JsonFormat>(query, message_id, timer);
-        self.send_message(response)?;
-        Ok(())
-    }
-
-    pub fn one_off_query_bsatn(&self, query: &str, message_id: &[u8], timer: Instant) -> Result<(), anyhow::Error> {
-        let response = self.one_off_query::<BsatnFormat>(query, message_id, timer);
-        self.send_message(response)?;
-        Ok(())
-    }
-
-    fn one_off_query<F: WebsocketFormat>(
+    pub async fn one_off_query_json(
         &self,
         query: &str,
         message_id: &[u8],
         timer: Instant,
-    ) -> OneOffQueryResponseMessage<F> {
-        let result = self.module.one_off_query::<F>(self.id.identity, query.to_owned());
-        let message_id = message_id.to_owned();
-        let total_host_execution_duration = timer.elapsed().into();
-        match result {
-            Ok(results) => OneOffQueryResponseMessage {
-                message_id,
-                error: None,
-                results: vec![results],
-                total_host_execution_duration,
-            },
-            Err(err) => OneOffQueryResponseMessage {
-                message_id,
-                error: Some(format!("{}", err)),
-                results: vec![],
-                total_host_execution_duration,
-            },
-        }
+    ) -> Result<(), anyhow::Error> {
+        self.module
+            .one_off_query::<JsonFormat>(
+                self.id.identity,
+                query.to_owned(),
+                self.sender.clone(),
+                message_id.to_owned(),
+                timer,
+                |msg: OneOffQueryResponseMessage<JsonFormat>| msg.into(),
+            )
+            .await
+    }
+
+    pub async fn one_off_query_bsatn(
+        &self,
+        query: &str,
+        message_id: &[u8],
+        timer: Instant,
+    ) -> Result<(), anyhow::Error> {
+        self.module
+            .one_off_query::<BsatnFormat>(
+                self.id.identity,
+                query.to_owned(),
+                self.sender.clone(),
+                message_id.to_owned(),
+                timer,
+                |msg: OneOffQueryResponseMessage<BsatnFormat>| msg.into(),
+            )
+            .await
     }
 
     pub async fn disconnect(self) {

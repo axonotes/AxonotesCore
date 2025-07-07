@@ -4,7 +4,8 @@ use once_cell::sync::Lazy;
 use prometheus::{GaugeVec, HistogramVec, IntCounterVec, IntGaugeVec};
 use spacetimedb_lib::{ConnectionId, Identity};
 use spacetimedb_metrics::metrics_group;
-use spacetimedb_table::{page_pool::PagePool, MemoryUsage};
+use spacetimedb_sats::memory_usage::MemoryUsage;
+use spacetimedb_table::page_pool::PagePool;
 use std::{sync::Once, time::Duration};
 use tokio::{spawn, time::sleep};
 
@@ -21,9 +22,14 @@ metrics_group!(
         pub ws_clients_spawned: IntGaugeVec,
 
         #[name = spacetime_worker_ws_clients_aborted]
-        #[help = "Number of ws client connections aborted"]
+        #[help = "Number of ws client connections aborted by either the server or the client"]
         #[labels(database_identity: Identity)]
         pub ws_clients_aborted: IntGaugeVec,
+
+        #[name = spacetime_worker_ws_clients_closed_connection]
+        #[help = "Number of ws client connections closed by the client as opposed to being termiated by the server"]
+        #[labels(database_identity: Identity)]
+        pub ws_clients_closed_connection: IntGaugeVec,
 
         #[name = spacetime_websocket_requests_total]
         #[help = "The cumulative number of websocket request messages"]
@@ -320,10 +326,10 @@ pub fn spawn_page_pool_stats(node_id: String, page_pool: PagePool) {
 
             loop {
                 resident_bytes.set(page_pool.heap_usage() as i64);
-                dropped_pages.set(page_pool.dropped_pages_count() as i64);
-                new_pages.set(page_pool.new_pages_allocated_count() as i64);
-                reused_pages.set(page_pool.pages_reused_count() as i64);
-                returned_pages.set(page_pool.pages_reused_count() as i64);
+                dropped_pages.set(page_pool.dropped_count() as i64);
+                new_pages.set(page_pool.new_allocated_count() as i64);
+                reused_pages.set(page_pool.reused_count() as i64);
+                returned_pages.set(page_pool.reused_count() as i64);
 
                 sleep(Duration::from_secs(10)).await;
             }

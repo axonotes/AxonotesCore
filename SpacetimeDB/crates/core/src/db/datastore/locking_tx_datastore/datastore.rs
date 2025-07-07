@@ -38,10 +38,11 @@ use spacetimedb_lib::{db::auth::StAccess, metrics::ExecutionMetrics};
 use spacetimedb_lib::{ConnectionId, Identity};
 use spacetimedb_paths::server::SnapshotDirPath;
 use spacetimedb_primitives::{ColList, ConstraintId, IndexId, SequenceId, TableId};
+use spacetimedb_sats::memory_usage::MemoryUsage;
 use spacetimedb_sats::{bsatn, buffer::BufReader, AlgebraicValue, ProductValue};
-use spacetimedb_schema::schema::{IndexSchema, SequenceSchema, TableSchema};
+use spacetimedb_schema::schema::{ColumnSchema, IndexSchema, SequenceSchema, TableSchema};
 use spacetimedb_snapshot::{ReconstructedSnapshot, SnapshotRepository};
-use spacetimedb_table::{indexes::RowPointer, page_pool::PagePool, table::RowRef, MemoryUsage};
+use spacetimedb_table::{indexes::RowPointer, page_pool::PagePool, table::RowRef};
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -299,12 +300,21 @@ impl Locking {
         Ok(iter)
     }
 
-    pub(crate) fn alter_table_access_mut_tx(&self, tx: &mut MutTxId, name: Box<str>, access: StAccess) -> Result<()> {
+    pub(crate) fn alter_table_access_mut_tx(&self, tx: &mut MutTxId, name: &str, access: StAccess) -> Result<()> {
         let table_id = self
-            .table_id_from_name_mut_tx(tx, &name)?
+            .table_id_from_name_mut_tx(tx, name)?
             .ok_or_else(|| TableError::NotFound(name.into()))?;
 
         tx.alter_table_access(table_id, access)
+    }
+
+    pub(crate) fn alter_table_row_type_mut_tx(
+        &self,
+        tx: &mut MutTxId,
+        table_id: TableId,
+        column_schemas: Vec<ColumnSchema>,
+    ) -> Result<()> {
+        tx.alter_table_row_type(table_id, column_schemas)
     }
 }
 
@@ -1154,17 +1164,19 @@ mod tests {
     use itertools::Itertools;
     use pretty_assertions::{assert_eq, assert_matches};
     use spacetimedb_execution::Datastore;
-    use spacetimedb_lib::bsatn::ToBsatn;
     use spacetimedb_lib::db::auth::{StAccess, StTableType};
     use spacetimedb_lib::error::ResultTest;
     use spacetimedb_lib::st_var::StVarValue;
     use spacetimedb_lib::{resolved_type_via_v9, ScheduleAt, TimeDuration};
     use spacetimedb_primitives::{col_list, ColId, ScheduleId};
     use spacetimedb_sats::algebraic_value::ser::value_serialize;
-    use spacetimedb_sats::{product, AlgebraicType, GroundSpacetimeType};
+    use spacetimedb_sats::bsatn::ToBsatn;
+    use spacetimedb_sats::layout::RowTypeLayout;
+    use spacetimedb_sats::{product, AlgebraicType, GroundSpacetimeType, SumTypeVariant, SumValue};
     use spacetimedb_schema::def::BTreeAlgorithm;
     use spacetimedb_schema::schema::{
-        ColumnSchema, ConstraintSchema, IndexSchema, RowLevelSecuritySchema, ScheduleSchema, SequenceSchema,
+        columns_to_row_type, ColumnSchema, ConstraintSchema, IndexSchema, RowLevelSecuritySchema, ScheduleSchema,
+        SequenceSchema,
     };
 
     /// For the first user-created table, sequences in the system tables start
@@ -1845,13 +1857,13 @@ mod tests {
         let mut tx = begin_mut_tx(&datastore);
         let schema = datastore.schema_for_table_mut_tx(&tx, table_id)?;
 
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         let mut dropped_indexes = 0;
         for (pos, index) in schema.indexes.iter().enumerate() {
             datastore.drop_index_mut_tx(&mut tx, index.index_id)?;
             dropped_indexes += 1;
 
-            let psc = &tx.tx_state.pending_schema_changes[pos];
+            let psc = &tx.pending_schema_changes()[pos];
             let PendingSchemaChange::IndexRemoved(tid, iid, _, schema) = psc else {
                 panic!("wrong pending schema change: {psc:?}");
             };
@@ -1866,7 +1878,7 @@ mod tests {
         datastore.commit_mut_tx(tx)?;
 
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         assert!(
             datastore.schema_for_table_mut_tx(&tx, table_id)?.indexes.is_empty(),
             "no indexes should be left in the schema post-commit"
@@ -1885,7 +1897,7 @@ mod tests {
             true,
         )?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [PendingSchemaChange::IndexAdded(tid, _, Some(_))]
             if *tid == table_id
         );
@@ -1908,7 +1920,7 @@ mod tests {
         datastore.commit_mut_tx(tx)?;
 
         let tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         assert_eq!(
             datastore.schema_for_table_mut_tx(&tx, table_id)?.indexes,
             expected_indexes,
@@ -1923,10 +1935,10 @@ mod tests {
     #[test]
     fn test_schema_for_table_rollback() -> ResultTest<()> {
         let (datastore, tx, table_id) = setup_table()?;
-        assert_eq!(tx.tx_state.pending_schema_changes.len(), 6);
+        assert_eq!(tx.pending_schema_changes().len(), 6);
         let _ = datastore.rollback_mut_tx(tx);
         let tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         let schema = datastore.schema_for_table_mut_tx(&tx, table_id);
         assert!(schema.is_err());
         Ok(())
@@ -2153,12 +2165,9 @@ mod tests {
         commit(&datastore, tx)?;
 
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         create_foo_age_idx_btree(&datastore, &mut tx, table_id)?;
-        assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
-            [PendingSchemaChange::IndexAdded(.., None)]
-        );
+        assert_matches!(tx.pending_schema_changes(), [PendingSchemaChange::IndexAdded(.., None)]);
         assert_st_indices(&tx, true)?;
         let row = u32_str_u32(0, "Bar", 18); // 0 will be ignored.
         let result = insert(&datastore, &mut tx, table_id, &row);
@@ -2183,7 +2192,7 @@ mod tests {
         commit(&datastore, tx)?;
 
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         assert_st_indices(&tx, true)?;
         let row = u32_str_u32(0, "Bar", 18); // 0 will be ignored.
         let result = insert(&datastore, &mut tx, table_id, &row);
@@ -2223,16 +2232,13 @@ mod tests {
         // Start a transaction. Schema changes empty so far.
         let datastore = get_datastore()?;
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
 
         // Make the table and witness `TableAdded`. Commit.
         let column = ColumnSchema::for_test(0, "id", AlgebraicType::I32);
         let schema = user_public_table([column], [], [], [], None, None);
         let table_id = datastore.create_table_mut_tx(&mut tx, schema)?;
-        assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
-            [PendingSchemaChange::TableAdded(..)]
-        );
+        assert_matches!(tx.pending_schema_changes(), [PendingSchemaChange::TableAdded(..)]);
         commit(&datastore, tx)?;
 
         // Start a new tx. Insert a row and witness that a sequence isn't used.
@@ -2262,7 +2268,7 @@ mod tests {
         };
         let seq_id = datastore.create_sequence_mut_tx(&mut tx, sequence.clone())?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [PendingSchemaChange::SequenceAdded(_, added_seq_id)]
                 if *added_seq_id == seq_id
         );
@@ -2271,7 +2277,7 @@ mod tests {
         // Drop the uncommitted sequence.
         datastore.drop_sequence_mut_tx(&mut tx, seq_id)?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [
                 PendingSchemaChange::SequenceAdded(..),
                 PendingSchemaChange::SequenceRemoved(.., schema),
@@ -2283,7 +2289,7 @@ mod tests {
         // Add the sequence again and rollback, witnessing that this had no effect in the next tx.
         let seq_id = datastore.create_sequence_mut_tx(&mut tx, sequence.clone())?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [
                 PendingSchemaChange::SequenceAdded(..),
                 PendingSchemaChange::SequenceRemoved(..),
@@ -2293,45 +2299,39 @@ mod tests {
         );
         let _ = datastore.rollback_mut_tx(tx);
         let mut tx: MutTxId = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         insert_assert_and_remove(&mut tx, &zero, &zero)?;
 
         // Add the sequence and this time actually commit. Check that it exists in next tx.
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         let seq_id = datastore.create_sequence_mut_tx(&mut tx, sequence.clone())?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [PendingSchemaChange::SequenceAdded(_, added_seq_id)]
                 if *added_seq_id == seq_id
         );
         commit(&datastore, tx)?;
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         insert_assert_and_remove(&mut tx, &zero, &one)?;
 
         // We have the sequence in committed state.
         // Drop it and then rollback, so in the next tx the seq is still there.
         datastore.drop_sequence_mut_tx(&mut tx, seq_id)?;
-        assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
-            [PendingSchemaChange::SequenceRemoved(..)]
-        );
+        assert_matches!(tx.pending_schema_changes(), [PendingSchemaChange::SequenceRemoved(..)]);
         insert_assert_and_remove(&mut tx, &zero, &zero)?;
         let _ = datastore.rollback_mut_tx(tx);
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         insert_assert_and_remove(&mut tx, &zero, &product![2])?;
 
         // Drop the seq and commit this time around. In the next tx, we witness that there's no seq.
         datastore.drop_sequence_mut_tx(&mut tx, seq_id)?;
-        assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
-            [PendingSchemaChange::SequenceRemoved(..)]
-        );
+        assert_matches!(tx.pending_schema_changes(), [PendingSchemaChange::SequenceRemoved(..)]);
         insert_assert_and_remove(&mut tx, &zero, &zero)?;
         commit(&datastore, tx)?;
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         insert_assert_and_remove(&mut tx, &zero, &zero)?;
 
         Ok(())
@@ -2558,16 +2558,16 @@ mod tests {
     fn test_update_no_such_index_because_deleted() -> ResultTest<()> {
         // Setup and immediately commit.
         let (datastore, tx, table_id) = setup_table()?;
-        assert_eq!(tx.tx_state.pending_schema_changes.len(), 6);
+        assert_eq!(tx.pending_schema_changes().len(), 6);
         commit(&datastore, tx)?;
 
         // Remove index in tx state.
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         let index_id = extract_index_id(&datastore, &tx, &basic_indices()[0])?;
         tx.drop_index(index_id)?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [PendingSchemaChange::IndexRemoved(tid, iid, _, _)]
             if *tid == table_id && *iid == index_id
         );
@@ -2642,7 +2642,7 @@ mod tests {
     fn test_update_no_such_row_because_deleted_new_index_in_tx() -> ResultTest<()> {
         let (datastore, mut tx, table_id) = setup_table_with_indices([], [])?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [
                 PendingSchemaChange::TableAdded(_),
                 PendingSchemaChange::SequenceAdded(..),
@@ -2656,13 +2656,13 @@ mod tests {
 
         // Now add the indices and then delete the row.
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         let mut indices = basic_indices();
         for (pos, index) in indices.iter_mut().enumerate() {
             index.table_id = table_id;
             index.index_id = datastore.create_index_mut_tx(&mut tx, index.clone(), true)?;
             assert_matches!(
-                &tx.tx_state.pending_schema_changes[pos],
+                &tx.pending_schema_changes()[pos],
                 PendingSchemaChange::IndexAdded(_, iid, _)
                 if *iid == index.index_id
             );
@@ -3075,10 +3075,10 @@ mod tests {
 
         // Create a transaction and drop the table and roll back.
         let mut tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         assert!(datastore.drop_table_mut_tx(&mut tx, table_id).is_ok());
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [
                 PendingSchemaChange::IndexRemoved(..),
                 PendingSchemaChange::IndexRemoved(..),
@@ -3093,7 +3093,7 @@ mod tests {
 
         // Ensure the table still exists in the next transaction.
         let tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         assert!(
             datastore.table_id_exists_mut_tx(&tx, &table_id),
             "Table should still exist",
@@ -3108,7 +3108,7 @@ mod tests {
         // Create a table in a failed transaction.
         let (datastore, tx, table_id) = setup_table()?;
         assert_matches!(
-            &*tx.tx_state.pending_schema_changes,
+            tx.pending_schema_changes(),
             [
                 PendingSchemaChange::TableAdded(added_table_id),
                 PendingSchemaChange::IndexAdded(.., Some(_)),
@@ -3123,11 +3123,180 @@ mod tests {
 
         // Nothing should have happened.
         let tx = begin_mut_tx(&datastore);
-        assert_eq!(&*tx.tx_state.pending_schema_changes, []);
+        assert_eq!(tx.pending_schema_changes(), []);
         assert!(
             !datastore.table_id_exists_mut_tx(&tx, &table_id),
             "Table should not exist"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_alter_table_access_is_transactional() -> ResultTest<()> {
+        // Create a table.
+        let (datastore, tx, table_id) = setup_table()?;
+        commit(&datastore, tx)?;
+
+        // In a new transaction, alter the table access and then rollback.
+        let mut tx = begin_mut_tx(&datastore);
+        let assert_access =
+            |tx: &MutTxId, access| assert_eq!(tx.get_schema(table_id).map(|s| s.table_access), Some(access));
+        assert_access(&tx, StAccess::Public);
+        tx.alter_table_access(table_id, StAccess::Private)?;
+        assert_eq!(
+            tx.pending_schema_changes(),
+            [PendingSchemaChange::TableAlterAccess(table_id, StAccess::Public)]
+        );
+        let _ = datastore.rollback_mut_tx(tx);
+
+        // Check that the access was reverted.
+        let mut tx = begin_mut_tx(&datastore);
+        assert_access(&tx, StAccess::Public);
+
+        // Commit the change this time and check that it persisted.
+        tx.alter_table_access(table_id, StAccess::Private)?;
+        commit(&datastore, tx)?;
+        let tx = begin_mut_tx(&datastore);
+        assert_access(&tx, StAccess::Private);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_alter_table_row_type_rejects_some_bad_changes() -> ResultTest<()> {
+        let datastore = get_datastore()?;
+
+        // Setup the initial table.
+        let mut tx = begin_mut_tx(&datastore);
+        let schedule = ScheduleSchema {
+            table_id: TableId::SENTINEL,
+            schedule_id: ScheduleId::SENTINEL,
+            schedule_name: "schedule".into(),
+            reducer_name: "reducer".into(),
+            at_column: 1.into(),
+        };
+        let sum_ty = AlgebraicType::sum([("foo", AlgebraicType::Bool), ("bar", AlgebraicType::U16)]);
+        let columns = [
+            ColumnSchema::for_test(0, "id", AlgebraicType::U64),
+            ColumnSchema::for_test(1, "at", ScheduleAt::get_type()),
+            ColumnSchema::for_test(2, "sum", sum_ty),
+        ];
+        let mut columns = columns.to_vec();
+        let schema = user_public_table(columns.clone(), [], [], [], Some(schedule), Some(0.into()));
+        let table_id = datastore.create_table_mut_tx(&mut tx, schema)?;
+        commit(&datastore, tx)?;
+
+        let mut tx = begin_mut_tx(&datastore);
+
+        let mut change_add_restore = |idx: usize, add| {
+            let col_ty = &mut columns[idx].col_type;
+            let col_ty_old = col_ty.clone();
+
+            let vars_ref = &mut col_ty.as_sum_mut().unwrap().variants;
+            let mut vars = Vec::from(mem::take(vars_ref));
+            vars.push(SumTypeVariant::new_named(add, "bad"));
+
+            assert!(datastore
+                .alter_table_row_type_mut_tx(&mut tx, table_id, columns.clone())
+                .is_err());
+            columns[idx].col_type = col_ty_old;
+        };
+
+        // Add a variant to `ScheduleAt`.
+        change_add_restore(1, AlgebraicType::time_duration());
+
+        // Add a variant to `sum` with an incompatible layout.
+        change_add_restore(2, AlgebraicType::U32);
+
+        // Add another field.
+        columns.push(ColumnSchema::for_test(3, "bad", AlgebraicType::U8));
+        assert!(datastore
+            .alter_table_row_type_mut_tx(&mut tx, table_id, columns.clone())
+            .is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_alter_table_row_type_is_transactional() -> ResultTest<()> {
+        let datastore = get_datastore()?;
+
+        // Setup the initial table.
+        let mut tx = begin_mut_tx(&datastore);
+        let sum_original = AlgebraicType::sum([("ba", AlgebraicType::U16)]);
+        let columns = [
+            ColumnSchema::for_test(0, "a", AlgebraicType::U64),
+            ColumnSchema::for_test(1, "b", sum_original.clone()),
+        ];
+        let indices = [
+            IndexSchema::for_test("index_a", BTreeAlgorithm::from(0)),
+            IndexSchema::for_test("index_b", BTreeAlgorithm::from(1)),
+        ];
+        let schema = user_public_table(columns, indices, [], [], None, None);
+        let table_id = datastore.create_table_mut_tx(&mut tx, schema)?;
+        let columns_original = tx.get_schema(table_id).unwrap().columns.to_vec();
+        let mut columns = columns_original.clone();
+        commit(&datastore, tx)?;
+
+        // Change the `b` column, adding a variant.
+        let vars_ref = &mut columns[1].col_type.as_sum_mut().unwrap().variants;
+        let mut vars = Vec::from(mem::take(vars_ref));
+        vars.push(SumTypeVariant::new_named(AlgebraicType::U8, "bb"));
+        *vars_ref = vars.into();
+
+        // Change the columns in datastore and roll back.
+        let mut tx = begin_mut_tx(&datastore);
+        datastore.alter_table_row_type_mut_tx(&mut tx, table_id, columns.clone())?;
+        assert_eq!(
+            tx.pending_schema_changes(),
+            [PendingSchemaChange::TableAlterRowType(
+                table_id,
+                columns_original.clone()
+            )]
+        );
+        assert_eq!(tx.get_schema(table_id).unwrap().columns, columns.clone());
+        let _ = datastore.rollback_mut_tx(tx);
+
+        // Assert no change to the schema type and index keys.
+        let mut tx = begin_mut_tx(&datastore);
+        assert_eq!(tx.get_schema(table_id).unwrap().columns, columns_original);
+        let index_key_types = |tx: &MutTxId| {
+            tx.table(table_id)
+                .unwrap()
+                .indexes
+                .values()
+                .map(|i| i.key_type.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(index_key_types(&tx), [AlgebraicType::U64, sum_original]);
+
+        // Alter successfully this time and insert a row.
+        datastore.alter_table_row_type_mut_tx(&mut tx, table_id, columns.clone())?;
+        let expected_row_type = columns_to_row_type(&columns);
+        let schema = tx.get_schema(table_id).unwrap();
+        assert_eq!(schema.columns, columns);
+        assert_eq!(schema.get_row_type(), &expected_row_type);
+        let sum_val = SumValue::new(1, 42u8);
+        let id = 24u64;
+        let (_, row_ref) = insert(&datastore, &mut tx, table_id, &product![id, sum_val.clone()])?;
+        assert_eq!(row_ref.row_layout(), &RowTypeLayout::from(expected_row_type));
+        assert_eq!(
+            index_key_types(&tx),
+            [
+                AlgebraicType::U64,
+                AlgebraicType::sum([("ba", AlgebraicType::U16), ("bb", AlgebraicType::U8)])
+            ]
+        );
+        commit(&datastore, tx)?;
+
+        // Check that we can successfully scan using the new schema type post commit.
+        let tx = begin_tx(&datastore);
+        let row_ref = datastore
+            .iter_by_col_eq_tx(&tx, table_id, 1, &sum_val.into())?
+            .next()
+            .unwrap();
+        assert_eq!(row_ref.read_col::<u64>(0).unwrap(), id);
+
         Ok(())
     }
 
