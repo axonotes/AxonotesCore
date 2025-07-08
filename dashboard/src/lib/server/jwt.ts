@@ -1,10 +1,12 @@
 import jwt from "jsonwebtoken";
 import {
-    ACCESS_TOKEN_EXPIRES_IN,
     JWT_KEY_ID,
     JWT_PRIVATE_KEY_BASE64,
     JWT_PUBLIC_KEY_BASE64,
-    REFRESH_TOKEN_EXPIRES_IN,
+    WEB_ACCESS_TOKEN_EXPIRES_IN,
+    WEB_REFRESH_TOKEN_EXPIRES_IN,
+    DESKTOP_ACCESS_TOKEN_EXPIRES_IN,
+    DESKTOP_REFRESH_TOKEN_EXPIRES_IN,
 } from "$env/static/private";
 import ms from "ms";
 
@@ -16,26 +18,41 @@ export interface UserTokenPayload {
     lastName: string;
 }
 
+export interface TokenOptions {
+    accessTokenLifetime?: ms.StringValue;
+    refreshTokenLifetime?: ms.StringValue;
+}
+
+// Web token lifetimes
+const DEFAULT_WEB_ACCESS_LIFETIME =
+    WEB_ACCESS_TOKEN_EXPIRES_IN as ms.StringValue;
+const DEFAULT_WEB_REFRESH_LIFETIME =
+    WEB_REFRESH_TOKEN_EXPIRES_IN as ms.StringValue;
+
+// Desktop token lifetimes (longer for better UX)
+const DEFAULT_DESKTOP_ACCESS_LIFETIME =
+    DESKTOP_ACCESS_TOKEN_EXPIRES_IN as ms.StringValue;
+const DEFAULT_DESKTOP_REFRESH_LIFETIME =
+    DESKTOP_REFRESH_TOKEN_EXPIRES_IN as ms.StringValue;
+
 const privateKey = Buffer.from(JWT_PRIVATE_KEY_BASE64, "base64").toString(
     "ascii"
 );
-
 const publicKey = Buffer.from(JWT_PUBLIC_KEY_BASE64, "base64").toString(
     "ascii"
 );
-
 const keyId = JWT_KEY_ID;
-const ALGORITHM = "ES256"; // Elliptic Curve algorithm
-
-const refreshTokenExpiresIn = REFRESH_TOKEN_EXPIRES_IN as ms.StringValue;
-const accessTokenExpiresIn = ACCESS_TOKEN_EXPIRES_IN as ms.StringValue;
+const ALGORITHM = "ES256";
 
 if (
     !privateKey ||
     !publicKey ||
     !keyId ||
-    !refreshTokenExpiresIn ||
-    !accessTokenExpiresIn
+    !ALGORITHM ||
+    !DEFAULT_WEB_ACCESS_LIFETIME ||
+    !DEFAULT_WEB_REFRESH_LIFETIME ||
+    !DEFAULT_DESKTOP_ACCESS_LIFETIME ||
+    !DEFAULT_DESKTOP_REFRESH_LIFETIME
 ) {
     throw new Error(
         "JWT keys are not set correctly. Please generate them with `bun run generate` and copy them into the .env file"
@@ -45,10 +62,16 @@ if (
 /**
  * Signs a payload to generate a short-lived ACCESS token.
  */
-export function generateAccessToken(payload: UserTokenPayload): string {
+export function generateAccessToken(
+    payload: UserTokenPayload,
+    options: TokenOptions = {}
+): string {
+    const expiresIn =
+        options.accessTokenLifetime || DEFAULT_WEB_ACCESS_LIFETIME;
+
     return jwt.sign(payload, privateKey, {
         algorithm: ALGORITHM,
-        expiresIn: accessTokenExpiresIn, // Use short lifetime
+        expiresIn,
         keyid: keyId,
     });
 }
@@ -56,12 +79,67 @@ export function generateAccessToken(payload: UserTokenPayload): string {
 /**
  * Signs a payload to generate a long-lived REFRESH token.
  */
-export function generateRefreshToken(payload: UserTokenPayload): string {
+export function generateRefreshToken(
+    payload: UserTokenPayload,
+    options: TokenOptions = {}
+): string {
+    const expiresIn =
+        options.refreshTokenLifetime || DEFAULT_WEB_REFRESH_LIFETIME;
+
     return jwt.sign(payload, privateKey, {
         algorithm: ALGORITHM,
-        expiresIn: refreshTokenExpiresIn, // Use long lifetime
+        expiresIn,
         keyid: keyId,
     });
+}
+
+/**
+ * Generate tokens specifically for web clients (shorter lifetimes)
+ */
+export function generateWebTokens(payload: UserTokenPayload) {
+    return {
+        accessToken: generateAccessToken(payload, {
+            accessTokenLifetime: DEFAULT_WEB_ACCESS_LIFETIME,
+            refreshTokenLifetime: DEFAULT_WEB_REFRESH_LIFETIME,
+        }),
+        refreshToken: generateRefreshToken(payload, {
+            accessTokenLifetime: DEFAULT_WEB_ACCESS_LIFETIME,
+            refreshTokenLifetime: DEFAULT_WEB_REFRESH_LIFETIME,
+        }),
+    };
+}
+
+/**
+ * Generate tokens specifically for desktop clients (longer lifetimes)
+ */
+export function generateDesktopTokens(payload: UserTokenPayload) {
+    return {
+        accessToken: generateAccessToken(payload, {
+            accessTokenLifetime: DEFAULT_DESKTOP_ACCESS_LIFETIME,
+            refreshTokenLifetime: DEFAULT_DESKTOP_REFRESH_LIFETIME,
+        }),
+        refreshToken: generateRefreshToken(payload, {
+            accessTokenLifetime: DEFAULT_DESKTOP_ACCESS_LIFETIME,
+            refreshTokenLifetime: DEFAULT_DESKTOP_REFRESH_LIFETIME,
+        }),
+    };
+}
+
+/**
+ * Get token lifetime in milliseconds for client use
+ */
+export function getTokenLifetimes(isDesktop: boolean = false) {
+    if (isDesktop) {
+        return {
+            accessTokenMs: ms(DEFAULT_DESKTOP_ACCESS_LIFETIME),
+            refreshTokenMs: ms(DEFAULT_DESKTOP_REFRESH_LIFETIME),
+        };
+    }
+
+    return {
+        accessTokenMs: ms(DEFAULT_WEB_ACCESS_LIFETIME),
+        refreshTokenMs: ms(DEFAULT_WEB_REFRESH_LIFETIME),
+    };
 }
 
 /**
@@ -74,9 +152,7 @@ export function verifyToken(token: string): UserTokenPayload | null {
             algorithms: [ALGORITHM],
         });
         return decoded as UserTokenPayload;
-    } catch (error) {
-        // This will catch expired tokens, invalid signatures, etc.
-        // console.error("JWT Verification failed:", error.name);
+    } catch (_error) {
         return null;
     }
 }

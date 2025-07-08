@@ -23,7 +23,7 @@ export const spacetime = writable<SpacetimeState>({
     status: "disconnected",
 });
 
-let connectionInstance: DbConnection | null = null;
+let _connectionInstance: DbConnection | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
     try {
@@ -64,7 +64,7 @@ export function connectToSpacetime(maxRefreshCalls: number = 5) {
 
     spacetime.update((s) => ({...s, status: "connecting", error: undefined}));
 
-    connectionInstance = DbConnection.builder()
+    _connectionInstance = DbConnection.builder()
         .withUri(PUBLIC_SPACETIME_WS)
         .withModuleName(PUBLIC_SPACETIME_MODULE_NAME)
         .withToken(accessToken)

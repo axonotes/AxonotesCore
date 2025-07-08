@@ -28,12 +28,11 @@ pub fn verify_user_signature(
         .decode(signature_base64)
         .map_err(|e| format!("Failed to decode signature: {}", e))?;
 
-    let public_key_array: [u8; 32] = public_key_vec.try_into().map_err(
-        |_| {
+    let public_key_array: [u8; 32] =
+        public_key_vec.try_into().map_err(|_| {
             "Public signing key is not the correct length (expected 32 bytes)."
                 .to_string()
-        },
-    )?;
+        })?;
 
     let verifying_key = VerifyingKey::from_bytes(&public_key_array)
         .map_err(|e| format!("Invalid public signing key format: {}", e))?;

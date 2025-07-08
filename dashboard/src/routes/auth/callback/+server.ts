@@ -1,8 +1,8 @@
 import {redirect} from "@sveltejs/kit";
 import {workos, workos_jwks, workosClientId} from "$lib/server/workos";
 import {
-    generateAccessToken,
-    generateRefreshToken,
+    generateWebTokens,
+    getTokenLifetimes,
     type UserTokenPayload,
 } from "$lib/server/jwt";
 import {
@@ -40,8 +40,11 @@ export async function GET({url, cookies}) {
             lastName: user.lastName ?? "",
         };
 
-        const axonotesAccessToken = generateAccessToken(tokenPayload);
-        const axonotesRefreshToken = generateRefreshToken(tokenPayload);
+        const {
+            accessToken: axonotesAccessToken,
+            refreshToken: axonotesRefreshToken,
+        } = generateWebTokens(tokenPayload);
+        const {accessTokenMs, refreshTokenMs} = getTokenLifetimes(false);
 
         const {payload} = await jwtVerify(accessToken, workos_jwks);
 
@@ -49,12 +52,11 @@ export async function GET({url, cookies}) {
             throw new Error("Invalid session ID in WorkOS token");
         }
 
-        // TODO: have one source of truth for token expiry
         cookies.set(PUBLIC_ACCESS_TOKEN_COOKIE_NAME, axonotesAccessToken, {
             path: "/",
             httpOnly: false,
             secure: !IN_DEVELOPMENT,
-            maxAge: 60 * 15, // 15 minutes, should match token expiry
+            maxAge: Math.floor(accessTokenMs / 1000), // should match token expiry
             sameSite: "lax",
         });
 
@@ -62,7 +64,7 @@ export async function GET({url, cookies}) {
             path: "/",
             httpOnly: true,
             secure: !IN_DEVELOPMENT,
-            maxAge: 60 * 60 * 24 * 7, // 7 days, should match token expiry
+            maxAge: Math.floor(refreshTokenMs / 1000), // should match token expiry
             sameSite: "strict",
         });
 
