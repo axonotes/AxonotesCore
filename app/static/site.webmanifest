@@ -1,0 +1,27 @@
+{
+    "name": "Axonotes - The Academic Platform That Actually Gets It",
+    "short_name": "Axonotes",
+    "description": "Stop juggling apps. Start studying smarter. One platform for notes, collaboration, and learning - built by students who understand your struggles.",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "theme_color": "#6089f7",
+    "background_color": "#fafafa",
+    "icons": [
+        {
+            "src": "/web-app-manifest-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "/web-app-manifest-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "categories": ["education", "productivity", "utilities"],
+    "lang": "en",
+    "dir": "ltr"
+}

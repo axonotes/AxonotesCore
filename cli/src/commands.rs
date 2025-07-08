@@ -169,6 +169,26 @@ pub async fn dashboard_dev_command(verbose: bool) -> Result<()> {
     .await
 }
 
+pub async fn tauri_app_dev_command(verbose: bool) -> Result<()> {
+    println!(
+        "{} Starting Tauri app development server...",
+        "🚀".bright_blue()
+    );
+
+    let config = Config::load_or_create()?;
+
+    check_and_fix_tauri_app_deps().await?;
+    check_and_fix_env(&config).await?;
+    check_and_fix_bindings().await?;
+
+    run_command_interactive(
+        "bun",
+        &["run", "tauri", "dev"],
+        Some("app"),
+    )
+    .await
+}
+
 pub async fn sdb_build_command(verbose: bool) -> Result<()> {
     build_spacetimedb_cli().await
 }
@@ -371,6 +391,10 @@ async fn check_and_fix_env(config: &Config) -> Result<()> {
                 "   - Add: http://localhost:{}/auth/callback",
                 config.dashboard.port
             );
+            println!(
+                "   - Add: http://localhost:{}/auth/desktop/callback",
+                config.dashboard.port
+            );
             println!("4. Update your .env file with the credentials");
             println!();
             println!("Missing WorkOS variables: {}", workos_keys.join(", "));
@@ -515,6 +539,17 @@ async fn check_port_consistency(env_path: &str, config: &Config) -> Result<()> {
             mismatched_vars.push("WORKOS_REDIRECT_URI");
         }
     }
+    
+    // Check DESKTOP_AUTH_CALLBACK_URL
+    if let Some(line) = env_content
+        .lines()
+        .find(|line| line.starts_with("DESKTOP_AUTH_CALLBACK_URL"))
+    {
+        if !line.contains(&format!("localhost:{}", dashboard_port)) {
+            needs_update = true;
+            mismatched_vars.push("DESKTOP_AUTH_CALLBACK_URL");
+        }
+    }
 
     if needs_update {
         print_warning(&format!(
@@ -547,6 +582,11 @@ fn update_env_ports(env_content: &str, config: &Config) -> String {
                     "WORKOS_REDIRECT_URI=\"http://localhost:{}/auth/callback\"",
                     dashboard_port
                 )
+            } else if line.starts_with("DESKTOP_AUTH_CALLBACK_URL=") {
+                format!(
+                    "DESKTOP_AUTH_CALLBACK_URL=\"http://localhost:{}/auth/desktop/callback\"",
+                    dashboard_port
+                )
             } else {
                 line.to_string()
             }
@@ -566,6 +606,23 @@ async fn check_and_fix_dashboard_deps() -> Result<()> {
             print_success("Dashboard dependencies installed");
         } else {
             print_error("Dashboard dependencies are required");
+            anyhow::bail!("Dependencies installation cancelled");
+        }
+    }
+    Ok(())
+}
+
+async fn check_and_fix_tauri_app_deps() -> Result<()> {
+    if !path_exists("app/node_modules") {
+        print_warning("Tauri app dependencies not installed");
+        if confirm_action("Install Tauri app dependencies?") {
+            print_step(
+                "Installing Tauri app dependencies... (this may take a while)",
+            );
+            run_command_quiet("bun", &["install"], Some("app")).await?;
+            print_success("Tauri app dependencies installed");
+        } else {
+            print_error("Tauri app dependencies are required");
             anyhow::bail!("Dependencies installation cancelled");
         }
     }

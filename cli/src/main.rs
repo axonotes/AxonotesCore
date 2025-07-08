@@ -35,6 +35,10 @@ enum Commands {
     /// Dashboard operations  
     #[command(subcommand)]
     Dashboard(DashboardCommands),
+    
+    /// Tauri app operations
+    #[command(subcommand)]
+    App(TauriAppCommands),
 
     /// SpacetimeDB operations
     #[command(subcommand)]
@@ -70,6 +74,12 @@ enum ServerCommands {
 #[derive(Subcommand)]
 enum DashboardCommands {
     /// Start development server
+    Dev,
+}
+
+#[derive(Subcommand)]
+enum TauriAppCommands {
+    /// Run the Tauri app in development mode
     Dev,
 }
 
@@ -116,6 +126,9 @@ async fn main() -> Result<()> {
         }
         Commands::Dashboard(DashboardCommands::Dev) => {
             commands::dashboard_dev_command(cli.verbose).await
+        }
+        Commands::App(TauriAppCommands::Dev) => {
+            commands::tauri_app_dev_command(cli.verbose).await
         }
         Commands::Sdb(SdbCommands::Build) => {
             commands::sdb_build_command(cli.verbose).await
