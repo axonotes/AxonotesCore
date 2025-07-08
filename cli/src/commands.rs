@@ -128,6 +128,7 @@ pub async fn server_publish_command(verbose: bool) -> Result<()> {
 
     // Generate bindings
     print_step("Generating TypeScript bindings...");
+    std::fs::create_dir_all("dashboard/src/lib/module_bindings")?;
     run_command_quiet(
         "./bin/spacetimedb-cli",
         &[
@@ -136,6 +137,24 @@ pub async fn server_publish_command(verbose: bool) -> Result<()> {
             "typescript",
             "--out-dir",
             "dashboard/src/lib/module_bindings",
+            "--project-path",
+            "server",
+        ],
+        None,
+    )
+    .await?;
+
+    // Generate Tauri bindings
+    print_step("Generating Tauri bindings...");
+    std::fs::create_dir_all("app/src-tauri/src/module_bindings")?;
+    run_command_quiet(
+        "./bin/spacetimedb-cli",
+        &[
+            "generate",
+            "--lang",
+            "rust",
+            "--out-dir",
+            "app/src-tauri/src/module_bindings",
             "--project-path",
             "server",
         ],
@@ -181,12 +200,7 @@ pub async fn tauri_app_dev_command(verbose: bool) -> Result<()> {
     check_and_fix_env(&config).await?;
     check_and_fix_bindings().await?;
 
-    run_command_interactive(
-        "bun",
-        &["run", "tauri", "dev"],
-        Some("app"),
-    )
-    .await
+    run_command_interactive("bun", &["run", "tauri", "dev"], Some("app")).await
 }
 
 pub async fn sdb_build_command(verbose: bool) -> Result<()> {
@@ -539,7 +553,7 @@ async fn check_port_consistency(env_path: &str, config: &Config) -> Result<()> {
             mismatched_vars.push("WORKOS_REDIRECT_URI");
         }
     }
-    
+
     // Check DESKTOP_AUTH_CALLBACK_URL
     if let Some(line) = env_content
         .lines()
@@ -635,6 +649,7 @@ async fn check_and_fix_bindings() -> Result<()> {
         if confirm_action("Generate TypeScript bindings?") {
             check_and_build_cli().await?;
             print_step("Generating TypeScript bindings...");
+            std::fs::create_dir_all("dashboard/src/lib/module_bindings")?;
             run_command_quiet(
                 "./bin/spacetimedb-cli",
                 &[
@@ -650,6 +665,29 @@ async fn check_and_fix_bindings() -> Result<()> {
             )
             .await?;
             print_success("TypeScript bindings generated");
+        }
+    }
+    if !path_exists("app/src-tauri/src/module_bindings") {
+        print_warning("Tauri bindings missing");
+        if confirm_action("Generate Tauri bindings?") {
+            check_and_build_cli().await?;
+            print_step("Generating Tauri bindings...");
+            std::fs::create_dir_all("app/src-tauri/src/module_bindings")?;
+            run_command_quiet(
+                "./bin/spacetimedb-cli",
+                &[
+                    "generate",
+                    "--lang",
+                    "rust",
+                    "--out-dir",
+                    "app/src-tauri/src/module_bindings",
+                    "--project-path",
+                    "server",
+                ],
+                None,
+            )
+            .await?;
+            print_success("Tauri bindings generated");
         }
     }
     Ok(())

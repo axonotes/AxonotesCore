@@ -35,7 +35,7 @@ enum Commands {
     /// Dashboard operations  
     #[command(subcommand)]
     Dashboard(DashboardCommands),
-    
+
     /// Tauri app operations
     #[command(subcommand)]
     App(TauriAppCommands),

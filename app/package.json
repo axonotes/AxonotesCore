@@ -16,7 +16,9 @@
     "@lucide/svelte": "^0.525.0",
     "@tailwindcss/vite": "^4.1.11",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "~2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "~2",
     "tailwindcss": "^4.1.11"
   },
   "devDependencies": {
