@@ -1,8 +1,10 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "The Academic Notes App"
+authors = [
+    "Oliver Seifert"
+]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -23,4 +25,17 @@ tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2"
 spacetimedb-sdk = "1.2.0"
 tauri-plugin-store = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+env_logger = "0.11.8"
+log = "0.4.27"
+url = "2.5.4"
+thiserror = { version = "1.0.69", features = [] }
+reqwest = { version = "0.12.22", features = ["json"] }
+toml = "0.8.23"
+tokio = "1.46.1"
+directories = "6.0.0"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = {version = "2.3.0", features = ["deep-link"]}
 
