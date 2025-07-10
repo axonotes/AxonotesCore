@@ -60,6 +60,15 @@ if (
 }
 
 /**
+ * Clean JWT payload by removing JWT-specific claims
+ * This prevents conflicts when generating new tokens
+ */
+function cleanJWTPayload(payload: any): UserTokenPayload {
+    const {exp, iat, nbf, jti, ...cleanPayload} = payload;
+    return cleanPayload as UserTokenPayload;
+}
+
+/**
  * Signs a payload to generate a short-lived ACCESS token.
  */
 export function generateAccessToken(
@@ -69,7 +78,10 @@ export function generateAccessToken(
     const expiresIn =
         options.accessTokenLifetime || DEFAULT_WEB_ACCESS_LIFETIME;
 
-    return jwt.sign(payload, privateKey, {
+    // Clean the payload to remove any existing JWT claims
+    const cleanPayload = cleanJWTPayload(payload);
+
+    return jwt.sign(cleanPayload, privateKey, {
         algorithm: ALGORITHM,
         expiresIn,
         keyid: keyId,
@@ -86,7 +98,10 @@ export function generateRefreshToken(
     const expiresIn =
         options.refreshTokenLifetime || DEFAULT_WEB_REFRESH_LIFETIME;
 
-    return jwt.sign(payload, privateKey, {
+    // Clean the payload to remove any existing JWT claims
+    const cleanPayload = cleanJWTPayload(payload);
+
+    return jwt.sign(cleanPayload, privateKey, {
         algorithm: ALGORITHM,
         expiresIn,
         keyid: keyId,

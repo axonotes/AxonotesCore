@@ -27,27 +27,11 @@ pub struct ConfigInfo {
 }
 
 #[tauri::command]
-pub async fn get_auth_state(
-    state: State<'_, AppState>,
-) -> Result<AuthStateResponse, String> {
-    let auth_state = state.get_auth_state().await;
-
-    Ok(AuthStateResponse {
-        is_authenticated: auth_state.is_authenticated,
-        user_info: auth_state.user_info,
-        is_waiting_for_auth: auth_state.is_waiting_for_auth,
-    })
-}
-
-#[tauri::command]
 pub async fn get_initiate_auth_url(
     state: State<'_, AppState>,
     request: InitiateAuthRequest,
 ) -> Result<InitiateAuthResponse, String> {
     let force_new_login = request.force_new_login.unwrap_or(false);
-
-    // Set waiting state
-    state.set_waiting_for_auth(true).await;
 
     match state.auth_manager.initiate_auth(force_new_login).await {
         Ok(auth_url) => {
@@ -55,7 +39,6 @@ pub async fn get_initiate_auth_url(
         }
         Err(e) => {
             log::error!("Failed to initiate auth: {}", e);
-            state.set_waiting_for_auth(false).await;
             Err(format!("Failed to initiate authentication: {}", e))
         }
     }
@@ -65,31 +48,22 @@ pub async fn get_initiate_auth_url(
 pub async fn handle_auth_callback(
     state: State<'_, AppState>,
     session_id: String,
-) -> Result<crate::auth::TokenResponse, String> {
+) -> Result<(), String> {
     log::info!("Handling auth callback for session: {}", session_id);
 
     match state.auth_manager.retrieve_tokens(&session_id).await {
-        Ok(token_response) => {
+        Ok(()) => {
             log::info!(
-                "Auth callback successful for user: {}",
-                token_response.user.email
+                "Auth callback successful for user",
             );
-            state.set_authenticated(token_response.clone()).await;
-            Ok(token_response)
+            
+            Ok(())
         }
         Err(e) => {
             log::error!("Auth callback failed: {}", e);
-            state.set_waiting_for_auth(false).await;
             Err(format!("Authentication failed: {}", e))
         }
     }
-}
-
-#[tauri::command]
-pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
-    log::info!("User logged out");
-    state.clear_auth().await;
-    Ok(())
 }
 
 #[tauri::command]
@@ -110,21 +84,4 @@ pub async fn update_config(
     config.save().map_err(|e| e.to_string())?;
     log::info!("Configuration updated");
     Ok(())
-}
-
-#[tauri::command]
-pub async fn refresh_token(
-    state: State<'_, AppState>,
-    refresh_token: String,
-) -> Result<crate::auth::RefreshTokenResponse, String> {
-    match state.auth_manager.refresh_token(&refresh_token).await {
-        Ok(refresh_response) => {
-            log::info!("Token refreshed successfully");
-            Ok(refresh_response)
-        }
-        Err(e) => {
-            log::error!("Token refresh failed: {}", e);
-            Err(format!("Failed to refresh token: {}", e))
-        }
-    }
 }

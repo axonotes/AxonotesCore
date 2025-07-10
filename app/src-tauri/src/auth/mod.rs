@@ -1,7 +1,13 @@
-use reqwest::Client;
+use std::collections::HashMap;
+use std::sync::Arc;
+use reqwest::{Client, Identity};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use crate::commands::InitiateAuthResponse;
+use account::AccountManager;
+
+mod account;
+mod jwt;
 
 #[derive(Error, Debug)]
 pub enum AuthError {
@@ -53,13 +59,17 @@ pub struct RefreshTokenResponse {
 
 pub struct AuthManager {
     client: Client,
+    account_manager: AccountManager,
     dashboard_url: String,
 }
 
 impl AuthManager {
     pub fn new(dashboard_url: String) -> Self {
+        let account_manager = AccountManager::new();
+
         Self {
             client: Client::new(),
+            account_manager,
             dashboard_url,
         }
     }
@@ -80,9 +90,9 @@ impl AuthManager {
 
     /// Retrieve tokens using the session ID received from deep link
     pub async fn retrieve_tokens(
-        &self,
+        &mut self,
         session_id: &str,
-    ) -> Result<TokenResponse, AuthError> {
+    ) -> Result<(), AuthError> {
         let url =
             format!("{}/api/auth/desktop/{}", self.dashboard_url, session_id);
 
@@ -97,7 +107,14 @@ impl AuthManager {
                     "Successfully retrieved tokens for user: {}",
                     token_response.user.email
                 );
-                Ok(token_response)
+                
+                self.account_manager.add_account(
+                    token_response.access_token.clone(),
+                    token_response.refresh_token.clone(),
+                    token_response.expires_at,
+                );
+
+                Ok(())
             }
             404 => Err(AuthError::SessionNotFound),
             400 => Err(AuthError::AuthFailed("Invalid request".to_string())),

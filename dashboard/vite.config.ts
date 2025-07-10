@@ -8,7 +8,7 @@ export default defineConfig({
         tailwindcss(),
         sveltekit(),
         nodePolyfills({
-            exclude: [],
+            exclude: ["crypto"],
             globals: {
                 Buffer: true,
                 global: true,

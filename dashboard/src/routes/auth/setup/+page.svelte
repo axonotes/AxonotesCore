@@ -7,6 +7,8 @@
     import {copy} from "$lib/actions/copy";
     import {TriangleAlert} from "@lucide/svelte";
     import {onMount} from "svelte";
+    import {page} from "$app/state";
+    import {goto} from "$app/navigation";
     import {
         connectToSpacetime,
         ensureSpacetimeConnected,
@@ -15,6 +17,8 @@
         setAndStoreVaultKeys,
         type VaultKeys,
     } from "$lib/client/cryptoStore";
+
+    const user_code = page.url.searchParams.get("user_code");
 
     let masterPassword = $state("");
     let isLoading = $state(false);
@@ -153,6 +157,16 @@
         );
     }
 
+    function handleContinue() {
+        if (!user_code) {
+            goto("/dashboard");
+            return;
+        }
+
+        // Complete the device flow
+        goto(`/auth/device/complete?user_code=${user_code}`);
+    }
+
     onMount(() => {
         connectToSpacetime();
     });
@@ -164,7 +178,21 @@
     >
         {#if !generatedPassphrase}
             <div class="flex flex-col space-y-6">
-                <h1 class="h2 text-center">Set Up Your Secure Account</h1>
+                <div class="text-center">
+                    <h1 class="h2 mb-2">Set Up Your Secure Account</h1>
+                </div>
+
+                {#if user_code}
+                    <div
+                        class="card preset-filled-primary-100-900 rounded-lg p-4"
+                    >
+                        <p class="text-center text-sm">
+                            To complete device authorization, you need to set up
+                            your master password first.
+                        </p>
+                    </div>
+                {/if}
+
                 <div>
                     <p class="mb-8">
                         Choose a strong master password. This will be used to
@@ -212,7 +240,16 @@
             </div>
         {:else}
             <div class="flex flex-col space-y-6">
-                <h2 class="h2 text-center">Save Your Backup Passphrase</h2>
+                <div class="text-center">
+                    <h2 class="h2 mb-2">Save Your Backup Passphrase</h2>
+                    {#if user_code}
+                        <p
+                            class="text-surface-600 dark:text-surface-400 text-sm"
+                        >
+                            Device Authorization - Final Step
+                        </p>
+                    {/if}
+                </div>
 
                 <div
                     class="card alert preset-filled-warning-900-100 dark:preset-filled-warning-100-900 space-y-2 p-4"
@@ -253,18 +290,19 @@
                     <span>I have securely saved my backup passphrase.</span>
                 </label>
 
-                <a
-                    href="/dashboard"
+                <button
+                    onclick={handleContinue}
+                    disabled={!confirmedSaved}
                     class="btn w-full {confirmedSaved
                         ? 'preset-filled-primary-500'
                         : 'preset-outlined-surface-500 cursor-not-allowed'}"
-                    aria-disabled={!confirmedSaved}
-                    onclick={(e) => {
-                        if (!confirmedSaved) e.preventDefault();
-                    }}
                 >
-                    Continue to Dashboard
-                </a>
+                    {#if user_code}
+                        Complete Device Authorization
+                    {:else}
+                        Continue to Dashboard
+                    {/if}
+                </button>
             </div>
         {/if}
 

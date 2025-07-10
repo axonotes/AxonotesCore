@@ -2,6 +2,7 @@ use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
 mod auth;
+mod module_bindings;
 mod commands;
 mod config;
 mod state;
