@@ -48,7 +48,7 @@ class WeightedRateLimiter {
             [
                 "device_flow",
                 {
-                    windowMs: parseInt(DEVICE_FLOW_WINDOW_MS || "60000"), // 1 minute
+                    windowMs: parseInt(DEVICE_FLOW_WINDOW_MS || "60000"),
                     maxRequests: parseInt(DEVICE_FLOW_MAX_REQUESTS || "5"),
                     weight: parseInt(DEVICE_FLOW_WEIGHT || "5"),
                 },
@@ -58,9 +58,9 @@ class WeightedRateLimiter {
             [
                 "device_poll",
                 {
-                    windowMs: parseInt(DEVICE_POLL_WINDOW_MS || "60000"), // 1 minute window
-                    maxRequests: parseInt(DEVICE_POLL_MAX_REQUESTS || "12"), // 12 requests per minute (1 every 5 seconds)
-                    weight: parseInt(DEVICE_POLL_WEIGHT || "1"), // Weight of 1 for simple counting
+                    windowMs: parseInt(DEVICE_POLL_WINDOW_MS || "60000"),
+                    maxRequests: parseInt(DEVICE_POLL_MAX_REQUESTS || "12"),
+                    weight: parseInt(DEVICE_POLL_WEIGHT || "1"),
                 },
             ],
 
@@ -68,7 +68,7 @@ class WeightedRateLimiter {
             [
                 "token_exchange",
                 {
-                    windowMs: parseInt(TOKEN_EXCHANGE_WINDOW_MS || "60000"), // 1 minute
+                    windowMs: parseInt(TOKEN_EXCHANGE_WINDOW_MS || "60000"),
                     maxRequests: parseInt(TOKEN_EXCHANGE_MAX_REQUESTS || "10"),
                     weight: parseInt(TOKEN_EXCHANGE_WEIGHT || "3"),
                 },
