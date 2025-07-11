@@ -1,0 +1,30 @@
+{
+    "name": "@axonotes/config-cli",
+    "version": "0.1.0",
+    "description": "TypeScript configuration management system for axonotes monorepo",
+    "module": "index.ts",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "generate": "bun index.ts generate",
+        "watch": "bun index.ts watch",
+        "validate": "bun index.ts validate",
+        "init": "bun index.ts init"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "@types/js-yaml": "^4.0.9",
+        "@types/nunjucks": "^3.2.6"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "@iarna/toml": "^2.2.5",
+        "chokidar": "^4.0.3",
+        "commander": "^14.0.0",
+        "dotenv": "^17.2.0",
+        "js-yaml": "^4.1.0",
+        "nunjucks": "^3.2.4"
+    }
+}
