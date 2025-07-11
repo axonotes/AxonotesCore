@@ -96,7 +96,9 @@ export class ConfigWatcher {
 
         this.watcher.on("change", (path) => this.handleFileChange(path));
         this.watcher.on("add", (path) => this.handleFileChange(path));
-        this.watcher.on("error", (error) => this.handleWatchError(error as Error));
+        this.watcher.on("error", (error) =>
+            this.handleWatchError(error as Error)
+        );
 
         console.log("📂 Watching files:");
         watchPaths.forEach((path) => console.log(`   - ${path}`));
