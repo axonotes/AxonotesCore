@@ -7,7 +7,7 @@
 <h1 align="center">AxonotesCore 🐙</h1>
 
 <p align="center">
-  <strong>Core monorepo for the Axonotes Desktop application (Tauri/SvelteKit) and its SpaceTimeDB Rust backend.</strong>
+  <strong>Core monorepo for the Axonotes Desktop application (Tauri/SvelteKit), web dashboard, and SpaceTimeDB Rust backend.</strong>
   <br />
   <em>Currently in early planning and development.</em>
 </p>
@@ -49,19 +49,30 @@ We're building an all-in-one academic suite focused on:
 
 This `AxonotesCore` repository is a monorepo that houses the foundational code for Axonotes:
 
+- **`/dashboard`**:
+
+    - The Axonotes web dashboard application.
+    - Built with **[SvelteKit](https://kit.svelte.dev/)** for the web interface.
+    - Provides browser-based access to Axonotes functionality.
+    - Handles authentication, collaboration features, and web-optimized workflows.
+
 - **`/app`**:
 
     - The Axonotes desktop application.
     - Built with **[Tauri](https://tauri.app/)** (using **[SvelteKit](https://kit.svelte.dev/)** for the frontend).
-    - Provides the cross-platform user interface (Windows, macOS, Linux) and client-side logic.
+    - Provides the cross-platform native desktop experience (Windows, macOS, Linux).
     - Handles offline-first capabilities and synchronization with the backend.
 
 - **`/server`**:
+
     - The backend logic and data modules running on **[SpaceTimeDB](https://spacetimedb.com/)**.
     - Written in **Rust**.
     - Manages real-time collaboration, data persistence, and the detailed version history system.
 
-> **Note:** Directory names are placeholders and may evolve.
+- **`/SpacetimeDB`**:
+
+    - Git subtree of the SpaceTimeDB engine for custom modifications.
+    - Allows us to contribute upstream and maintain our own customizations.
 
 ## ⏳ Current Stage
 
@@ -75,32 +86,55 @@ community feedback.
 
 ## 🛠️ Tech Stack
 
-- **Client-side (Desktop App):**
+- **Desktop Application (`/app`):**
     - Framework: [Tauri](https://tauri.app/)
     - UI: [SvelteKit](https://kit.svelte.dev/)
+    - Language: TypeScript, HTML, CSS
+- **Web Dashboard (`/dashboard`):**
+    - Framework: [SvelteKit](https://kit.svelte.dev/)
     - Language: TypeScript, HTML, CSS
 - **Backend & Real-time Database:**
     - Platform: [SpaceTimeDB](https://spacetimedb.com/)
     - Language: Rust
+- **Development Tools:**
+    - Configuration Management: [Axogen](https://axonotes.github.io/axogen/) (our own TypeScript configuration system)
+    - Package Manager: [Bun](https://bun.sh/)
 - **Key Features Powered by this Stack:**
-    - Cross-platform native-like experience
+    - Cross-platform native-like experience (desktop) and web access
     - Real-time collaboration
     - Robust offline-first capabilities
     - Incredibly detailed version history
 
 ## 🚀 Getting Started
 
-As we are in the early stages, detailed setup and contribution guidelines for developers are still being formulated.
+Ready to dive in? Check out our comprehensive [Developer Setup Guide](DEVELOPING.md) for detailed instructions on:
 
-However, to work with this repository, you will generally need:
+- Prerequisites and tool installation
+- Environment configuration
+- Running the development environment
+- Making changes and contributing
 
-- **Rust Toolchain:** For the SpaceTimeDB modules.
-- **Node.js & bun:** For the SvelteKit frontend and Tauri.
-- **Tauri Prerequisites:** Follow the [Tauri setup guide](https://tauri.app/v1/guides/getting-started/prerequisites) for
-  your operating system.
+### Quick Start
 
-More specific instructions for building, running, and developing will be added to the respective subdirectories (`/app`,
-`/server`) as they mature.
+If you're eager to get started:
+
+```sh
+# 1. Clone the repository
+git clone https://github.com/axonotes/AxonotesCore.git
+cd AxonotesCore
+
+# 2. Install dependencies (includes axogen)
+bun install
+
+# 3. Set up WorkOS credentials in .env.axogen (see DEVELOPING.md)
+
+# 4. Run automated setup
+bunx @axonotes/axogen run setup
+
+# 5. Start development environment (see DEVELOPING.md for full instructions)
+```
+
+For complete setup instructions, see [DEVELOPING.md](DEVELOPING.md).
 
 ## 🤝 Contributing
 

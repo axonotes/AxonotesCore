@@ -4,27 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "prepare": "husky",
-        "comment:config": "--- Configuration Management ---",
-        "config:generate": "bun cli/index.ts generate",
-        "config:watch": "bun cli/index.ts watch",
-        "config:validate": "bun cli/index.ts validate",
-        "config:init": "bun cli/index.ts init",
-        "comment:git": "--- Git Subtree Management ---",
-        "sdb:pull-upstream": "git subtree pull --prefix=SpacetimeDB https://github.com/clockworklabs/SpacetimeDB.git master --squash",
-        "sdb:push-fork": "git subtree push --prefix=SpacetimeDB https://github.com/axonotes/SpacetimeDB.git master",
-        "sdb:pull-fork": "git subtree pull --prefix=SpacetimeDB https://github.com/axonotes/SpacetimeDB.git master --squash",
-        "comment:server": "--- Server Specific Operations ---",
-        "srv:clear": "axonotes sdb build && ./bin/spacetimedb-cli server clear",
-        "srv:logs": "axonotes sdb build && ./bin/spacetimedb-cli logs axonotes",
-        "comment:dashboard": "--- Dashboard Build/Preview ---",
-        "dash:dev": "cd dashboard && bun run dev",
-        "dash:build": "cd dashboard && bun run build",
-        "dash:preview": "cd dashboard && bun run preview",
-        "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "lint": "eslint .",
-        "lint:fix": "eslint . --fix"
+        "prepare": "husky"
     },
     "lint-staged": {
         "*.{js,ts,svelte,json,md}": "prettier --write",
@@ -45,11 +25,11 @@
         "prettier-plugin-svelte": "^3.4.0",
         "prettier-plugin-tailwindcss": "^0.6.12",
         "svelte-eslint-parser": "^1.2.0",
-        "typescript": "^5.8.3",
+        "typescript": "^5.9.2",
         "typescript-eslint": "^8.33.1"
     },
     "dependencies": {
-        "@axonotes/axogen": "^0.3.1",
+        "@axonotes/axogen": "^0.5.7",
         "@types/node": "^24.0.15"
     }
 }
