@@ -11,10 +11,14 @@ Before you begin, ensure you have the following tools installed on your system.
     - [Install Rust](https://www.rust-lang.org/tools/install)
 - **Node.js and Bun:** Required for the SvelteKit frontend, Tauri desktop app, scripts, and dependency management. We use `bun` as the
   package manager and runtime.
-    - [Install Node.js](https://nodejs.org/)
+    - [Install Node.js](https://nodejs.org/en/download)
     - [Install Bun](https://bun.sh/docs/installation)
 - **Tauri Prerequisites:** Required for the desktop application. Follow the official Tauri v2 setup guide for your operating system.
     - [Tauri v2 Prerequisites](https://v2.tauri.app/start/prerequisites/)
+- **SpacetimeDB CLI:** Required for starting the server.
+    - [SpacetimeDB](https://spacetimedb.com/install)
+- **(Optional) WebAssembly binaryen**: Makes the spacetime server code faster.
+    - [WebAssembly Binaryen](https://github.com/WebAssembly/binaryen/releases)
 
 ## 2. Initial Project Setup
 

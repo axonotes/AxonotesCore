@@ -1,8 +1,0 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <Nullable>enable</Nullable>
-
-    <IsPackable>false</IsPackable>
-    <DefaultItemExcludes>$(DefaultItemExcludes);snapshots/**/*</DefaultItemExcludes>
-  </PropertyGroup>
-</Project>

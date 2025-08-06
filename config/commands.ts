@@ -1,5 +1,4 @@
-import {cmd, group, liveExec} from "@axonotes/axogen";
-import * as fs from "fs/promises";
+import {cmd, exec, group, liveExec} from "@axonotes/axogen";
 import * as z from "zod";
 import {envVars} from "./env";
 
@@ -19,7 +18,6 @@ const sdb_cli = group({
         build: cmd({
             help: "Build the SpacetimeDB CLI",
             exec: async () => {
-                await buildSpacetimeDBCLI();
             },
         }),
     },
@@ -51,33 +49,22 @@ const sdb_server = group({
                     .optional()
                     .describe(
                         "Run the database in memory and dont write to disk"
-                    ),
-                "auth-required": z
-                    .boolean()
-                    .default(false)
-                    .optional()
-                    .describe("Only users with existing JWTs can connect"),
+                    )
             },
             exec: async (context) => {
-                await checkAndBuildSpacetimeDBCLI();
-
                 const commandOptions = [
-                    `--allowed-oidc-issuer ${envVars.DASHBOARD_ORIGIN}`,
-                    "--allowed-oidc-issuer https://auth.spacetimedb.com",
                     context.options["in-memory"] ? "--in-memory" : "",
-                    context.options["auth-required"] ? "--auth-required" : "",
                 ].join(" ");
 
-                await liveExec(`./bin/spacetimedb-cli start ${commandOptions}`);
+                await liveExec(`spacetime start ${commandOptions}`);
             },
         }),
         generate: sdb_server_generate,
         publish: cmd({
             help: "Publish server to SpacetimeDB and generate types",
             exec: async () => {
-                await checkAndBuildSpacetimeDBCLI();
                 await liveExec(
-                    `./bin/spacetimedb-cli publish --project-path server ${envVars.SPACETIME_MODULE_NAME}`
+                    `spacetime publish --project-path server ${envVars.SPACETIME_MODULE_NAME}`
                 );
                 await generateServerTypesForAll();
                 process.exit();
@@ -86,9 +73,8 @@ const sdb_server = group({
         logs: cmd({
             help: "Show the servers logs",
             exec: async () => {
-                await checkAndBuildSpacetimeDBCLI();
                 await liveExec(
-                    `./bin/spacetimedb-cli logs ${envVars.SPACETIME_MODULE_NAME}`
+                    `spacetime logs ${envVars.SPACETIME_MODULE_NAME}`
                 );
             },
         }),
@@ -102,15 +88,13 @@ const sdb = group({
         login: cmd({
             help: "Login to Spacetime",
             exec: async () => {
-                await checkAndBuildSpacetimeDBCLI();
-                await liveExec("./bin/spacetimedb-cli login");
+                await liveExec("spacetime login");
             },
         }),
         logout: cmd({
             help: "Logout from Spacetime",
             exec: async () => {
-                await checkAndBuildSpacetimeDBCLI();
-                await liveExec("./bin/spacetimedb-cli logout");
+                await liveExec("spacetime logout");
             },
         }),
         server: sdb_server,
@@ -149,7 +133,13 @@ export const commands = {
     setup: cmd({
         help: "Setup everything",
         exec: async () => {
-            await checkAndBuildSpacetimeDBCLI();
+            // Check if tools are installed
+            await checkVersion("Rust", "1.88.x", "https://www.rust-lang.org/tools/install", "rustc --version", "rustc 1.88");
+            await checkVersion("Node.js", "v22", "https://nodejs.org/en/download", "node --version", "v22");
+            await checkVersion("Bun", "1.2", "https://bun.sh/docs/installation", "bun --version", "1.2");
+            await checkVersion("SpacetimeDB CLI", "1.2", "https://spacetimedb.com/install", "spacetime -V", "spacetime 1.2");
+            await checkVersion("WasmOpt", "123", "https://github.com/WebAssembly/binaryen/releases", "wasm-opt --version", "wasm-opt version 123", false);
+
             await liveExec("cd dashboard && bun install");
             await liveExec("cd app && bun install");
         },
@@ -158,33 +148,17 @@ export const commands = {
 
 // ---- Helper Functions ----
 
-async function buildSpacetimeDBCLI() {
-    try {
-        await fs.mkdir("./bin");
-    } catch (_e) {
-        // Folder already exists
-    }
-
-    await liveExec(
-        "cargo build --release -p spacetimedb-cli -p spacetimedb-standalone",
-        {
-            cwd: "./SpacetimeDB",
-            outputPrefix: "Build",
+async function checkVersion(name: string, version: string, link: string, command: string, startsWith: string, required = true) {
+    const result = await exec(command);
+    if (result.exitCode !== 0) {
+        if (!required) {
+            console.log(`Its recommended to install ${name} from ${link}. But you can continue without it.`);
+            return;
         }
-    );
-    await fs.rename(
-        "./SpacetimeDB/target/release/spacetimedb-cli",
-        "./bin/spacetimedb-cli"
-    );
-    await fs.rename(
-        "./SpacetimeDB/target/release/spacetimedb-standalone",
-        "./bin/spacetimedb-standalone"
-    );
-}
-
-async function checkAndBuildSpacetimeDBCLI() {
-    // check if the SpacetimeDB CLI binary exists
-    await buildSpacetimeDBCLI();
+        throw Error(`Make sure to install ${name} from ${link}`);
+    } else if (!result.stdout.startsWith(startsWith)) {
+        throw Error(`Make sure to update ${name} to version ${version} from ${link}`);
+    }
 }
 
 async function generateServerTypesForAll() {
@@ -192,8 +166,7 @@ async function generateServerTypesForAll() {
 }
 
 async function generateServerTypesForDashboard() {
-    await checkAndBuildSpacetimeDBCLI();
     await liveExec(
-        "./bin/spacetimedb-cli generate --lang typescript --out-dir dashboard/src/lib/module_bindings --project-path server"
+        "spacetime generate --lang typescript --out-dir dashboard/src/lib/module_bindings --project-path server"
     );
 }
