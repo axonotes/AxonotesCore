@@ -17,8 +17,7 @@ const sdb_cli = group({
     commands: {
         build: cmd({
             help: "Build the SpacetimeDB CLI",
-            exec: async () => {
-            },
+            exec: async () => {},
         }),
     },
 });
@@ -33,6 +32,10 @@ const sdb_server_generate = group({
         dash: cmd({
             help: "Generate server types to dashboard",
             exec: generateServerTypesForDashboard,
+        }),
+        app: cmd({
+            help: "Generate server types to app",
+            exec: generateServerTypesForApp,
         }),
     },
 });
@@ -49,7 +52,7 @@ const sdb_server = group({
                     .optional()
                     .describe(
                         "Run the database in memory and dont write to disk"
-                    )
+                    ),
             },
             exec: async (context) => {
                 const commandOptions = [
@@ -105,7 +108,18 @@ const app = group({
     help: "Tauri Desktop App commands",
     commands: {
         install: "cd app && bun install",
-        dev: "cd app && bun run tauri dev",
+        dev: cmd({
+            help: "Run the Tauri app in development mode",
+            exec: async () => {
+                // check if user is on linux and set the environment variable
+                const isLinux = process.platform === "linux";
+                const command = `${isLinux ? "__NV_DISABLE_EXPLICIT_SYNC=1 " : ""}bun run tauri dev`;
+                await liveExec(command, {
+                    cwd: "./app",
+                    outputPrefix: "Tauri Dev",
+                });
+            },
+        }),
     },
 });
 
@@ -115,10 +129,6 @@ export const commands = {
         exec: async () => {
             await liveExec("bunx prettier --write .", {
                 outputPrefix: "Prettier",
-            });
-            await liveExec("cargo fmt --all", {
-                cwd: "./SpacetimeDB",
-                outputPrefix: "Cargo",
             });
             await liveExec("cargo fmt --all", {
                 cwd: "./server",
@@ -134,11 +144,42 @@ export const commands = {
         help: "Setup everything",
         exec: async () => {
             // Check if tools are installed
-            await checkVersion("Rust", "1.88.x", "https://www.rust-lang.org/tools/install", "rustc --version", "rustc 1.88");
-            await checkVersion("Node.js", "v22", "https://nodejs.org/en/download", "node --version", "v22");
-            await checkVersion("Bun", "1.2", "https://bun.sh/docs/installation", "bun --version", "1.2");
-            await checkVersion("SpacetimeDB CLI", "1.2", "https://spacetimedb.com/install", "spacetime -V", "spacetime 1.2");
-            await checkVersion("WasmOpt", "123", "https://github.com/WebAssembly/binaryen/releases", "wasm-opt --version", "wasm-opt version 123", false);
+            await checkVersion(
+                "Rust",
+                "1.88.x",
+                "https://www.rust-lang.org/tools/install",
+                "rustc --version",
+                "rustc 1.88"
+            );
+            await checkVersion(
+                "Node.js",
+                "v22",
+                "https://nodejs.org/en/download",
+                "node --version",
+                "v22"
+            );
+            await checkVersion(
+                "Bun",
+                "1.2",
+                "https://bun.sh/docs/installation",
+                "bun --version",
+                "1.2"
+            );
+            await checkVersion(
+                "SpacetimeDB CLI",
+                "1.2",
+                "https://spacetimedb.com/install",
+                "spacetime -V",
+                "spacetime 1.2"
+            );
+            await checkVersion(
+                "WasmOpt",
+                "123",
+                "https://github.com/WebAssembly/binaryen/releases",
+                "wasm-opt --version",
+                "wasm-opt version 123",
+                false
+            );
 
             await liveExec("cd dashboard && bun install");
             await liveExec("cd app && bun install");
@@ -148,25 +189,43 @@ export const commands = {
 
 // ---- Helper Functions ----
 
-async function checkVersion(name: string, version: string, link: string, command: string, startsWith: string, required = true) {
+async function checkVersion(
+    name: string,
+    version: string,
+    link: string,
+    command: string,
+    startsWith: string,
+    required = true
+) {
     const result = await exec(command);
     if (result.exitCode !== 0) {
         if (!required) {
-            console.log(`Its recommended to install ${name} from ${link}. But you can continue without it.`);
+            console.log(
+                `Its recommended to install ${name} from ${link}. But you can continue without it.`
+            );
             return;
         }
         throw Error(`Make sure to install ${name} from ${link}`);
     } else if (!result.stdout.startsWith(startsWith)) {
-        throw Error(`Make sure to update ${name} to version ${version} from ${link}`);
+        throw Error(
+            `Make sure to update ${name} to version ${version} from ${link}`
+        );
     }
 }
 
 async function generateServerTypesForAll() {
     await generateServerTypesForDashboard();
+    await generateServerTypesForApp();
 }
 
 async function generateServerTypesForDashboard() {
     await liveExec(
         "spacetime generate --lang typescript --out-dir dashboard/src/lib/module_bindings --project-path server"
+    );
+}
+
+async function generateServerTypesForApp() {
+    await liveExec(
+        "spacetime generate --lang rust --out-dir app/src-tauri/src/module_bindings --project-path server"
     );
 }

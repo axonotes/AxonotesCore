@@ -268,7 +268,7 @@
                     class="dark:preset-filled-surface-200-800 rounded-lg p-4 outline-1 dark:outline-0"
                 >
                     <pre
-                        class="text-center font-mono text-lg break-words whitespace-pre-wrap">{generatedPassphrase}</pre>
+                        class="whitespace-pre-wrap break-words text-center font-mono text-lg">{generatedPassphrase}</pre>
                     <button
                         class="btn preset-filled-surface-900-100 dark:preset-filled-surface-100-900 mt-2 w-full"
                         use:copy={{

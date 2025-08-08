@@ -10,7 +10,7 @@
     class="from-primary-700/10 dark:to-primary-700/20 flex min-h-screen flex-col bg-gradient-to-br to-transparent dark:from-transparent"
 >
     <header
-        class="absolute top-0 left-0 z-20 flex w-full items-center justify-end p-2"
+        class="absolute left-0 top-0 z-20 flex w-full items-center justify-end p-2"
     >
         <AuthButton />
         <LightSwitch />

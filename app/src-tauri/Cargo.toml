@@ -22,20 +22,18 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
-tauri-plugin-deep-link = "2"
 spacetimedb-sdk = "1.2.0"
-tauri-plugin-store = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 env_logger = "0.11.8"
-log = "0.4.27"
+reqwest = {version = "0.12.22", features = ["json"] }
+serde = {version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.142"
+tokio = {version = "1.47.1", features = ["full"] }
+sha2 = "0.10.9"
+base64 = "0.22.1"
+rand = "0.9.2"
 url = "2.5.4"
-thiserror = { version = "1.0.69", features = [] }
-reqwest = { version = "0.12.22", features = ["json"] }
-toml = "0.8.23"
-tokio = "1.46.1"
-directories = "6.0.0"
 jsonwebtoken = "9.3.1"
+anyhow = "1.0.98"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = {version = "2.3.0", features = ["deep-link"] }

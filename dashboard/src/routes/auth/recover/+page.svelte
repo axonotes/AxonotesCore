@@ -219,7 +219,7 @@
                     />
                     <Progress value={passwordStrength} max={4}></Progress>
 
-                    <label for="confirmPassword" class="mt-4 mb-2"
+                    <label for="confirmPassword" class="mb-2 mt-4"
                         >Confirm New Password</label
                     >
                     <input
