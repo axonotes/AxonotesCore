@@ -2,7 +2,7 @@ import NodeCache from "node-cache";
 import {v4 as uuidv4} from "uuid";
 import {createHash, randomBytes} from "crypto";
 import {
-    generateDesktopTokens,
+    generateTokens,
     getTokenLifetimes,
     type UserTokenPayload,
 } from "./jwt";
@@ -218,7 +218,7 @@ export class DesktopAuthManager {
         }
 
         // Generate tokens
-        const {accessToken, refreshToken} = generateDesktopTokens(user_data);
+        const {accessToken, refreshToken} = generateTokens(user_data);
 
         // Update session
         const updatedSession: DeviceFlowSession = {

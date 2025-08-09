@@ -1,8 +1,7 @@
 import {json} from "@sveltejs/kit";
 import {
     verifyToken,
-    generateDesktopTokens,
-    getTokenLifetimes,
+    getTokenLifetimes, generateTokens,
 } from "$lib/server/jwt";
 import {rateLimiter} from "$lib/server/rate-limiter";
 import {InputValidator} from "$lib/server/input-validator";
@@ -113,9 +112,11 @@ export async function POST({request}) {
             );
         }
 
+        // Ensure client type is set to desktop!!
+        tokenPayload.client_type = "desktop";
+
         // Generate new tokens
-        const {accessToken, refreshToken: newRefreshToken} =
-            generateDesktopTokens(tokenPayload);
+        const {accessToken, refreshToken: newRefreshToken} = generateTokens(tokenPayload);
         const {accessTokenMs} = getTokenLifetimes(true);
 
         return json(

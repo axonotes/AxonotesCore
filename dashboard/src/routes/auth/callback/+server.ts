@@ -1,7 +1,7 @@
 import {redirect} from "@sveltejs/kit";
 import {workos, workos_jwks, workosClientId} from "$lib/server/workos";
 import {
-    generateWebTokens,
+    generateTokens,
     getTokenLifetimes,
     type UserTokenPayload,
 } from "$lib/server/jwt";
@@ -38,12 +38,13 @@ export async function GET({url, cookies}) {
             email: user.email,
             firstName: user.firstName ?? "",
             lastName: user.lastName ?? "",
+            client_type: "web", // Always web for WorkOS auth
         };
 
         const {
             accessToken: axonotesAccessToken,
             refreshToken: axonotesRefreshToken,
-        } = generateWebTokens(tokenPayload);
+        } = generateTokens(tokenPayload);
         const {accessTokenMs, refreshTokenMs} = getTokenLifetimes(false);
 
         const {payload} = await jwtVerify(accessToken, workos_jwks);

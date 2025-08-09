@@ -47,7 +47,7 @@
 
         try {
             // Derive the single backup key from the user's mnemonic
-            const backupKey = crypto.getKeyFromMnemonic(passphrase);
+            const backupKey = crypto.getKeyFromMnemonic(passphrase) as Uint8Array<ArrayBuffer>;
 
             // Decrypt the RSA private key using the backup key
             recoveredRsaPrivateKey = await crypto.decryptWithAes(
@@ -89,11 +89,11 @@
         errorMessage = "";
 
         try {
-            const newSalt = crypto.generateSalt(16);
+            const newSalt = crypto.generateSalt(16) as Uint8Array<ArrayBuffer>;
             const newPasswordHash = await crypto.hashPassword(
                 newPassword,
                 newSalt
-            );
+            ) as Uint8Array<ArrayBuffer>;
 
             const newEncryptedPrivateKey = await crypto.encryptWithAes(
                 recoveredRsaPrivateKey,

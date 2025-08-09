@@ -64,10 +64,10 @@ export async function unlockVaultWithPassword(
     encryptedPrivateKey: crypto.EncryptedData,
     encryptedPrivateSigningKey: crypto.EncryptedData,
     password: string,
-    salt: Uint8Array
+    salt: Uint8Array<ArrayBuffer>
 ): Promise<boolean> {
     try {
-        const passwordHash = await crypto.hashPassword(password, salt);
+        const passwordHash = await crypto.hashPassword(password, salt) as Uint8Array<ArrayBuffer>;
 
         const privateKeyString = await crypto.decryptWithAes(
             encryptedPrivateKey,

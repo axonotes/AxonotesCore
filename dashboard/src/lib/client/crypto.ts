@@ -20,7 +20,7 @@ export function arrayBufferToBase64(buffer: ArrayBufferLike): string {
 }
 
 /** Converts a Base64 string to a Uint8Array. */
-export function base64ToUint8Array(base64: string): Uint8Array {
+export function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
     const binary_string = window.atob(base64);
     const len = binary_string.length;
     const bytes = new Uint8Array(len);
@@ -71,7 +71,7 @@ export async function generateRsaKeyPair(): Promise<{
 /** Encrypts data using AES-256-GCM with the Web Crypto API. */
 export async function encryptWithAes(
     data: string,
-    key: Uint8Array
+    key: Uint8Array<ArrayBuffer>
 ): Promise<EncryptedData> {
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const encoder = new TextEncoder();
@@ -103,7 +103,7 @@ export async function encryptWithAes(
 /** Decrypts data using AES-256-GCM with the Web Crypto API. */
 export async function decryptWithAes(
     encrypted: EncryptedData,
-    key: Uint8Array
+    key: Uint8Array<ArrayBuffer>
 ): Promise<string> {
     const iv = base64ToUint8Array(encrypted.iv);
     const data = base64ToUint8Array(encrypted.data);

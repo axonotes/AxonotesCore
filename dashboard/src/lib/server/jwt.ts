@@ -16,6 +16,7 @@ export interface UserTokenPayload {
     email: string;
     firstName: string;
     lastName: string;
+    client_type: "web" | "desktop";
 }
 
 export interface TokenOptions {
@@ -138,6 +139,17 @@ export function generateDesktopTokens(payload: UserTokenPayload) {
             refreshTokenLifetime: DEFAULT_DESKTOP_REFRESH_LIFETIME,
         }),
     };
+}
+
+/**
+ * Generate tokens based on client type
+ */
+export function generateTokens(payload: UserTokenPayload) {
+    if (payload.client_type === "desktop") {
+        return generateDesktopTokens(payload);
+    } else {
+        return generateWebTokens(payload);
+    }
 }
 
 /**

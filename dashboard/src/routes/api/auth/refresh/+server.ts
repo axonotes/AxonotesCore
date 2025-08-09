@@ -1,13 +1,18 @@
 import {json, error} from "@sveltejs/kit";
 import {
     verifyToken,
-    generateAccessToken,
-    UserTokenPayload,
+    UserTokenPayload, generateTokens,
 } from "$lib/server/jwt";
 import {REFRESH_TOKEN_COOKIE_NAME} from "$env/static/private";
 
-export async function POST({cookies}) {
-    const refreshToken = cookies.get(REFRESH_TOKEN_COOKIE_NAME);
+export async function POST({cookies, request}) {
+    let refreshToken = cookies.get(REFRESH_TOKEN_COOKIE_NAME);
+
+    const body = await request.json();
+    if (!refreshToken) {
+        // Check if the request body contains a refresh token
+        refreshToken = body.refresh_token || null;
+    }
 
     console.log("Token refresh");
 
@@ -28,10 +33,8 @@ export async function POST({cookies}) {
         email: payload.email,
         firstName: payload.firstName,
         lastName: payload.lastName,
+        client_type: payload.client_type,
     };
 
-    // If refresh token is valid, issue a new access token
-    const newAccessToken = generateAccessToken(accessTokenPayload);
-
-    return json({accessToken: newAccessToken});
+    return json(generateTokens(accessTokenPayload));
 }

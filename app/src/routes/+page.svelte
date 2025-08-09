@@ -61,26 +61,63 @@
     }
 </script>
 
-<div>
-    <header>
-        <h1>Axonotes Desktop</h1>
-        <p>Phase 2: Authentication Testing</p>
-    </header>
+<div class="container mx-auto max-w-md p-8 space-y-8">
+    <div class="card variant-filled-surface p-8 space-y-6">
+        <header class="text-center space-y-4">
+            <h1 class="h2 font-bold text-primary-500">Axonotes Authentication</h1>
+            <p class="text-surface-600-300-token">Connect your account to get started</p>
+        </header>
 
-    <main>
-        <div>
-            <h2>Authentication Status</h2>
+        <div class="space-y-6">
             {#if status === "before"}
-                <p>
-                    Click the button below to start the authentication process.
-                </p>
-                <button onclick={add_new_user}>Start Authentication</button>
+                <div class="text-center space-y-4">
+                    <div class="w-16 h-16 mx-auto bg-surface-200-700-token rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                    </div>
+                    <p class="text-surface-700-200-token">
+                        Click the button below to start the authentication process.
+                    </p>
+                    <button
+                        class="btn variant-filled-primary w-full"
+                        onclick={add_new_user}
+                    >
+                        Start Authentication
+                    </button>
+                </div>
             {:else if status === "waiting"}
-                <p>Please complete the authentication in your browser.</p>
-                <p>Your user code is: <strong>{userCode}</strong></p>
+                <div class="text-center space-y-4">
+                    <div class="w-16 h-16 mx-auto bg-warning-500 rounded-full flex items-center justify-center animate-pulse">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <p class="text-surface-700-200-token">
+                        Please complete the authentication in your browser.
+                    </p>
+                    <div class="card variant-ghost-warning p-4">
+                        <p class="text-sm text-surface-600-300-token">Your user code is:</p>
+                        <p class="code text-lg font-mono font-bold text-warning-600-300-token tracking-wider">
+                            {userCode}
+                        </p>
+                    </div>
+                </div>
             {:else if status === "done"}
-                <p>Authentication completed successfully!</p>
+                <div class="text-center space-y-4">
+                    <div class="w-16 h-16 mx-auto bg-success-500 rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <p class="h4 text-success-600-300-token font-semibold">
+                        Authentication completed successfully!
+                    </p>
+                    <p class="text-surface-600-300-token">
+                        You can now start using Axonotes.
+                    </p>
+                </div>
             {/if}
         </div>
-    </main>
+    </div>
 </div>

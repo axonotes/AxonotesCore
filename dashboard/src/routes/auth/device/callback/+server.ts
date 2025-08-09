@@ -1,6 +1,6 @@
 import {redirect} from "@sveltejs/kit";
 import {workos, workosClientId, workos_jwks} from "$lib/server/workos";
-import {type UserTokenPayload} from "$lib/server/jwt";
+import {generateTokens, type UserTokenPayload} from "$lib/server/jwt";
 import {
     JWT_ISSUER,
     WORKOS_SESSION_ID_COOKIE_NAME,
@@ -8,7 +8,7 @@ import {
 } from "$env/static/private";
 import {jwtVerify} from "jose";
 import {IN_DEVELOPMENT} from "$lib/utils";
-import {generateWebTokens, getTokenLifetimes} from "$lib/server/jwt";
+import {getTokenLifetimes} from "$lib/server/jwt";
 import {PUBLIC_ACCESS_TOKEN_COOKIE_NAME} from "$env/static/public";
 
 export async function GET({url, cookies}) {
@@ -45,11 +45,12 @@ export async function GET({url, cookies}) {
             email: user.email,
             firstName: user.firstName ?? "",
             lastName: user.lastName ?? "",
+            client_type: "web", // Always web for WorkOS auth
         };
 
         // Generate temporary web tokens for the setup/gate flow
         const {accessToken: tempAccessToken, refreshToken: tempRefreshToken} =
-            generateWebTokens(tokenPayload);
+            generateTokens(tokenPayload);
         const {accessTokenMs, refreshTokenMs} = getTokenLifetimes(false);
 
         // Store temporary auth cookies
