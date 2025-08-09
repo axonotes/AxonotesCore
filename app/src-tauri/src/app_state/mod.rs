@@ -57,3 +57,36 @@ pub async fn wait_for_user_auth(
         None => Err("User profile not found".into()),
     }
 }
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn refresh_user_token(
+    state: State<'_, AppState>,
+    user_profile_id: u16,
+) -> Result<bool, String> {
+    let mut profiles = state.user_profiles.lock().await;
+
+    match profiles
+        .iter_mut()
+        .find(|profile| profile.user_profile_id == user_profile_id)
+    {
+        Some(profile) => Ok(profile.refresh_tokens().await),
+        None => Err("User profile not found".into())
+    }
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn remove_user(
+    state: State<'_, AppState>,
+    user_profile_id: u16,
+) -> Result<bool, String> {
+    let mut profiles = state.user_profiles.lock().await;
+
+    let initial_len = profiles.len();
+    profiles.retain(|profile| profile.user_profile_id != user_profile_id);
+
+    if profiles.len() < initial_len {
+        Ok(true)
+    } else {
+        Err("User profile not found".into())
+    }
+}

@@ -1,7 +1,9 @@
 import {json, error} from "@sveltejs/kit";
 import {
     verifyToken,
-    UserTokenPayload, generateTokens,
+    UserTokenPayload,
+    generateTokens,
+    getTokenLifetimes,
 } from "$lib/server/jwt";
 import {REFRESH_TOKEN_COOKIE_NAME} from "$env/static/private";
 
@@ -36,5 +38,20 @@ export async function POST({cookies, request}) {
         client_type: payload.client_type,
     };
 
-    return json(generateTokens(accessTokenPayload));
+    const refreshedTokens = generateTokens(accessTokenPayload);
+    if (payload.client_type === "web") {
+        return json(refreshedTokens);
+    }
+
+    const {accessTokenMs} = getTokenLifetimes(true);
+    return json(
+        {
+            access_token: refreshedTokens.accessToken,
+            token_type: "Bearer",
+            expires_in: Math.floor(accessTokenMs / 1000),
+            refresh_token: refreshedTokens.refreshToken,
+            scope: "openid profile email",
+        },
+        {status: 200}
+    );
 }

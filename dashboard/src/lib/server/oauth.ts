@@ -1,11 +1,7 @@
 import NodeCache from "node-cache";
 import {v4 as uuidv4} from "uuid";
 import {createHash, randomBytes} from "crypto";
-import {
-    generateTokens,
-    getTokenLifetimes,
-    type UserTokenPayload,
-} from "./jwt";
+import {generateTokens, getTokenLifetimes, type UserTokenPayload} from "./jwt";
 import {
     DESKTOP_AUTH_SESSION_TTL,
     DEVICE_CODE_TTL_MS,

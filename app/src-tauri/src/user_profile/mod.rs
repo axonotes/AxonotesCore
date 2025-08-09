@@ -27,6 +27,10 @@ impl UserProfile {
         self.user_id = self.auth_manager.user_id.clone();
         res
     }
+    
+    pub async fn refresh_tokens(&mut self) -> bool {
+        self.auth_manager.refresh_tokens().await
+    }
 }
 
 fn generate_user_profile_id() -> u16 {

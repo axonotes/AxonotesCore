@@ -61,14 +61,16 @@
 
             // 2. Generate the single recovery phrase and its derived AES key
             const backupPassphrase = generateMnemonic(128); // 12 words
-            const backupAesKey = crypto.getKeyFromMnemonic(backupPassphrase) as Uint8Array<ArrayBuffer>;
+            const backupAesKey = crypto.getKeyFromMnemonic(
+                backupPassphrase
+            ) as Uint8Array<ArrayBuffer>;
 
             // 3. Hash the master password with a new salt
             const salt = crypto.generateSalt(16);
-            const passwordHash = await crypto.hashPassword(
+            const passwordHash = (await crypto.hashPassword(
                 masterPassword,
                 salt
-            ) as Uint8Array<ArrayBuffer>;
+            )) as Uint8Array<ArrayBuffer>;
 
             // 4. Encrypt both private keys with the password hash
             const encryptedPrivateKey = await crypto.encryptWithAes(

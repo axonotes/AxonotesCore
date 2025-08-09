@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::time::Duration;
 use tokio::time::sleep;
 use serde::Serialize;
@@ -121,6 +122,25 @@ impl AuthManager {
         AuthorizationCompleteResponse {
             status: "error".to_string(),
             error_message: "Authentication timed out".to_string().into(),
+        }
+    }
+
+    pub async fn refresh_tokens(&mut self) -> bool {
+        if self.token.is_none() {
+            return false;
+        }
+
+        let old_refresh_token = self.token.clone().expect("Unexpected Error: Token should be something due to check.").refresh_token;
+
+        let res = self.oauth_client.refresh_tokens(old_refresh_token).await;
+        match res {
+            Ok(new_tokens) => {
+                self.token = new_tokens.into();
+                true
+            }
+            Err(_) => {
+                false
+            }
         }
     }
 }

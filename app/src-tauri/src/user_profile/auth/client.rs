@@ -55,6 +55,11 @@ struct ErrorResponse {
     error_description: String,
 }
 
+#[derive(Debug, Serialize)]
+struct TokenRefreshBodyRequest {
+    refresh_token: String,
+}
+
 pub struct OAuthClient {
     client: Client,
     base_url: String,
@@ -172,6 +177,22 @@ impl OAuthClient {
 
         let token_response: TokenResponse = response.json().await?;
         Ok(token_response)
+    }
+
+    pub async fn refresh_tokens(&self, refresh_token: String) -> Result<TokenResponse, Box<dyn Error + Send + Sync>> {
+        let url = format!("{}/api/auth/refresh", self.base_url);
+
+        let request_body = TokenRefreshBodyRequest {
+            refresh_token
+        };
+
+        let response = self.client
+            .post(&url)
+            .json(&request_body)
+            .send()
+            .await?;
+
+        Ok(response.json().await?)
     }
 }
 

@@ -4,7 +4,7 @@ mod module_bindings;
 mod user_profile;
 mod app_state;
 
-use crate::app_state::{add_and_auth_new_user, wait_for_user_auth};
+use crate::app_state::{add_and_auth_new_user, wait_for_user_auth, refresh_user_token, remove_user};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,7 +18,9 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             add_and_auth_new_user,
-            wait_for_user_auth
+            wait_for_user_auth,
+            refresh_user_token,
+            remove_user
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

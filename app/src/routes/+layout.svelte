@@ -5,5 +5,5 @@
     let {children} = $props();
 </script>
 
-<LightSwitch/>
+<LightSwitch />
 {@render children()}
