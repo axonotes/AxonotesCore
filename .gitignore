@@ -32,3 +32,6 @@ ehthumbs.db
 *.key
 credentials.*
 secrets.*
+node_modules
+.svelte-kit
+
