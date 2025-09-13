@@ -8,8 +8,11 @@ const publicKeyPem = Buffer.from(JWT_PUBLIC_KEY_BASE64, "base64").toString(
 const keyId = JWT_KEY_ID;
 
 /**
- * This endpoint serves the public key in the standard JWKS format.
- * It allows services like SpaceTimeDB to fetch the key for JWT verification.
+ * HTTP GET handler that returns the application's public key as a JWKS JSON document.
+ *
+ * If the required environment configuration (public key or key id) is missing, responds with a 500 JSON error.
+ * On success returns a JSON response containing a single ES256 public JWK augmented with `kid`, `use: "sig"`, and `alg: "ES256"`,
+ * and sets a Cache-Control header ("public, max-age=3600, s-maxage=86400") to allow aggressive client and proxy caching.
  */
 export async function GET({setHeaders}) {
     if (!publicKeyPem || !keyId) {

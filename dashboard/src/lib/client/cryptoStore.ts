@@ -38,9 +38,12 @@ export const vaultStore = {
 };
 
 /**
- * Directly sets the vault keys in the Svelte store and persists them
- * to IndexedDB. This is used during the initial account setup.
- * @param keys The VaultKeys object containing the non-extractable key handles.
+ * Persistently stores the provided VaultKeys in IndexedDB and updates the in-memory vault store to the unlocked state.
+ *
+ * The `keys` object contains non-extractable CryptoKey handles (RSA-OAEP private key and Ed25519 private key).
+ *
+ * @param keys - VaultKeys to persist and set in the store
+ * @returns A promise that resolves once the keys have been stored and the store updated
  */
 export async function setAndStoreVaultKeys(keys: VaultKeys) {
     await persistentKeyStore.storeKey(keys);
@@ -49,16 +52,13 @@ export async function setAndStoreVaultKeys(keys: VaultKeys) {
 }
 
 /**
- * Unlocks the vault using the user's master password.
- * This is the fallback method if a key is not found in IndexedDB.
- * It decrypts the private key, imports it as non-extractable,
- * and stores it in both IndexedDB and the in-memory Svelte store.
+ * Decrypts server-provided encrypted private keys with the user's master password, imports them as non-extractable CryptoKey handles, persists them to IndexedDB, and updates the in-memory vault store.
  *
- * @param encryptedPrivateKey The encrypted private key object from the server.
- * @param encryptedPrivateSigningKey The encrypted private key object for signing.
- * @param password The user's master password.
- * @param salt The salt used to hash the password.
- * @returns A boolean indicating if the unlock was successful.
+ * @param encryptedPrivateKey - The server-provided encrypted RSA private key blob.
+ * @param encryptedPrivateSigningKey - The server-provided encrypted Ed25519 private key blob.
+ * @param password - The user's master password used to derive the decryption key.
+ * @param salt - Salt used when hashing the password to derive the AES key.
+ * @returns True if keys were successfully decrypted, imported, persisted, and the vault unlocked; false on error (the vault will be left locked).
  */
 export async function unlockVaultWithPassword(
     encryptedPrivateKey: crypto.EncryptedData,

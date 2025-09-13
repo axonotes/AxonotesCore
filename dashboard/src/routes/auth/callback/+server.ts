@@ -14,6 +14,16 @@ import {jwtVerify} from "jose";
 import {IN_DEVELOPMENT} from "$lib/utils";
 import {PUBLIC_ACCESS_TOKEN_COOKIE_NAME} from "$env/static/public";
 
+/**
+ * Handle the WorkOS OAuth callback: exchange the authorization code, create app tokens, set session cookies, and redirect to the app gate.
+ *
+ * Exchanges the `code` query parameter for a WorkOS user and access token, verifies the WorkOS token to extract a session id, builds an internal user token payload, generates internal access and refresh tokens, and sets three cookies:
+ * - PUBLIC_ACCESS_TOKEN_COOKIE_NAME: public (non-httpOnly) access token for the client
+ * - REFRESH_TOKEN_COOKIE_NAME: httpOnly refresh token
+ * - WORKOS_SESSION_ID_COOKIE_NAME: httpOnly WorkOS session id
+ *
+ * On success the handler redirects (302) to "/auth/gate". If the `code` parameter is missing the handler redirects to "/?error=no_code". Any failure during the exchange/verification flow logs the error and redirects to "/?error=auth_failed".
+ */
 export async function GET({url, cookies}) {
     const code = url.searchParams.get("code");
 

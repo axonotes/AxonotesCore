@@ -13,6 +13,18 @@ use spacetimedb_sdk::__codegen::{self as __sdk, __lib, __sats, __ws};
 pub(super) struct ClientConnectedArgs {}
 
 impl From<ClientConnectedArgs> for super::Reducer {
+    /// Convert `ClientConnectedArgs` into the corresponding `Reducer` variant.
+    ///
+    /// `ClientConnectedArgs` is an empty payload type; converting it produces the
+    /// `Reducer::ClientConnected` unit variant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = ClientConnectedArgs {};
+    /// let reducer: super::Reducer = args.into();
+    /// assert!(matches!(reducer, super::Reducer::ClientConnected));
+    /// ```
     fn from(args: ClientConnectedArgs) -> Self {
         Self::ClientConnected
     }
@@ -52,10 +64,38 @@ pub trait client_connected {
 }
 
 impl client_connected for super::RemoteReducers {
+    /// Request execution of the `client_connected` reducer.
+    ///
+    /// Sends an asynchronous request to run the remote reducer named `"client_connected"`.
+    /// The call returns once the request is dispatched; the reducer itself runs asynchronously.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // `reducers` is an instance of the generated `RemoteReducers` extension.
+    /// // The call returns `Ok(())` if the request could be sent.
+    /// let _ = reducers.client_connected().unwrap();
+    /// ```
     fn client_connected(&self) -> __sdk::Result<()> {
         self.imp
             .call_reducer("client_connected", ClientConnectedArgs {})
     }
+    /// Register a callback to be invoked when the `client_connected` reducer is triggered.
+    ///
+    /// The provided `callback` is called with a reference to the reducer's `ReducerEventContext`
+    /// each time a `client_connected` event is received. The returned `ClientConnectedCallbackId`
+    /// can be used to unregister the callback via `remove_on_client_connected`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // `remote` implements `RemoteReducers`
+    /// let id = remote.on_client_connected(|ctx: &remote::ReducerEventContext| {
+    ///     // inspect `ctx` to react to the client_connected event
+    ///     println!("client connected: {:?}", ctx);
+    /// });
+    /// remote.remove_on_client_connected(id);
+    /// ```
     fn on_client_connected(
         &self,
         mut callback: impl FnMut(&super::ReducerEventContext) + Send + 'static,
@@ -78,6 +118,19 @@ impl client_connected for super::RemoteReducers {
             }),
         ))
     }
+    /// Unregisters a previously registered `client_connected` callback.
+    ///
+    /// The provided `ClientConnectedCallbackId` must have been returned by
+    /// `on_client_connected`. After calling this, the associated callback will no
+    /// longer be invoked for future `client_connected` reducer events.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `reducers` is a RemoteReducers instance and `cb_id` was returned by
+    /// // `reducers.on_client_connected(...)`.
+    /// reducers.remove_on_client_connected(cb_id);
+    /// ```
     fn remove_on_client_connected(&self, callback: ClientConnectedCallbackId) {
         self.imp.remove_on_reducer("client_connected", callback.0)
     }
@@ -98,6 +151,20 @@ pub trait set_flags_for_client_connected {
 }
 
 impl set_flags_for_client_connected for super::SetReducerFlags {
+    /// Set call flags for the `client_connected` reducer.
+    ///
+    /// The provided flags control how the runtime should invoke the `client_connected` reducer
+    /// (for example delivery semantics or prioritization). This configures the behavior but
+    /// does not trigger the reducer itself.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `set_flags` implements the `set_flags_for_client_connected` extension.
+    /// // `__ws::CallReducerFlags` is the flag type used by the runtime.
+    /// let flags = __ws::CallReducerFlags::default();
+    /// set_flags.client_connected(flags);
+    /// ```
     fn client_connected(&self, flags: __ws::CallReducerFlags) {
         self.imp.set_call_reducer_flags("client_connected", flags);
     }

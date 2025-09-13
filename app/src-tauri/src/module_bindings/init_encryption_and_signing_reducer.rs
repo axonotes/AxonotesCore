@@ -21,6 +21,27 @@ pub(super) struct InitEncryptionAndSigningArgs {
 }
 
 impl From<InitEncryptionAndSigningArgs> for super::Reducer {
+    /// Converts an `InitEncryptionAndSigningArgs` value into a `Reducer::InitEncryptionAndSigning` variant,
+    /// moving all argument fields into the reducer payload.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = InitEncryptionAndSigningArgs {
+    ///     public_key: String::from("pub"),
+    ///     encrypted_private_key: String::from("enc_priv"),
+    ///     encrypted_backup_key: String::from("enc_backup"),
+    ///     public_signing_key: String::from("pub_sign"),
+    ///     encrypted_private_signing_key: String::from("enc_priv_sign"),
+    ///     encrypted_private_backup_signing_key: String::from("enc_priv_backup_sign"),
+    ///     argon_salt: String::from("salt"),
+    /// };
+    /// let reducer: super::Reducer = args.into();
+    /// match reducer {
+    ///     super::Reducer::InitEncryptionAndSigning { public_key, .. } => assert_eq!(public_key, "pub"),
+    ///     _ => panic!("unexpected reducer variant"),
+    /// }
+    /// ```
     fn from(args: InitEncryptionAndSigningArgs) -> Self {
         Self::InitEncryptionAndSigning {
             public_key: args.public_key,
@@ -91,6 +112,26 @@ pub trait init_encryption_and_signing {
 }
 
 impl init_encryption_and_signing for super::RemoteReducers {
+    /// Requests the remote `init_encryption_and_signing` reducer with the given keys and salt.
+    ///
+    /// Sends a reducer invocation to the remote module carrying the provided payload. The call
+    /// returns immediately; the `Ok(())` result only indicates the request was sent successfully,
+    /// not that the reducer has completed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `r` is a RemoteReducers implementation.
+    /// let _ = r.init_encryption_and_signing(
+    ///     "pub_key".to_string(),
+    ///     "enc_priv_key".to_string(),
+    ///     "enc_backup_key".to_string(),
+    ///     "pub_sign_key".to_string(),
+    ///     "enc_priv_sign_key".to_string(),
+    ///     "enc_priv_backup_sign_key".to_string(),
+    ///     "argon_salt".to_string(),
+    /// );
+    /// ```
     fn init_encryption_and_signing(
         &self,
         public_key: String,
@@ -114,6 +155,27 @@ impl init_encryption_and_signing for super::RemoteReducers {
             },
         )
     }
+    /// Register a callback invoked when the `init_encryption_and_signing` reducer is emitted.
+    ///
+    /// The provided callback is called with:
+    /// - a reference to the reducer event context, and
+    /// - references to the reducer payload fields in this order:
+    ///   `public_key`, `encrypted_private_key`, `encrypted_backup_key`,
+    ///   `public_signing_key`, `encrypted_private_signing_key`,
+    ///   `encrypted_private_backup_signing_key`, `argon_salt`.
+    ///
+    /// Returns an `InitEncryptionAndSigningCallbackId` that can be used to remove the callback.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Register a callback that logs the public and signing keys.
+    /// let _cb_id = remote_reducers.on_init_encryption_and_signing(|ctx, public_key, _enc_priv, _enc_backup, public_signing_key, _enc_priv_sign, _enc_priv_backup_sign, _argon_salt| {
+    ///     println!("Reducer invoked for public key: {}", public_key);
+    ///     println!("Signing key: {}", public_signing_key);
+    ///     // `ctx` can be used to inspect metadata about the event.
+    /// });
+    /// ```
     fn on_init_encryption_and_signing(
         &self,
         mut callback: impl FnMut(
@@ -164,6 +226,20 @@ impl init_encryption_and_signing for super::RemoteReducers {
             }),
         ))
     }
+    /// Unregisters a previously registered `on_init_encryption_and_signing` callback.
+    ///
+    /// This removes the callback identified by `callback` so it will no longer be invoked
+    /// when the `init_encryption_and_signing` reducer runs.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use app::module_bindings::init_encryption_and_signing::InitEncryptionAndSigningCallbackId;
+    /// # // `reducers` represents a value implementing the RemoteReducers extension.
+    /// # let reducers = todo!();
+    /// # let cb_id: InitEncryptionAndSigningCallbackId = todo!();
+    /// reducers.remove_on_init_encryption_and_signing(cb_id);
+    /// ```
     fn remove_on_init_encryption_and_signing(
         &self,
         callback: InitEncryptionAndSigningCallbackId,
@@ -188,6 +264,17 @@ pub trait set_flags_for_init_encryption_and_signing {
 }
 
 impl set_flags_for_init_encryption_and_signing for super::SetReducerFlags {
+    /// Set call-reducer flags for the `init_encryption_and_signing` reducer.
+    ///
+    /// The provided `flags` are forwarded to the runtime and control how the
+    /// `init_encryption_and_signing` reducer will be scheduled/executed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `setter` implements `SetReducerFlags`
+    /// setter.init_encryption_and_signing(__ws::CallReducerFlags::default());
+    /// ```
     fn init_encryption_and_signing(&self, flags: __ws::CallReducerFlags) {
         self.imp
             .set_call_reducer_flags("init_encryption_and_signing", flags);

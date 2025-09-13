@@ -57,6 +57,20 @@ impl __sdk::InModule for Reducer {
 }
 
 impl __sdk::Reducer for Reducer {
+    /// Returns the canonical reducer name for this `Reducer` variant.
+    ///
+    /// The returned string is the static name used by the Spacetime protocol to
+    /// identify which reducer is being invoked:
+    /// - `ClientConnected` -> `"client_connected"`
+    /// - `InitEncryptionAndSigning` -> `"init_encryption_and_signing"`
+    /// - `UpdateEncryptionKeys` -> `"update_encryption_keys"`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let name = Reducer::ClientConnected.reducer_name();
+    /// assert_eq!(name, "client_connected");
+    /// ```
     fn reducer_name(&self) -> &'static str {
         match self {
             Reducer::ClientConnected => "client_connected",
@@ -69,6 +83,18 @@ impl __sdk::Reducer for Reducer {
 }
 impl TryFrom<__ws::ReducerCallInfo<__ws::BsatnFormat>> for Reducer {
     type Error = __sdk::Error;
+    /// Converts a `__ws::ReducerCallInfo<__ws::BsatnFormat>` into a `Reducer`.
+    ///
+    /// Matches `value.reducer_name` against the module's reducer names and parses the
+    /// accompanying `args` into the corresponding reducer variant. Returns an error
+    /// if the reducer name is unknown or if argument parsing fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Given a `ReducerCallInfo` `info` received from the websocket layer:
+    /// // let reducer = Reducer::try_from(info).expect("valid reducer call");
+    /// ```
     fn try_from(
         value: __ws::ReducerCallInfo<__ws::BsatnFormat>,
     ) -> __sdk::Result<Self> {
@@ -90,6 +116,22 @@ pub struct DbUpdate {
 
 impl TryFrom<__ws::DatabaseUpdate<__ws::BsatnFormat>> for DbUpdate {
     type Error = __sdk::Error;
+    /// Converts a raw WebSocket `DatabaseUpdate<__ws::BsatnFormat>` into this module's `DbUpdate`.
+    ///
+    /// Only known tables are accepted; each recognized table's updates are parsed and appended to the
+    /// corresponding `DbUpdate` field. Currently the only supported table name is `"user"`, which is
+    /// parsed with `user_table::parse_table_update`.
+    ///
+    /// Returns an `InternalError::unknown_name` (propagated as the `TryFrom` error) if an unknown
+    /// table name is encountered.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // Construct a raw update (example shape; actual construction depends on the __ws types)
+    /// let raw = __ws::DatabaseUpdate { tables: vec![] };
+    /// let db_update = module_bindings::DbUpdate::try_from(raw).unwrap();
+    /// ```
     fn try_from(
         raw: __ws::DatabaseUpdate<__ws::BsatnFormat>,
     ) -> Result<Self, Self::Error> {
@@ -119,6 +161,21 @@ impl __sdk::InModule for DbUpdate {
 }
 
 impl __sdk::DbUpdate for DbUpdate {
+    /// Applies this database update to the provided client cache and returns the resulting applied diff.
+    ///
+    /// The returned `AppliedDiff` describes which rows in the module's tables were inserted, updated,
+    /// or removed as a result of applying this update. This operation mutates `cache`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Create a client cache and an empty update, then apply it.
+    /// let mut cache: __sdk::ClientCache<RemoteModule> = __sdk::ClientCache::default();
+    /// let update = DbUpdate::default();
+    /// let applied: AppliedDiff<'_> = update.apply_to_client_cache(&mut cache);
+    /// // With an empty update, no rows should be affected.
+    /// assert!(applied.user.is_empty());
+    /// ```
     fn apply_to_client_cache(
         &self,
         cache: &mut __sdk::ClientCache<RemoteModule>,
@@ -145,6 +202,19 @@ impl __sdk::InModule for AppliedDiff<'_> {
 }
 
 impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
+    /// Invoke registered per-row callbacks for the `user` table using this applied diff.
+    ///
+    /// This will call any table row callbacks that were registered for the "user" table,
+    /// passing each per-row change contained in `self.user` along with the provided event context.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // `applied_diff` is an AppliedDiff produced by applying a DbUpdate,
+    /// // `event_ctx` is the current EventContext, and `callbacks` is the DbCallbacks registry.
+    /// // The call below will forward row-level changes for the "user" table to registered callbacks.
+    /// // applied_diff.invoke_row_callbacks(&event_ctx, &mut callbacks);
+    /// ```
     fn invoke_row_callbacks(
         &self,
         event: &EventContext,
@@ -235,60 +305,168 @@ impl __sdk::DbContext for DbConnection {
     type Reducers = RemoteReducers;
     type SetReducerFlags = SetReducerFlags;
 
+    /// Returns a reference to the connection's database view.
+    ///
+    /// The returned view exposes table accessors for this remote module (e.g. the `user` table).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let db_view = conn.db();
+    /// // use `db_view` to access table APIs, e.g. `db_view.user()`
+    /// ```
     fn db(&self) -> &Self::DbView {
         &self.db
     }
+    /// Returns a reference to the reducers view for this database connection.
+    ///
+    /// The returned value provides access to reducer-related operations (e.g., registering
+    /// reducer callbacks or setting reducer flags) for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let conn = DbConnection::builder().build();
+    /// let reducers = conn.reducers();
+    /// // Use `reducers` to register callbacks or interact with reducers.
+    /// let _ = reducers;
+    /// ```
     fn reducers(&self) -> &Self::Reducers {
         &self.reducers
     }
+    /// Returns a reference to the connection's SetReducerFlags view.
+    ///
+    /// This view is used to set or modify reducer flags for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module.
+    /// let flags = conn.set_reducer_flags();
+    /// // `flags` can now be used to set reducer-specific flags.
+    /// ```
     fn set_reducer_flags(&self) -> &Self::SetReducerFlags {
         &self.set_reducer_flags
     }
 
+    /// Returns true if the underlying database connection/context is currently active.
+    ///
+    /// This reflects the internal connection state exposed by the implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `conn` is a DbConnection or other DbContext-backed value.
+    /// // let conn = /* obtain connection */;
+    /// // assert!(conn.is_active());
+    /// ```
     fn is_active(&self) -> bool {
         self.imp.is_active()
     }
 
+    /// Disconnects the underlying database connection.
+    ///
+    /// Attempts to close the active connection and returns an error if the disconnect fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `conn` is an active `DbConnection`
+    /// conn.disconnect().expect("failed to disconnect");
+    /// ```
     fn disconnect(&self) -> __sdk::Result<()> {
         self.imp.disconnect()
     }
 
     type SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>;
 
+    /// Creates a new subscription builder tied to this connection.
+    ///
+    /// The returned builder is preconfigured to operate for this module's connection and can be
+    /// used to construct and start subscriptions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module
+    /// let builder = conn.subscription_builder();
+    /// // configure and use `builder`...
+    /// ```
     fn subscription_builder(&self) -> Self::SubscriptionBuilder {
         __sdk::SubscriptionBuilder::new(&self.imp)
     }
 
+    /// Returns the current connection identity for this context, if available.
+    ///
+    /// The identity is present when the underlying connection is authenticated/connected;
+    /// returns `None` when there is no active identity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `ctx` can be a `DbConnection` or any event/context type that exposes `try_identity()`.
+    /// let maybe_id = ctx.try_identity();
+    /// if let Some(id) = maybe_id {
+    ///     // use `id`...
+    ///     let _ = id.to_string();
+    /// }
+    /// ```
     fn try_identity(&self) -> Option<__sdk::Identity> {
         self.imp.try_identity()
     }
+    /// Returns the connection identifier for this DbConnection.
+    ///
+    /// The returned `__sdk::ConnectionId` uniquely identifies the active connection (if any).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = db_connection.connection_id();
+    /// // `id` can be compared or logged as needed
+    /// ```
     fn connection_id(&self) -> __sdk::ConnectionId {
         self.imp.connection_id()
     }
 }
 
 impl DbConnection {
-    /// Builder-pattern constructor for a connection to a remote module.
+    /// Create a new DbConnectionBuilder for this remote module.
     ///
-    /// See [`__sdk::DbConnectionBuilder`] for required and optional configuration for the new connection.
+    /// Returns a fresh [`__sdk::DbConnectionBuilder<RemoteModule>`] preconfigured for building
+    /// a connection to the RemoteModule. See [`__sdk::DbConnectionBuilder`] for available
+    /// configuration and how to establish the connection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let builder = builder();
+    /// // configure `builder` (e.g. endpoint, credentials) then call its build method.
+    /// ```
     pub fn builder() -> __sdk::DbConnectionBuilder<RemoteModule> {
         __sdk::DbConnectionBuilder::new()
     }
 
-    /// If any WebSocket messages are waiting, process one of them.
+    /// Process a single pending WebSocket message if one is available.
     ///
-    /// Returns `true` if a message was processed, or `false` if the queue is empty.
-    /// Callers should invoke this message in a loop until it returns `false`
-    /// or for as much time is available to process messages.
+    /// Returns `Ok(true)` when a message was processed, `Ok(false)` when the incoming
+    /// queue was empty, or an `Err` if the connection has been disconnected.
+    /// Normal (intentional) disconnects will produce an error that can be downcast to
+    /// `__sdk::DisconnectedError`.
     ///
-    /// Returns an error if the connection is disconnected.
-    /// If the disconnection in question was normal,
-    ///  i.e. the result of a call to [`__sdk::DbContext::disconnect`],
-    /// the returned error will be downcastable to [`__sdk::DisconnectedError`].
+    /// This is a low-level scheduling primitive for advanced users. Most callers
+    /// should use `Self::frame_tick()` each frame to drain the queue when time is
+    /// available. Callers that use this function typically loop until it returns
+    /// `false` or until they have exhausted their processing time allotment.
     ///
-    /// This is a low-level primitive exposed for power users who need significant control over scheduling.
-    /// Most applications should call [`Self::frame_tick`] each frame
-    /// to fully exhaust the queue whenever time is available.
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // Process messages until the queue is empty.
+    /// // `conn` is a `DbConnection`-like value.
+    /// while let Ok(true) = conn.advance_one_message() {
+    ///     // handled one message; continue
+    /// }
+    /// ```
     pub fn advance_one_message(&self) -> __sdk::Result<bool> {
         self.imp.advance_one_message()
     }
@@ -321,24 +499,71 @@ impl DbConnection {
         self.imp.advance_one_message_async().await
     }
 
-    /// Process all WebSocket messages waiting in the queue,
-    /// then return without `await`ing or blocking the current thread.
+    /// Process any pending WebSocket messages without blocking the current thread.
+    ///
+    /// This processes all queued incoming WebSocket frames/messages for the connection and
+    /// returns immediately; it does not await asynchronous work or block waiting for new data.
+    /// Any processing errors are returned as a `__sdk::Result::Err`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` (or any type exposing `frame_tick`)
+    /// let _ = conn.frame_tick().expect("frame tick failed");
+    /// ```
     pub fn frame_tick(&self) -> __sdk::Result<()> {
         self.imp.frame_tick()
     }
 
-    /// Spawn a thread which processes WebSocket messages as they are received.
+    /// Spawns a background thread that continuously processes incoming WebSocket messages for this connection.
+    ///
+    /// The returned `JoinHandle` can be used to wait for the thread to finish. The background thread runs until
+    /// the connection is disconnected or the underlying runtime stops.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // `conn` is a `DbConnection` built via `DbConnection::builder()`.
+    /// let conn = /* obtain a DbConnection */ unimplemented!();
+    /// let handle = conn.run_threaded();
+    /// // ... use the connection from other threads ...
+    /// handle.join().expect("thread panicked");
+    /// ```
     pub fn run_threaded(&self) -> std::thread::JoinHandle<()> {
         self.imp.run_threaded()
     }
 
-    /// Run an `async` loop which processes WebSocket messages when polled.
+    /// Runs the connection's asynchronous processing loop, awaiting until the connection ends or an error occurs.
+    ///
+    /// This processes incoming WebSocket messages on the current connection and returns when the loop completes.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // `conn` is a previously built and connected `DbConnection`.
+    /// // Await the background processing loop to run until completion:
+    /// // conn.run_async().await?;
+    /// ```
     pub async fn run_async(&self) -> __sdk::Result<()> {
         self.imp.run_async().await
     }
 }
 
 impl __sdk::DbConnection for DbConnection {
+    /// Create a new DbConnection that shares the given internal database context.
+    ///
+    /// The resulting connection contains `db`, `reducers`, and `set_reducer_flags` views
+    /// which all hold clones of the provided `__sdk::DbContextImpl<RemoteModule>` and
+    /// the original `imp` is stored for operations requiring ownership.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `imp` is an internal __sdk::DbContextImpl<RemoteModule> provided by the SDK.
+    /// let conn = DbConnection::new(imp);
+    /// // The connection's activity state is delegated to the underlying context.
+    /// let _ = conn.is_active();
+    /// ```
     fn new(imp: __sdk::DbContextImpl<RemoteModule>) -> Self {
         Self {
             db: RemoteTables { imp: imp.clone() },
@@ -361,6 +586,18 @@ impl __sdk::InModule for SubscriptionHandle {
 }
 
 impl __sdk::SubscriptionHandle for SubscriptionHandle {
+    /// Creates a SubscriptionHandle wrapping the provided internal implementation.
+    ///
+    /// This is a simple constructor that takes an SDK-internal `SubscriptionHandleImpl<RemoteModule>`
+    /// and returns the public `SubscriptionHandle` wrapper.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Obtain the internal implementation from the SDK (e.g., from a subscription result).
+    /// // let imp: __sdk::SubscriptionHandleImpl<RemoteModule> = /* ... */;
+    /// // let handle = SubscriptionHandle::new(imp);
+    /// ```
     fn new(imp: __sdk::SubscriptionHandleImpl<RemoteModule>) -> Self {
         Self { imp }
     }
@@ -370,13 +607,37 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
         self.imp.is_ended()
     }
 
-    /// Returns true if this subscription has been applied and has not yet been unsubscribed.
+    /// Returns true if the underlying database connection/context is currently active.
+    ///
+    /// This reflects the internal connection state exposed by the implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `conn` is a DbConnection or other DbContext-backed value.
+    /// // let conn = /* obtain connection */;
+    /// // assert!(conn.is_active());
+    /// ```
     fn is_active(&self) -> bool {
         self.imp.is_active()
     }
 
-    /// Unsubscribe from the query controlled by this `SubscriptionHandle`,
-    /// then run `on_end` when its rows are removed from the client cache.
+    /// Unsubscribe from this subscription and invoke `on_end` once its rows are removed from the client cache.
+    ///
+    /// This consumes the handle, requests the server to end the subscription, and arranges for `on_end` to be
+    /// called when the subscription has fully ended and all associated rows have been evicted from the local cache.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use app::module_bindings::SubscriptionHandle;
+    /// # use app::module_bindings as bindings;
+    /// let handle: SubscriptionHandle = unimplemented!();
+    /// // `on_end` will be called when the subscription is fully ended and its rows removed.
+    /// handle.unsubscribe_then(Box::new(|_ctx| {
+    ///     // cleanup work here
+    /// })).unwrap();
+    /// ```
     fn unsubscribe_then(
         self,
         on_end: __sdk::OnEndedCallback<RemoteModule>,
@@ -384,6 +645,17 @@ impl __sdk::SubscriptionHandle for SubscriptionHandle {
         self.imp.unsubscribe_then(Some(on_end))
     }
 
+    /// Unsubscribes from the remote subscription, dropping the handle.
+    ///
+    /// Returns Ok(()) on success or an error if the unsubscribe operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `handle` is a SubscriptionHandle obtained from a subscription API.
+    /// // Unsubscribe and propagate errors (if any).
+    /// handle.unsubscribe().unwrap();
+    /// ```
     fn unsubscribe(self) -> __sdk::Result<()> {
         self.imp.unsubscribe_then(None)
     }
@@ -433,9 +705,31 @@ pub struct EventContext {
 
 impl __sdk::AbstractEventContext for EventContext {
     type Event = __sdk::Event<Reducer>;
+    /// Returns a reference to the contained event.
+    ///
+    /// This accessor provides read-only access to the `event` carried by the context.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // given `ctx` is an event context (e.g. `EventContext`)
+    /// // let ctx: EventContext = ...;
+    /// // let event_ref = ctx.event();
+    /// ```
     fn event(&self) -> &Self::Event {
         &self.event
     }
+    /// Creates a new EventContext that wraps the given database context implementation and event.
+    ///
+    /// The returned context provides `db`, `reducers`, and `set_reducer_flags` views backed by clones
+    /// of `imp`, and stores the provided `event`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let ctx = EventContext::new(imp, event);
+    /// // ctx.db, ctx.reducers, and ctx.set_reducer_flags are available and backed by `imp`.
+    /// ```
     fn new(
         imp: __sdk::DbContextImpl<RemoteModule>,
         event: Self::Event,
@@ -459,33 +753,125 @@ impl __sdk::DbContext for EventContext {
     type Reducers = RemoteReducers;
     type SetReducerFlags = SetReducerFlags;
 
+    /// Returns a reference to the connection's database view.
+    ///
+    /// The returned view exposes table accessors for this remote module (e.g. the `user` table).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let db_view = conn.db();
+    /// // use `db_view` to access table APIs, e.g. `db_view.user()`
+    /// ```
     fn db(&self) -> &Self::DbView {
         &self.db
     }
+    /// Returns a reference to the reducers view for this database connection.
+    ///
+    /// The returned value provides access to reducer-related operations (e.g., registering
+    /// reducer callbacks or setting reducer flags) for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let conn = DbConnection::builder().build();
+    /// let reducers = conn.reducers();
+    /// // Use `reducers` to register callbacks or interact with reducers.
+    /// let _ = reducers;
+    /// ```
     fn reducers(&self) -> &Self::Reducers {
         &self.reducers
     }
+    /// Returns a reference to the connection's SetReducerFlags view.
+    ///
+    /// This view is used to set or modify reducer flags for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module.
+    /// let flags = conn.set_reducer_flags();
+    /// // `flags` can now be used to set reducer-specific flags.
+    /// ```
     fn set_reducer_flags(&self) -> &Self::SetReducerFlags {
         &self.set_reducer_flags
     }
 
+    /// Returns true if the underlying database connection/context is currently active.
+    ///
+    /// This reflects the internal connection state exposed by the implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `conn` is a DbConnection or other DbContext-backed value.
+    /// // let conn = /* obtain connection */;
+    /// // assert!(conn.is_active());
+    /// ```
     fn is_active(&self) -> bool {
         self.imp.is_active()
     }
 
+    /// Disconnects the underlying database connection.
+    ///
+    /// Attempts to close the active connection and returns an error if the disconnect fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `conn` is an active `DbConnection`
+    /// conn.disconnect().expect("failed to disconnect");
+    /// ```
     fn disconnect(&self) -> __sdk::Result<()> {
         self.imp.disconnect()
     }
 
     type SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>;
 
+    /// Creates a new subscription builder tied to this connection.
+    ///
+    /// The returned builder is preconfigured to operate for this module's connection and can be
+    /// used to construct and start subscriptions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module
+    /// let builder = conn.subscription_builder();
+    /// // configure and use `builder`...
+    /// ```
     fn subscription_builder(&self) -> Self::SubscriptionBuilder {
         __sdk::SubscriptionBuilder::new(&self.imp)
     }
 
+    /// Returns the current connection identity for this context, if available.
+    ///
+    /// The identity is present when the underlying connection is authenticated/connected;
+    /// returns `None` when there is no active identity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `ctx` can be a `DbConnection` or any event/context type that exposes `try_identity()`.
+    /// let maybe_id = ctx.try_identity();
+    /// if let Some(id) = maybe_id {
+    ///     // use `id`...
+    ///     let _ = id.to_string();
+    /// }
+    /// ```
     fn try_identity(&self) -> Option<__sdk::Identity> {
         self.imp.try_identity()
     }
+    /// Returns the connection identifier for this DbConnection.
+    ///
+    /// The returned `__sdk::ConnectionId` uniquely identifies the active connection (if any).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = db_connection.connection_id();
+    /// // `id` can be compared or logged as needed
+    /// ```
     fn connection_id(&self) -> __sdk::ConnectionId {
         self.imp.connection_id()
     }
@@ -512,9 +898,31 @@ pub struct ReducerEventContext {
 
 impl __sdk::AbstractEventContext for ReducerEventContext {
     type Event = __sdk::ReducerEvent<Reducer>;
+    /// Returns a reference to the contained event.
+    ///
+    /// This accessor provides read-only access to the `event` carried by the context.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // given `ctx` is an event context (e.g. `EventContext`)
+    /// // let ctx: EventContext = ...;
+    /// // let event_ref = ctx.event();
+    /// ```
     fn event(&self) -> &Self::Event {
         &self.event
     }
+    /// Creates a new EventContext that wraps the given database context implementation and event.
+    ///
+    /// The returned context provides `db`, `reducers`, and `set_reducer_flags` views backed by clones
+    /// of `imp`, and stores the provided `event`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let ctx = EventContext::new(imp, event);
+    /// // ctx.db, ctx.reducers, and ctx.set_reducer_flags are available and backed by `imp`.
+    /// ```
     fn new(
         imp: __sdk::DbContextImpl<RemoteModule>,
         event: Self::Event,
@@ -538,33 +946,125 @@ impl __sdk::DbContext for ReducerEventContext {
     type Reducers = RemoteReducers;
     type SetReducerFlags = SetReducerFlags;
 
+    /// Returns a reference to the connection's database view.
+    ///
+    /// The returned view exposes table accessors for this remote module (e.g. the `user` table).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let db_view = conn.db();
+    /// // use `db_view` to access table APIs, e.g. `db_view.user()`
+    /// ```
     fn db(&self) -> &Self::DbView {
         &self.db
     }
+    /// Returns a reference to the reducers view for this database connection.
+    ///
+    /// The returned value provides access to reducer-related operations (e.g., registering
+    /// reducer callbacks or setting reducer flags) for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let conn = DbConnection::builder().build();
+    /// let reducers = conn.reducers();
+    /// // Use `reducers` to register callbacks or interact with reducers.
+    /// let _ = reducers;
+    /// ```
     fn reducers(&self) -> &Self::Reducers {
         &self.reducers
     }
+    /// Returns a reference to the connection's SetReducerFlags view.
+    ///
+    /// This view is used to set or modify reducer flags for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module.
+    /// let flags = conn.set_reducer_flags();
+    /// // `flags` can now be used to set reducer-specific flags.
+    /// ```
     fn set_reducer_flags(&self) -> &Self::SetReducerFlags {
         &self.set_reducer_flags
     }
 
+    /// Returns true if the underlying database connection/context is currently active.
+    ///
+    /// This reflects the internal connection state exposed by the implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `conn` is a DbConnection or other DbContext-backed value.
+    /// // let conn = /* obtain connection */;
+    /// // assert!(conn.is_active());
+    /// ```
     fn is_active(&self) -> bool {
         self.imp.is_active()
     }
 
+    /// Disconnects the underlying database connection.
+    ///
+    /// Attempts to close the active connection and returns an error if the disconnect fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `conn` is an active `DbConnection`
+    /// conn.disconnect().expect("failed to disconnect");
+    /// ```
     fn disconnect(&self) -> __sdk::Result<()> {
         self.imp.disconnect()
     }
 
     type SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>;
 
+    /// Creates a new subscription builder tied to this connection.
+    ///
+    /// The returned builder is preconfigured to operate for this module's connection and can be
+    /// used to construct and start subscriptions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module
+    /// let builder = conn.subscription_builder();
+    /// // configure and use `builder`...
+    /// ```
     fn subscription_builder(&self) -> Self::SubscriptionBuilder {
         __sdk::SubscriptionBuilder::new(&self.imp)
     }
 
+    /// Returns the current connection identity for this context, if available.
+    ///
+    /// The identity is present when the underlying connection is authenticated/connected;
+    /// returns `None` when there is no active identity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `ctx` can be a `DbConnection` or any event/context type that exposes `try_identity()`.
+    /// let maybe_id = ctx.try_identity();
+    /// if let Some(id) = maybe_id {
+    ///     // use `id`...
+    ///     let _ = id.to_string();
+    /// }
+    /// ```
     fn try_identity(&self) -> Option<__sdk::Identity> {
         self.imp.try_identity()
     }
+    /// Returns the connection identifier for this DbConnection.
+    ///
+    /// The returned `__sdk::ConnectionId` uniquely identifies the active connection (if any).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = db_connection.connection_id();
+    /// // `id` can be compared or logged as needed
+    /// ```
     fn connection_id(&self) -> __sdk::ConnectionId {
         self.imp.connection_id()
     }
@@ -588,9 +1088,33 @@ pub struct SubscriptionEventContext {
 
 impl __sdk::AbstractEventContext for SubscriptionEventContext {
     type Event = ();
+    /// Returns a reference to the context's event payload.
+    ///
+    /// For contexts that carry no event data, the event type is `()` and this
+    /// returns a reference to the unit value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `ctx` is a context type whose `Event` associated type is `()`.
+    /// // let ctx: SubscriptionEventContext = ...;
+    /// // assert_eq!(ctx.event(), &());
+    /// ```
     fn event(&self) -> &Self::Event {
         &()
     }
+    /// Creates a new context instance from a database context implementation and an event.
+    ///
+    /// The `imp` is stored and cloned into the contained `db`, `reducers`, and
+    /// `set_reducer_flags` views. The `event` parameter is accepted to match the
+    /// trait signature; some context types may ignore it (hence the leading `_`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `imp` and `event` are provided by the runtime/SDK.
+    /// let ctx = EventContext::new(imp, event);
+    /// ```
     fn new(
         imp: __sdk::DbContextImpl<RemoteModule>,
         _event: Self::Event,
@@ -613,33 +1137,125 @@ impl __sdk::DbContext for SubscriptionEventContext {
     type Reducers = RemoteReducers;
     type SetReducerFlags = SetReducerFlags;
 
+    /// Returns a reference to the connection's database view.
+    ///
+    /// The returned view exposes table accessors for this remote module (e.g. the `user` table).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let db_view = conn.db();
+    /// // use `db_view` to access table APIs, e.g. `db_view.user()`
+    /// ```
     fn db(&self) -> &Self::DbView {
         &self.db
     }
+    /// Returns a reference to the reducers view for this database connection.
+    ///
+    /// The returned value provides access to reducer-related operations (e.g., registering
+    /// reducer callbacks or setting reducer flags) for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let conn = DbConnection::builder().build();
+    /// let reducers = conn.reducers();
+    /// // Use `reducers` to register callbacks or interact with reducers.
+    /// let _ = reducers;
+    /// ```
     fn reducers(&self) -> &Self::Reducers {
         &self.reducers
     }
+    /// Returns a reference to the connection's SetReducerFlags view.
+    ///
+    /// This view is used to set or modify reducer flags for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module.
+    /// let flags = conn.set_reducer_flags();
+    /// // `flags` can now be used to set reducer-specific flags.
+    /// ```
     fn set_reducer_flags(&self) -> &Self::SetReducerFlags {
         &self.set_reducer_flags
     }
 
+    /// Returns true if the underlying database connection/context is currently active.
+    ///
+    /// This reflects the internal connection state exposed by the implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `conn` is a DbConnection or other DbContext-backed value.
+    /// // let conn = /* obtain connection */;
+    /// // assert!(conn.is_active());
+    /// ```
     fn is_active(&self) -> bool {
         self.imp.is_active()
     }
 
+    /// Disconnects the underlying database connection.
+    ///
+    /// Attempts to close the active connection and returns an error if the disconnect fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `conn` is an active `DbConnection`
+    /// conn.disconnect().expect("failed to disconnect");
+    /// ```
     fn disconnect(&self) -> __sdk::Result<()> {
         self.imp.disconnect()
     }
 
     type SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>;
 
+    /// Creates a new subscription builder tied to this connection.
+    ///
+    /// The returned builder is preconfigured to operate for this module's connection and can be
+    /// used to construct and start subscriptions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module
+    /// let builder = conn.subscription_builder();
+    /// // configure and use `builder`...
+    /// ```
     fn subscription_builder(&self) -> Self::SubscriptionBuilder {
         __sdk::SubscriptionBuilder::new(&self.imp)
     }
 
+    /// Returns the current connection identity for this context, if available.
+    ///
+    /// The identity is present when the underlying connection is authenticated/connected;
+    /// returns `None` when there is no active identity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `ctx` can be a `DbConnection` or any event/context type that exposes `try_identity()`.
+    /// let maybe_id = ctx.try_identity();
+    /// if let Some(id) = maybe_id {
+    ///     // use `id`...
+    ///     let _ = id.to_string();
+    /// }
+    /// ```
     fn try_identity(&self) -> Option<__sdk::Identity> {
         self.imp.try_identity()
     }
+    /// Returns the connection identifier for this DbConnection.
+    ///
+    /// The returned `__sdk::ConnectionId` uniquely identifies the active connection (if any).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = db_connection.connection_id();
+    /// // `id` can be compared or logged as needed
+    /// ```
     fn connection_id(&self) -> __sdk::ConnectionId {
         self.imp.connection_id()
     }
@@ -666,9 +1282,31 @@ pub struct ErrorContext {
 
 impl __sdk::AbstractEventContext for ErrorContext {
     type Event = Option<__sdk::Error>;
+    /// Returns a reference to the contained event.
+    ///
+    /// This accessor provides read-only access to the `event` carried by the context.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // given `ctx` is an event context (e.g. `EventContext`)
+    /// // let ctx: EventContext = ...;
+    /// // let event_ref = ctx.event();
+    /// ```
     fn event(&self) -> &Self::Event {
         &self.event
     }
+    /// Creates a new EventContext that wraps the given database context implementation and event.
+    ///
+    /// The returned context provides `db`, `reducers`, and `set_reducer_flags` views backed by clones
+    /// of `imp`, and stores the provided `event`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let ctx = EventContext::new(imp, event);
+    /// // ctx.db, ctx.reducers, and ctx.set_reducer_flags are available and backed by `imp`.
+    /// ```
     fn new(
         imp: __sdk::DbContextImpl<RemoteModule>,
         event: Self::Event,
@@ -692,33 +1330,125 @@ impl __sdk::DbContext for ErrorContext {
     type Reducers = RemoteReducers;
     type SetReducerFlags = SetReducerFlags;
 
+    /// Returns a reference to the connection's database view.
+    ///
+    /// The returned view exposes table accessors for this remote module (e.g. the `user` table).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let db_view = conn.db();
+    /// // use `db_view` to access table APIs, e.g. `db_view.user()`
+    /// ```
     fn db(&self) -> &Self::DbView {
         &self.db
     }
+    /// Returns a reference to the reducers view for this database connection.
+    ///
+    /// The returned value provides access to reducer-related operations (e.g., registering
+    /// reducer callbacks or setting reducer flags) for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let conn = DbConnection::builder().build();
+    /// let reducers = conn.reducers();
+    /// // Use `reducers` to register callbacks or interact with reducers.
+    /// let _ = reducers;
+    /// ```
     fn reducers(&self) -> &Self::Reducers {
         &self.reducers
     }
+    /// Returns a reference to the connection's SetReducerFlags view.
+    ///
+    /// This view is used to set or modify reducer flags for the remote module.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module.
+    /// let flags = conn.set_reducer_flags();
+    /// // `flags` can now be used to set reducer-specific flags.
+    /// ```
     fn set_reducer_flags(&self) -> &Self::SetReducerFlags {
         &self.set_reducer_flags
     }
 
+    /// Returns true if the underlying database connection/context is currently active.
+    ///
+    /// This reflects the internal connection state exposed by the implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `conn` is a DbConnection or other DbContext-backed value.
+    /// // let conn = /* obtain connection */;
+    /// // assert!(conn.is_active());
+    /// ```
     fn is_active(&self) -> bool {
         self.imp.is_active()
     }
 
+    /// Disconnects the underlying database connection.
+    ///
+    /// Attempts to close the active connection and returns an error if the disconnect fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `conn` is an active `DbConnection`
+    /// conn.disconnect().expect("failed to disconnect");
+    /// ```
     fn disconnect(&self) -> __sdk::Result<()> {
         self.imp.disconnect()
     }
 
     type SubscriptionBuilder = __sdk::SubscriptionBuilder<RemoteModule>;
 
+    /// Creates a new subscription builder tied to this connection.
+    ///
+    /// The returned builder is preconfigured to operate for this module's connection and can be
+    /// used to construct and start subscriptions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `conn` is a `DbConnection` for this module
+    /// let builder = conn.subscription_builder();
+    /// // configure and use `builder`...
+    /// ```
     fn subscription_builder(&self) -> Self::SubscriptionBuilder {
         __sdk::SubscriptionBuilder::new(&self.imp)
     }
 
+    /// Returns the current connection identity for this context, if available.
+    ///
+    /// The identity is present when the underlying connection is authenticated/connected;
+    /// returns `None` when there is no active identity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `ctx` can be a `DbConnection` or any event/context type that exposes `try_identity()`.
+    /// let maybe_id = ctx.try_identity();
+    /// if let Some(id) = maybe_id {
+    ///     // use `id`...
+    ///     let _ = id.to_string();
+    /// }
+    /// ```
     fn try_identity(&self) -> Option<__sdk::Identity> {
         self.imp.try_identity()
     }
+    /// Returns the connection identifier for this DbConnection.
+    ///
+    /// The returned `__sdk::ConnectionId` uniquely identifies the active connection (if any).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = db_connection.connection_id();
+    /// // `id` can be compared or logged as needed
+    /// ```
     fn connection_id(&self) -> __sdk::ConnectionId {
         self.imp.connection_id()
     }
@@ -740,6 +1470,17 @@ impl __sdk::SpacetimeModule for RemoteModule {
     type AppliedDiff<'r> = AppliedDiff<'r>;
     type SubscriptionHandle = SubscriptionHandle;
 
+    /// Registers this module's tables with the given client cache.
+    ///
+    /// This installs all table schemas and handlers required by the module into the provided
+    /// client cache so incoming database updates can be parsed and applied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut cache = __sdk::ClientCache::<module_bindings::RemoteModule>::new();
+    /// module_bindings::RemoteModule::register_tables(&mut cache);
+    /// ```
     fn register_tables(client_cache: &mut __sdk::ClientCache<Self>) {
         user_table::register_table(client_cache);
     }

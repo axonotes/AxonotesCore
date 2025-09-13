@@ -6,6 +6,19 @@ mod app_state;
 
 use crate::app_state::{add_and_auth_new_user, wait_for_user_auth, refresh_user_token, remove_user};
 
+/// Bootstraps and runs the Tauri application.
+///
+/// This function initializes logging, configures the Tauri `Builder` (registering the
+/// opener plugin, managing application state, and wiring RPC handlers), and then starts
+/// the application event loop. When compiled for mobile, this function is the mobile
+/// entry point.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Start the Tauri application (blocks until the app exits).
+/// app_src_tauri::run();
+/// ```
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging

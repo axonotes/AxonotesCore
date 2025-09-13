@@ -7,6 +7,17 @@ import {
 } from "$lib/server/jwt";
 import {REFRESH_TOKEN_COOKIE_NAME} from "$env/static/private";
 
+/**
+ * Refreshes authentication tokens using a provided refresh token.
+ *
+ * Verifies a refresh token taken first from a secure cookie (REFRESH_TOKEN_COOKIE_NAME) or, as a fallback, from the request JSON body (`refresh_token`). If the token is missing the handler responds with 401. If verification fails the refresh cookie is cleared (path "/") and a 401 is returned. On success, new tokens are generated.
+ *
+ * - For payloads with `client_type === "web"`: returns the raw refreshed token pair as JSON.
+ * - For other client types: returns an OpenID-style token response with `access_token`, `token_type`, `expires_in` (seconds), `refresh_token`, and `scope` (200).
+ *
+ * @throws {HttpError} 401 if the refresh token is not provided or is invalid/expired.
+ * @returns A SvelteKit JSON response containing either the refreshed tokens (web clients) or an OpenID-like token object (non-web clients).
+ */
 export async function POST({cookies, request}) {
     let refreshToken = cookies.get(REFRESH_TOKEN_COOKIE_NAME);
 

@@ -187,7 +187,22 @@ export const commands = {
     }),
 };
 
-// ---- Helper Functions ----
+/**
+ * Verifies a tool is installed and at the expected version by running a command.
+ *
+ * Runs `command` and checks its exit code and stdout prefix. If the command fails:
+ * - if `required` is false, logs a recommendation to install from `link` and returns;
+ * - if `required` is true, throws an error instructing the user to install from `link`.
+ * If the command succeeds but its stdout does not start with `startsWith`, throws an error
+ * instructing the user to update the tool to `version`.
+ *
+ * @param name - Human-readable tool name used in messages (e.g., "Rust").
+ * @param version - Expected version string shown in update instructions.
+ * @param link - URL to the tool's installation or download page used in messages.
+ * @param command - Shell command to query the tool's version (must return stdout to be checked).
+ * @param startsWith - Expected prefix of `command`'s stdout that indicates the correct version.
+ * @param required - If false, missing tool is tolerated (only a recommendation is logged); if true, missing tool causes an error. Default: true.
+ */
 
 async function checkVersion(
     name: string,
@@ -213,17 +228,37 @@ async function checkVersion(
     }
 }
 
+/**
+ * Generate server type bindings for both the dashboard and the app.
+ *
+ * Runs the dashboard generation first, then the app generation. Resolves when both generation tasks complete.
+ *
+ * @returns A promise that resolves when all server type generation has finished.
+ */
 async function generateServerTypesForAll() {
     await generateServerTypesForDashboard();
     await generateServerTypesForApp();
 }
 
+/**
+ * Generate TypeScript bindings for the dashboard from the Spacetime server project.
+ *
+ * Runs the `spacetime generate` command to produce TypeScript module bindings into
+ * `dashboard/src/lib/module_bindings`, using the server project as the source.
+ */
 async function generateServerTypesForDashboard() {
     await liveExec(
         "spacetime generate --lang typescript --out-dir dashboard/src/lib/module_bindings --project-path server"
     );
 }
 
+/**
+ * Generates Rust bindings for the desktop app from the server project.
+ *
+ * Invokes `spacetime generate --lang rust` in order to produce Rust module bindings
+ * into `app/src-tauri/src/module_bindings` using the server project as the source.
+ * This function has the side effect of writing generated files to that directory.
+ */
 async function generateServerTypesForApp() {
     await liveExec(
         "spacetime generate --lang rust --out-dir app/src-tauri/src/module_bindings --project-path server"

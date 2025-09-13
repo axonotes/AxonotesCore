@@ -40,13 +40,24 @@ export type ClientConnected = {};
  */
 export namespace ClientConnected {
     /**
-     * A function which returns this type represented as an AlgebraicType.
-     * This function is derived from the AlgebraicType used to generate this type.
+     * Returns the AlgebraicType representation for this type.
+     *
+     * The returned AlgebraicType is a product type with no fields (an empty/unit product).
+     *
+     * @returns The AlgebraicType for this type
      */
     export function getTypeScriptAlgebraicType(): AlgebraicType {
         return AlgebraicType.createProductType([]);
     }
 
+    /**
+     * Serializes a ClientConnected value into the provided binary writer.
+     *
+     * Uses the generated TypeScript AlgebraicType for ClientConnected (an empty product type)
+     * to perform the serialization.
+     *
+     * @param value - The ClientConnected value to serialize (empty object)
+     */
     export function serialize(
         writer: BinaryWriter,
         value: ClientConnected
@@ -54,6 +65,12 @@ export namespace ClientConnected {
         ClientConnected.getTypeScriptAlgebraicType().serialize(writer, value);
     }
 
+    /**
+     * Deserializes a ClientConnected value from a binary stream.
+     *
+     * @param reader - Binary reader positioned at a serialized ClientConnected value.
+     * @returns The deserialized ClientConnected (an empty object).
+     */
     export function deserialize(reader: BinaryReader): ClientConnected {
         return ClientConnected.getTypeScriptAlgebraicType().deserialize(reader);
     }

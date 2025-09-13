@@ -33,12 +33,29 @@ const csrf =
         return resolve(event);
     };
 
+/**
+ * Checks whether the request's Content-Type (base media type) matches any of the provided types.
+ *
+ * The header is normalized by removing any parameters (for example `; charset=utf-8`) before comparison.
+ *
+ * @param request - The incoming Request whose Content-Type will be checked
+ * @param types - One or more media types to match against (e.g., `"application/json"`, `"multipart/form-data"`)
+ * @returns `true` if the request's base Content-Type equals any of the provided types
+ */
 function isContentType(request: Request, ...types: string[]) {
     const type =
         request.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
     return types.includes(type);
 }
 
+/**
+ * Returns true if the request's Content-Type indicates an HTML form submission.
+ *
+ * Checks whether the request's Content-Type header is either
+ * `application/x-www-form-urlencoded` or `multipart/form-data`.
+ *
+ * @returns `true` when the request is a form submission content type, otherwise `false`.
+ */
 function isFormContentType(request: Request) {
     return isContentType(
         request,

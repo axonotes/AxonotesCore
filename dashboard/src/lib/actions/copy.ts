@@ -13,27 +13,19 @@ interface CopyParams {
 }
 
 /**
- * A Svelte action that copies a given text to the clipboard when the node is clicked.
- * It also provides visual feedback by temporarily changing the node's text content.
+ * Svelte action that copies `params.text` to the clipboard on click and briefly replaces the element's text content with a success message.
  *
- * @param {HTMLElement} node - The element to attach the action to.
- * @param {CopyParams} params - The configuration for the copy action.
+ * The action optionally initializes the element's text content from `params.defaultText`. On a successful copy it sets the element text to `params.successText` (defaults to `"Copied!"`) for `params.duration` milliseconds (defaults to `2000`), then restores the original/default text. If the copy fails the error is logged to the console.
  *
- * @example
- * ```svelte
- * <script>
- *   import { copy } from '$lib/actions/copy';
- *   let someText = "Hello, world!";
- * </script>
- *
- * <button use:copy={{ text: someText }}>
- *   Copy
- * </button>
- *
- * <button use:copy={{ text: "Customized", successText: "Done!", duration: 1000 }}>
- *   Copy Me
- * </button>
- * ```
+ * @param node - The HTMLElement to attach the action to.
+ * @param params - Configuration for the copy behavior. Important fields:
+ *   - `text` (string): text to copy (required).
+ *   - `successText` (string): message shown after a successful copy (default: `"Copied!"`).
+ *   - `defaultText` (string): initial text to set on the element (optional).
+ *   - `duration` (number): milliseconds to show the success text before reverting (default: `2000`).
+ * @returns An object with lifecycle methods:
+ *   - `update(newParams: CopyParams)` — replace the action parameters (updates element text if `defaultText` is provided).
+ *   - `destroy()` — removes the click listener and clears any pending revert timer.
  */
 export function copy(node: HTMLElement, params: CopyParams) {
     let timer: number;

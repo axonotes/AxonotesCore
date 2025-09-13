@@ -69,6 +69,17 @@ pub struct OAuthClient {
 }
 
 impl OAuthClient {
+    /// Creates a new OAuthClient configured for the device authorization flow with PKCE.
+    ///
+    /// Generates a cryptographically random PKCE `code_verifier` and its corresponding
+    /// `code_challenge`, builds an internal HTTP client, and stores the provided
+    /// `base_url` and `client_id`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let client = OAuthClient::new("https://api.example.com".to_string(), "my-client-id".to_string());
+    /// ```
     pub fn new(base_url: String, client_id: String) -> Self {
         let code_verifier = generate_code_verifier();
         let code_challenge = generate_code_challenge(&code_verifier);
@@ -82,6 +93,26 @@ impl OAuthClient {
         }
     }
 
+    /// Initiates the OAuth 2.0 Device Authorization request (PKCE) and returns the device authorization response.
+    ///
+    /// Sends a POST to `{base_url}/oauth/device/authorize` with the client ID, PKCE code challenge, S256 method, and the `openid profile email` scope. On HTTP success the response is parsed as `DeviceAuthResponse`. On non-success the response body is returned as an error.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use app::user_profile::auth::client::OAuthClient;
+    /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+    /// let client = OAuthClient::new("https://auth.example.com".into(), "my-client-id".into());
+    /// let auth = client.start_device_flow().await;
+    /// match auth {
+    ///     Ok(resp) => {
+    ///         println!("User code: {}", resp.user_code);
+    ///         println!("Visit: {}", resp.verification_uri_complete);
+    ///     }
+    ///     Err(e) => eprintln!("Device flow failed: {}", e),
+    /// }
+    /// # });
+    /// ```
     pub async fn start_device_flow(
         &self,
     ) -> Result<DeviceAuthResponse, Box<dyn Error + Send + Sync>> {
@@ -105,6 +136,34 @@ impl OAuthClient {
         Ok(auth_response)
     }
 
+    /// Polls the device token endpoint to check whether the user has completed authorization for the given device code.
+    ///
+    /// Returns `Ok(true)` when the server reports the device flow status as `"complete"`. Returns `Ok(false)` when
+    /// authorization is still pending or the server asks the client to slow down (in which case the function delays 2s
+    /// before returning). Returns `Err` for terminal errors such as an expired device code or other HTTP/JSON-reported errors.
+    ///
+    /// # Parameters
+    ///
+    /// - `device_code` — the device_code received from the device authorization response; this ties the poll request to the
+    ///   in-progress device authorization session.
+    ///
+    /// # Errors
+    ///
+    /// - Returns an error when the server responds with `expired_token`.
+    /// - Returns an error for non-400 HTTP failures or when the server reports an error other than `authorization_pending` or `slow_down`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = OAuthClient::new("https://example.com".to_string(), "client_id".to_string());
+    /// // `device_code` would normally come from start_device_flow()
+    /// let authorized = client.poll_for_authorization("example_device_code").await?;
+    /// if authorized {
+    ///     // proceed to exchange_for_tokens(...)
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub async fn poll_for_authorization(
         &self,
         device_code: &str,
@@ -150,6 +209,30 @@ impl OAuthClient {
         }
     }
 
+    /// Exchanges a device authorization code for OAuth 2.0 tokens.
+    ///
+    /// Sends a form-encoded POST to the client's `{base_url}/oauth/device/token` endpoint
+    /// using the device-code grant type with the stored PKCE `code_verifier`. On success
+    /// returns a parsed `TokenResponse`. If the endpoint responds with an error status,
+    /// the server `error_description` is returned as an Err.
+    ///
+    /// # Parameters
+    ///
+    /// - `device_code`: the device code previously obtained from `start_device_flow`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use app::user_profile::auth::client::OAuthClient;
+    /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+    /// let client = OAuthClient::new("https://auth.example.com".into(), "my-client-id".into());
+    /// let result = client.exchange_for_tokens("DEVICE_CODE_VALUE").await;
+    /// match result {
+    ///     Ok(tokens) => println!("access_token={}", tokens.access_token),
+    ///     Err(e) => eprintln!("exchange failed: {}", e),
+    /// }
+    /// # });
+    /// ```
     pub async fn exchange_for_tokens(
         &self,
         device_code: &str,
@@ -179,6 +262,27 @@ impl OAuthClient {
         Ok(token_response)
     }
 
+    /// Refreshes OAuth tokens using a refresh token.
+    ///
+    /// Sends the refresh token to the backend refresh endpoint (`/api/auth/refresh`)
+    /// and returns a new TokenResponse on success.
+    ///
+    /// # Returns
+    /// A `TokenResponse` containing fresh access and refresh tokens on success.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::error::Error;
+    /// # use tokio;
+    /// # #[tokio::test]
+    /// # async fn example() -> Result<(), Box<dyn Error>> {
+    /// let client = OAuthClient::new("https://auth.example.com".to_string(), "client-id".to_string());
+    /// let refreshed = client.refresh_tokens("existing-refresh-token".to_string()).await?;
+    /// assert!(!refreshed.access_token.is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn refresh_tokens(&self, refresh_token: String) -> Result<TokenResponse, Box<dyn Error + Send + Sync>> {
         let url = format!("{}/api/auth/refresh", self.base_url);
 
@@ -197,6 +301,19 @@ impl OAuthClient {
 }
 
 // PKCE helper functions
+/// Generates a cryptographically random PKCE code verifier.
+///
+/// The verifier is a 128-character string drawn from the unreserved characters
+/// allowed by the PKCE specification: ASCII letters, digits, and "-._~".
+///
+/// # Examples
+///
+/// ```
+/// let verifier = generate_code_verifier();
+/// assert_eq!(verifier.len(), 128);
+/// let allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+/// assert!(verifier.chars().all(|c| allowed.contains(c)));
+/// ```
 fn generate_code_verifier() -> String {
     use rand::Rng;
     const CHARSET: &[u8] =
@@ -211,6 +328,19 @@ fn generate_code_verifier() -> String {
         .collect()
 }
 
+/// Produce a PKCE "S256" code challenge from a code verifier.
+///
+/// The function computes the SHA-256 digest of `verifier` and returns the
+/// URL-safe base64 (no padding) encoding of that digest, suitable for use as
+/// the `code_challenge` in the OAuth 2.0 PKCE S256 flow.
+///
+/// # Examples
+///
+/// ```
+/// let verifier = "test";
+/// let challenge = generate_code_challenge(verifier);
+/// assert_eq!(challenge, "n4bQgYhx9leK-qoMVrQFaO_TxssLgi0V1sFbDwCgg");
+/// ```
 fn generate_code_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(digest)
