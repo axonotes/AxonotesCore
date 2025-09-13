@@ -6,6 +6,8 @@ import {
     parseAndValidateForm,
 } from "$lib/server/validation-schemas";
 
+const noStore = {"Cache-Control": "no-store", "Pragma": "no-cache"};
+
 export async function POST({request}) {
     try {
         // 1. Parse and validate form data with Zod
@@ -25,7 +27,7 @@ export async function POST({request}) {
                     error: oauthError,
                     error_description: validation.error,
                 },
-                {status: 400}
+                {status: 400, headers: noStore}
             );
         }
 
@@ -45,7 +47,10 @@ export async function POST({request}) {
                     error_description:
                         "Too many requests. Please try again later.",
                 },
-                {status: 429}
+                {status: 429, headers: {
+                    ...noStore,
+                    "Retry-After": String(rateLimit.retryAfter ?? 60),
+                }}
             );
         }
 
@@ -58,12 +63,20 @@ export async function POST({request}) {
                     error: "invalid_grant",
                     error_description: "Invalid or expired refresh token",
                 },
-                {status: 400}
+                {status: 400, headers: noStore}
             );
         }
 
-        // Ensure client type is set to desktop!!
-        tokenPayload.client_type = "desktop";
+        // Enforce desktop-only refresh tokens
+        if (tokenPayload.client_type !== "desktop") {
+            return json(
+                {
+                    error: "invalid_grant",
+                    error_description: "Refresh token client_type mismatch",
+                },
+                { status: 400, headers: noStore }
+            );
+        }
 
         // 4. Generate new tokens
         const {accessToken, refreshToken: newRefreshToken} =
@@ -78,7 +91,7 @@ export async function POST({request}) {
                 refresh_token: newRefreshToken,
                 scope: "openid profile email",
             },
-            {status: 200}
+            {status: 200, headers: noStore}
         );
     } catch (error) {
         console.error("Token refresh error:", error);
@@ -87,7 +100,7 @@ export async function POST({request}) {
                 error: "server_error",
                 error_description: "Internal server error",
             },
-            {status: 500}
+            {status: 500, headers: noStore}
         );
     }
 }

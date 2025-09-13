@@ -194,7 +194,7 @@ export class DesktopAuthManager {
         user_data: UserTokenPayload
     ): Promise<void> {
         // Remove dashes from user code for lookup
-        const cleanUserCode = user_code.replace("-", "");
+        const cleanUserCode = user_code.replace(/-/g, "").toUpperCase();
         const session = sessionCache.get<DeviceFlowSession>(
             `user_${cleanUserCode}`
         );
@@ -287,10 +287,10 @@ export class DesktopAuthManager {
      */
     async validateUserCode(user_code: string): Promise<boolean> {
         // Remove dashes and validate format
-        const cleanUserCode = user_code.replace("-", "");
+        const cleanUserCode = user_code.replace(/-/g, "").toUpperCase();
 
         // Updated regex to match our character set
-        if (!/^[123456789ABCDEFGHJKLMNOPQRSTUVWXYZ]{8}$/.test(cleanUserCode)) {
+        if (!/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/.test(cleanUserCode)) {
             return false;
         }
 

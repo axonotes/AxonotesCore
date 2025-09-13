@@ -9,7 +9,7 @@
     "lint-staged": {
         "*.{js,ts,svelte,json,md}": "prettier --write",
         "*.{js,ts,svelte}": "eslint --fix",
-        "**/src-tauri/*.rs": "cargo fmt --",
+        "**/src-tauri/**/*.rs": "cargo fmt --",
         "server/**/*.rs": "cargo fmt --",
         "SpacetimeDB/**/*.rs": "cargo fmt --"
     },
