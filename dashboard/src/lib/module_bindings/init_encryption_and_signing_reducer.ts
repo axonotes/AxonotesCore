@@ -84,6 +84,11 @@ export namespace InitEncryptionAndSigning {
         ]);
     }
 
+    /**
+     * Serializes an InitEncryptionAndSigning value into a binary writer.
+     *
+     * @param value - The InitEncryptionAndSigning object to serialize.
+     */
     export function serialize(
         writer: BinaryWriter,
         value: InitEncryptionAndSigning
@@ -94,6 +99,11 @@ export namespace InitEncryptionAndSigning {
         );
     }
 
+    /**
+     * Reads and returns an InitEncryptionAndSigning value from the provided binary reader.
+     *
+     * @returns The deserialized InitEncryptionAndSigning object.
+     */
     export function deserialize(
         reader: BinaryReader
     ): InitEncryptionAndSigning {

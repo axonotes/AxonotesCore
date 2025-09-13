@@ -25,6 +25,15 @@ export const spacetime = writable<SpacetimeState>({
 
 let _connectionInstance: DbConnection | null = null;
 
+/**
+ * Attempts to obtain a fresh access token from the server and store it in a cookie.
+ *
+ * Sends a POST request to "/api/auth/refresh"; on success stores the returned `accessToken`
+ * in the PUBLIC_ACCESS_TOKEN_COOKIE_NAME cookie and resolves `true`. If the HTTP response is
+ * not OK or a network/error occurs, resolves `false`.
+ *
+ * @returns `true` when a new access token was successfully retrieved and stored, otherwise `false`.
+ */
 async function refreshAccessToken(): Promise<boolean> {
     try {
         const response = await fetch("/api/auth/refresh", {method: "POST"});
@@ -44,7 +53,18 @@ async function refreshAccessToken(): Promise<boolean> {
     }
 }
 
-// The main connection function
+/**
+ * Starts a Spacetime DB connection if running in the browser and no connection is active.
+ *
+ * Attempts to read an access token from cookies, optionally retries token refresh up to
+ * `maxRefreshCalls` times (500ms between attempts), and then establishes a DbConnection using
+ * the token. On successful connection the spacetime store is updated to `connected` and a
+ * subscription is created to load the current user by identity. On disconnect or connection
+ * error the function will try to refresh the token and reconnect; if refresh fails it sets the
+ * store to an `error` state and redirects the user to `/login`.
+ *
+ * @param maxRefreshCalls - Maximum recursive refresh attempts to perform when no access token is present (default: 5).
+ */
 export function connectToSpacetime(maxRefreshCalls: number = 5) {
     if (!browser || get(spacetime).status !== "disconnected") return;
 
@@ -131,10 +151,15 @@ export function connectToSpacetime(maxRefreshCalls: number = 5) {
 let connectionPromise: Promise<SpacetimeState> | null = null;
 
 /**
- * Ensures the spacetime store is connected and returns the handle.
- * Throws an error if the connection fails or times out.
- * @param {number} timeoutMs - The timeout in milliseconds.
- * @returns {Promise<SpacetimeState>} A promise that resolves with the connected handle.
+ * Ensure the spacetime store reaches a connected state and return the connected handle.
+ *
+ * Waits for the module-level `spacetime` store to become `status === "connected"`. Concurrent
+ * callers are de-duplicated (only one connection attempt is performed). If the store does not
+ * become connected within `timeoutMs`, the returned promise rejects.
+ *
+ * @param timeoutMs - Maximum time in milliseconds to wait for a connection (default: 3000).
+ * @returns A promise that resolves with the connected SpacetimeState.
+ * @throws Error if the connection times out or the store enters an `error` state.
  */
 export async function ensureSpacetimeConnected(
     timeoutMs: number = 3000
@@ -186,6 +211,17 @@ export async function ensureSpacetimeConnected(
     }
 }
 
+/**
+ * Retrieves the currently authenticated Spacetime DB user, waiting for a connection if needed.
+ *
+ * Ensures a Spacetime connection (up to `timeoutMs`) and then locates the user whose identity
+ * matches the active connection. If not running in the browser, or if no connection is available,
+ * returns `null`. If the user record is missing any required cryptographic fields, navigates the
+ * browser to `/auth/setup` and returns `null`.
+ *
+ * @param timeoutMs - Maximum time in milliseconds to wait for a connected Spacetime handle (default: 3000)
+ * @returns The matched `User` when connected and fully provisioned, otherwise `null`
+ */
 export async function getSpacetimeUser(
     timeoutMs: number = 3000
 ): Promise<User | null> {

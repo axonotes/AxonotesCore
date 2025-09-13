@@ -45,8 +45,15 @@ export type UpdateEncryptionKeys = {
  */
 export namespace UpdateEncryptionKeys {
     /**
-     * A function which returns this type represented as an AlgebraicType.
-     * This function is derived from the AlgebraicType used to generate this type.
+     * Return an AlgebraicType describing the UpdateEncryptionKeys product type.
+     *
+     * The resulting product type has four string fields:
+     * - `newEncryptedPrivateKey`
+     * - `newEncryptedPrivateSigningKey`
+     * - `newArgonSalt`
+     * - `signatureBase64`
+     *
+     * @returns An AlgebraicType representing the UpdateEncryptionKeys structure.
      */
     export function getTypeScriptAlgebraicType(): AlgebraicType {
         return AlgebraicType.createProductType([
@@ -69,6 +76,14 @@ export namespace UpdateEncryptionKeys {
         ]);
     }
 
+    /**
+     * Writes an UpdateEncryptionKeys value to a BinaryWriter as its binary representation.
+     *
+     * Delegates to the generated algebraic type serializer for the UpdateEncryptionKeys product type;
+     * the provided `writer` will be advanced with the serialized bytes for `value`.
+     *
+     * @param value - The UpdateEncryptionKeys object to serialize.
+     */
     export function serialize(
         writer: BinaryWriter,
         value: UpdateEncryptionKeys
@@ -79,6 +94,11 @@ export namespace UpdateEncryptionKeys {
         );
     }
 
+    /**
+     * Deserializes an UpdateEncryptionKeys value from a BinaryReader.
+     *
+     * @returns The deserialized UpdateEncryptionKeys object.
+     */
     export function deserialize(reader: BinaryReader): UpdateEncryptionKeys {
         return UpdateEncryptionKeys.getTypeScriptAlgebraicType().deserialize(
             reader

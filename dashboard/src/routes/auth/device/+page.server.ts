@@ -9,6 +9,15 @@ import {
 } from "$env/static/private";
 import {PUBLIC_ACCESS_TOKEN_COOKIE_NAME} from "$env/static/public";
 
+/**
+ * Validates a device `user_code`, determines whether the requester is already authenticated, and returns the code plus current user info when available.
+ *
+ * If `user_code` is missing or invalid this function throws a 302 redirect to an error page.
+ *
+ * @returns An object containing:
+ * - `user_code` — the validated device user code from the URL query string.
+ * - `currentUser` — `null` if no valid access token is present; otherwise an object with `id`, `email`, `firstName`, `lastName`, and `fullName`.
+ */
 export async function load({url, cookies}) {
     const user_code = url.searchParams.get("user_code");
 

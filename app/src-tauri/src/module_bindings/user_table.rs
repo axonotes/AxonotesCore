@@ -31,6 +31,17 @@ pub trait UserTableAccess {
 }
 
 impl UserTableAccess for super::RemoteTables {
+    /// Returns a typed handle to the "user" table scoped to this RemoteTables context.
+    ///
+    /// The returned `UserTableHandle` provides typed access, iteration, and event callback
+    /// registration for rows of type `User`.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let rt: super::RemoteTables = /* obtain RemoteTables */ unimplemented!();
+    /// let user_table = rt.user();
+    /// ```
     fn user(&self) -> UserTableHandle<'_> {
         UserTableHandle {
             imp: self.imp.get_table::<User>("user"),
@@ -46,15 +57,51 @@ impl<'ctx> __sdk::Table for UserTableHandle<'ctx> {
     type Row = User;
     type EventContext = super::EventContext;
 
+    /// Returns the number of rows currently stored in the user table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let num = user.count();
+    /// assert!(num <= u64::MAX);
+    /// ```
     fn count(&self) -> u64 {
         self.imp.count()
     }
+    /// Returns an iterator over all rows in the table.
+    ///
+    /// The iterator yields owned `User` values (one per row).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// for user in table_handle.iter() {
+    ///     // `user` is an owned `User`
+    ///     println!("{}", user.identity);
+    /// }
+    /// ```
     fn iter(&self) -> impl Iterator<Item = User> + '_ {
         self.imp.iter()
     }
 
     type InsertCallbackId = UserInsertCallbackId;
 
+    /// Register an insert event callback for the User table and return its callback id.
+    ///
+    /// The provided `callback` is invoked for every inserted row with the event context and a
+    /// reference to the inserted `User`. Returns a `UserInsertCallbackId` which can be used to
+    /// remove the callback later.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let handle: UserTableHandle<'_> = /* obtained from RemoteTables */ unimplemented!();
+    /// let cb_id = handle.on_insert(|ctx: &super::EventContext, user: &User| {
+    ///     // react to insertion
+    ///     let _ = (ctx, user);
+    /// });
+    /// // later: handle.remove_on_insert(cb_id);
+    /// ```
     fn on_insert(
         &self,
         callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
@@ -62,12 +109,39 @@ impl<'ctx> __sdk::Table for UserTableHandle<'ctx> {
         UserInsertCallbackId(self.imp.on_insert(Box::new(callback)))
     }
 
+    /// Unregisters a previously-registered insert callback so it will no longer be invoked.
+    ///
+    /// If the callback id is unknown or already removed this is a no-op.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `handle` is a `UserTableHandle`
+    /// let cb_id = handle.on_insert(|ctx, row| { /* handle insert */ });
+    /// handle.remove_on_insert(cb_id);
+    /// ```
     fn remove_on_insert(&self, callback: UserInsertCallbackId) {
         self.imp.remove_on_insert(callback.0)
     }
 
     type DeleteCallbackId = UserDeleteCallbackId;
 
+    /// Register a deletion callback for rows in the `user` table.
+    ///
+    /// The callback is invoked with the event context and the deleted row. Returns a
+    /// `UserDeleteCallbackId` that can be used to unregister the callback.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use module_bindings::UserTableHandle;
+    /// # let handle: UserTableHandle = unsafe { std::mem::zeroed() };
+    /// let _cb_id = handle.on_delete(|ctx, row| {
+    ///     // react to deletion
+    ///     let _ = ctx;
+    ///     let _ = row;
+    /// });
+    /// ```
     fn on_delete(
         &self,
         callback: impl FnMut(&Self::EventContext, &Self::Row) + Send + 'static,
@@ -75,11 +149,33 @@ impl<'ctx> __sdk::Table for UserTableHandle<'ctx> {
         UserDeleteCallbackId(self.imp.on_delete(Box::new(callback)))
     }
 
+    /// Unregisters a previously-registered delete callback for the User table.
+    ///
+    /// If the provided `callback` id corresponds to a registered delete callback, it will be removed;
+    /// otherwise this is a no-op.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let id: UserDeleteCallbackId = table.on_delete(|ctx, row| { /* ... */ });
+    /// table.remove_on_delete(id);
+    /// ```
     fn remove_on_delete(&self, callback: UserDeleteCallbackId) {
         self.imp.remove_on_delete(callback.0)
     }
 }
 
+/// Register the "user" table in the client cache and add its unique `identity` constraint.
+///
+/// Ensures a typed table handle for `"user"` exists in `client_cache` and attaches a unique
+/// constraint named `"identity"` that indexes the `User::identity` field for fast lookups.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Given a mutable `client_cache: __sdk::ClientCache<super::RemoteModule>`
+/// register_table(&mut client_cache);
+/// ```
 #[doc(hidden)]
 pub(super) fn register_table(
     client_cache: &mut __sdk::ClientCache<super::RemoteModule>,
@@ -94,6 +190,23 @@ pub struct UserUpdateCallbackId(__sdk::CallbackId);
 impl<'ctx> __sdk::TableWithPrimaryKey for UserTableHandle<'ctx> {
     type UpdateCallbackId = UserUpdateCallbackId;
 
+    /// Registers an update callback for the User table.
+    ///
+    /// The callback is invoked for each primary-keyed update with the event context,
+    /// the previous row value, and the new row value. Returns a `UserUpdateCallbackId`
+    /// that can be passed to `remove_on_update` to unregister the callback.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cb_id = table.on_update(|ctx, old, new| {
+    ///     // `old` is the pre-update row, `new` is the post-update row
+    ///     assert_eq!(old.identity, new.identity);
+    /// });
+    ///
+    /// // later, to remove:
+    /// table.remove_on_update(cb_id);
+    /// ```
     fn on_update(
         &self,
         callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row)
@@ -103,11 +216,35 @@ impl<'ctx> __sdk::TableWithPrimaryKey for UserTableHandle<'ctx> {
         UserUpdateCallbackId(self.imp.on_update(Box::new(callback)))
     }
 
+    /// Removes a previously-registered update callback so it will no longer be invoked.
+    ///
+    /// The `callback` value must be one returned from this table's `on_update` method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `table` is a `UserTableHandle` and `cb` was returned by `table.on_update(...)`:
+    /// // table.remove_on_update(cb);
+    /// ```
     fn remove_on_update(&self, callback: UserUpdateCallbackId) {
         self.imp.remove_on_update(callback.0)
     }
 }
 
+/// Parse a raw websocket `TableUpdate` (BSATN format) into a typed `__sdk::TableUpdate<User>`.
+///
+/// On success returns the typed `TableUpdate<User>`; if parsing fails the error is
+/// converted into an `__sdk::InternalError` using `failed_parse("TableUpdate<User>", "TableUpdate")`
+/// with the original parse error attached as the cause.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Convert a raw websocket TableUpdate payload into a typed update for the `User` table.
+/// // Errors are returned as `__sdk::InternalError`.
+/// let raw: __ws::TableUpdate<__ws::BsatnFormat> = /* received from websocket */ unimplemented!();
+/// let typed: __sdk::Result<__sdk::TableUpdate<User>> = parse_table_update(raw);
+/// ```
 #[doc(hidden)]
 pub(super) fn parse_table_update(
     raw_updates: __ws::TableUpdate<__ws::BsatnFormat>,
@@ -132,7 +269,19 @@ pub struct UserIdentityUnique<'ctx> {
 }
 
 impl<'ctx> UserTableHandle<'ctx> {
-    /// Get a handle on the `identity` unique index on the table `user`.
+    /// Returns a handle to the table's `identity` unique index.
+    ///
+    /// The returned `UserIdentityUnique` lets callers perform identity-based lookups
+    /// (e.g., `find`) against the `user` table's unique `identity` column.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `tables` is a RemoteTables-like context; `table` is the user table handle.
+    /// // let table = tables.user();
+    /// // let unique = table.identity();
+    /// // let maybe_user = unique.find(&some_identity);
+    /// ```
     pub fn identity(&self) -> UserIdentityUnique<'ctx> {
         UserIdentityUnique {
             imp: self
@@ -144,8 +293,18 @@ impl<'ctx> UserTableHandle<'ctx> {
 }
 
 impl<'ctx> UserIdentityUnique<'ctx> {
-    /// Find the subscribed row whose `identity` column value is equal to `col_val`,
-    /// if such a row is present in the client cache.
+    /// Returns the cached `User` whose `identity` column equals `col_val`, if present.
+    ///
+    /// This performs a lookup against the client-side unique index and does not query the remote store.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let result = user_identity_unique.find(&identity_value);
+    /// if let Some(user) = result {
+    ///     assert_eq!(user.identity, identity_value);
+    /// }
+    /// ```
     pub fn find(&self, col_val: &__sdk::Identity) -> Option<User> {
         self.imp.find(col_val)
     }

@@ -3,6 +3,16 @@ import {desktopAuthManager} from "$lib/server/oauth";
 import {verifyToken} from "$lib/server/jwt";
 import {PUBLIC_ACCESS_TOKEN_COOKIE_NAME} from "$env/static/public";
 
+/**
+ * Completes a device authentication flow and redirects to success or an error page.
+ *
+ * Reads `user_code` from the request query and requires a valid access token cookie (named by
+ * `PUBLIC_ACCESS_TOKEN_COOKIE_NAME`). If the code or token is missing/invalid, or if completion
+ * fails, the handler issues a 302 redirect to `/auth/device/error` with an appropriate `error`
+ * query parameter (`missing_user_code`, `not_authenticated`, `invalid_token`, or `completion_failed`).
+ *
+ * On successful completion it issues a 302 redirect to `/auth/device/success`.
+ */
 export async function GET({url, cookies}) {
     const user_code = url.searchParams.get("user_code");
 

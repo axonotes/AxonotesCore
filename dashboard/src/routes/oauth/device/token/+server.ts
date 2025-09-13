@@ -6,6 +6,19 @@ import {
     parseAndValidateForm,
 } from "$lib/server/validation-schemas";
 
+/**
+ * Polls the device authorization status for a given `device_code`.
+ *
+ * Validates the `device_code` format (UUIDv4-like), enforces a client-specific
+ * polling rate limit, and delegates status checks to `desktopAuthManager.pollDeviceStatus`.
+ *
+ * Returns JSON responses with OAuth2-style error fields and appropriate HTTP statuses:
+ * - 200: { status: "complete", message: string } when authorization is complete.
+ * - 400: invalid_request for missing/invalid `device_code` or when `pollDeviceStatus` returns an error.
+ * - 400: slow_down when the client is being asked to reduce poll frequency.
+ * - 429: rate_limit_exceeded when the client exceeded the allowed rate.
+ * - 500: server_error on unexpected runtime failures.
+ */
 export async function GET({url, request}) {
     try {
         // 1. Rate limiting for polling
@@ -89,6 +102,21 @@ export async function GET({url, request}) {
     }
 }
 
+/**
+ * Handle a device token exchange request (OAuth2 Device Authorization Grant).
+ *
+ * Validates form input, enforces client rate limits for token exchanges, and
+ * attempts to exchange a device code + code verifier for tokens via the
+ * desktop authentication manager. On validation or rate-limit failure the
+ * handler returns an OAuth2-style error response; on internal or exchange
+ * failures it maps common internal error messages to appropriate OAuth2 error
+ * codes (`invalid_grant`, `authorization_pending`, `expired_token`, etc.).
+ *
+ * Responses are returned as JSON with appropriate HTTP status codes:
+ * - 200: successful token response (token JSON returned from the auth manager)
+ * - 400: validation errors or mapped OAuth2 errors
+ * - 429: rate limit exceeded
+ */
 export async function POST({request}) {
     try {
         // 1. Parse and validate form data with Zod

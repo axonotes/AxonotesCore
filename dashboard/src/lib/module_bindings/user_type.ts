@@ -48,8 +48,19 @@ export type User = {
  */
 export namespace User {
     /**
-     * A function which returns this type represented as an AlgebraicType.
-     * This function is derived from the AlgebraicType used to generate this type.
+     * Returns an AlgebraicType describing the User product type.
+     *
+     * The returned product type has eight elements (in order):
+     *  - `identity`: Identity
+     *  - `publicKey`: optional string
+     *  - `encryptedPrivateKey`: optional string
+     *  - `encryptedBackupKey`: optional string
+     *  - `publicSigningKey`: optional string
+     *  - `encryptedPrivateSigningKey`: optional string
+     *  - `encryptedPrivateBackupSigningKey`: optional string
+     *  - `argonSalt`: optional string
+     *
+     * @returns An AlgebraicType representing the TypeScript `User` product type.
      */
     export function getTypeScriptAlgebraicType(): AlgebraicType {
         return AlgebraicType.createProductType([
@@ -88,10 +99,21 @@ export namespace User {
         ]);
     }
 
+    /**
+     * Serializes a User value into a BinaryWriter.
+     *
+     * Writes the User to the provided writer using the generated algebraic-type representation.
+     */
     export function serialize(writer: BinaryWriter, value: User): void {
         User.getTypeScriptAlgebraicType().serialize(writer, value);
     }
 
+    /**
+     * Deserializes a User from the given binary reader.
+     *
+     * @param reader - BinaryReader positioned at the start of a serialized `User` value
+     * @returns The deserialized `User`
+     */
     export function deserialize(reader: BinaryReader): User {
         return User.getTypeScriptAlgebraicType().deserialize(reader);
     }

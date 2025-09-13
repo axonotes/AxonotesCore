@@ -18,6 +18,28 @@ pub(super) struct UpdateEncryptionKeysArgs {
 }
 
 impl From<UpdateEncryptionKeysArgs> for super::Reducer {
+    /// Convert `UpdateEncryptionKeysArgs` into the corresponding `Reducer::UpdateEncryptionKeys` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = UpdateEncryptionKeysArgs {
+    ///     new_encrypted_private_key: "key".into(),
+    ///     new_encrypted_private_signing_key: "signing".into(),
+    ///     new_argon_salt: "salt".into(),
+    ///     signature_base_64: "sig".into(),
+    /// };
+    /// let reducer: super::Reducer = args.into();
+    /// match reducer {
+    ///     super::Reducer::UpdateEncryptionKeys { new_encrypted_private_key, new_encrypted_private_signing_key, new_argon_salt, signature_base_64 } => {
+    ///         assert_eq!(new_encrypted_private_key, "key");
+    ///         assert_eq!(new_encrypted_private_signing_key, "signing");
+    ///         assert_eq!(new_argon_salt, "salt");
+    ///         assert_eq!(signature_base_64, "sig");
+    ///     }
+    ///     _ => panic!("unexpected reducer variant"),
+    /// }
+    /// ```
     fn from(args: UpdateEncryptionKeysArgs) -> Self {
         Self::UpdateEncryptionKeys {
             new_encrypted_private_key: args.new_encrypted_private_key,
@@ -79,6 +101,25 @@ pub trait update_encryption_keys {
 }
 
 impl update_encryption_keys for super::RemoteReducers {
+    /// Requests the remote module to invoke the `update_encryption_keys` reducer with new encrypted keys and signature.
+    ///
+    /// Sends the given encrypted private key, encrypted private signing key, Argon salt, and signature to the remote reducer.
+    /// Returns Ok(()) if the request was successfully sent; otherwise returns an error from the SDK.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # // `remote` is an instance implementing the `update_encryption_keys` extension (e.g., RemoteReducers).
+    /// # fn example_call(remote: &impl update_encryption_keys) -> __sdk::Result<()> {
+    /// remote.update_encryption_keys(
+    ///     "enc_priv_key".to_string(),
+    ///     "enc_signing_key".to_string(),
+    ///     "argon_salt".to_string(),
+    ///     "signature_base64".to_string(),
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
     fn update_encryption_keys(
         &self,
         new_encrypted_private_key: String,
@@ -96,6 +137,25 @@ impl update_encryption_keys for super::RemoteReducers {
             },
         )
     }
+    /// Registers a callback to be invoked when the `update_encryption_keys` reducer is triggered.
+    ///
+    /// The provided callback will be called with:
+    /// - a reference to the reducer event context, and
+    /// - references to the four string fields: `new_encrypted_private_key`, `new_encrypted_private_signing_key`,
+    ///   `new_argon_salt`, and `signature_base_64`.
+    ///
+    /// Returns an `UpdateEncryptionKeysCallbackId` which can be used to remove the callback later.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// // `remote` implements the `update_encryption_keys` extension trait.
+    /// let cb_id = remote.on_update_encryption_keys(|ctx, new_key, new_signing_key, argon_salt, sig_b64| {
+    ///     // handle the update; `new_key`, `new_signing_key`, `argon_salt`, and `sig_b64` are &String
+    ///     println!("Received new keys: {}, {}", new_key, new_signing_key);
+    /// });
+    /// // Later: remote.remove_on_update_encryption_keys(cb_id);
+    /// ```
     fn on_update_encryption_keys(
         &self,
         mut callback: impl FnMut(
@@ -137,6 +197,18 @@ impl update_encryption_keys for super::RemoteReducers {
             }),
         ))
     }
+    /// Unregisters a previously registered callback for the `update_encryption_keys` reducer.
+    ///
+    /// The provided `callback` id (returned by `on_update_encryption_keys`) is removed so the callback
+    /// will no longer be invoked when the reducer runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // let reducers = /* instance of RemoteReducers */ ;
+    /// // let callback_id = reducers.on_update_encryption_keys(|_ctx, a, b, c, d| { /* ... */ });
+    /// // reducers.remove_on_update_encryption_keys(callback_id);
+    /// ```
     fn remove_on_update_encryption_keys(
         &self,
         callback: UpdateEncryptionKeysCallbackId,
@@ -161,6 +233,18 @@ pub trait set_flags_for_update_encryption_keys {
 }
 
 impl set_flags_for_update_encryption_keys for super::SetReducerFlags {
+    /// Set call-reducer flags for the `update_encryption_keys` reducer.
+    ///
+    /// This configures how the remote reducer invocation is performed (e.g., retry, timeout,
+    /// or delivery semantics) by applying the provided `__ws::CallReducerFlags` to the
+    /// "update_encryption_keys" reducer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Given an implementation of `SetReducerFlags` named `set_flags_impl`:
+    /// // set_flags_impl.update_encryption_keys(__ws::CallReducerFlags::default());
+    /// ```
     fn update_encryption_keys(&self, flags: __ws::CallReducerFlags) {
         self.imp
             .set_call_reducer_flags("update_encryption_keys", flags);

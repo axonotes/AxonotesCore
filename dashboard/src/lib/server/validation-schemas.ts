@@ -107,7 +107,18 @@ export const validateFormSize = (request: Request) => {
     }
 };
 
-// Generic form data parser with Zod validation
+/**
+ * Parse URL-encoded form data from a Request and validate it against a Zod schema.
+ *
+ * Attempts to enforce form size and content-type constraints, convert the request's FormData
+ * into a plain string-record, and run `schema.safeParse` on that object.
+ *
+ * @param request - Incoming Request expected to have `application/x-www-form-urlencoded` body.
+ * @param schema - Zod schema used to validate the parsed form values.
+ * @returns On success `{ success: true, data }` where `data` is the parsed and validated value.
+ *          On failure `{ success: false, error }` where `error` is either the first Zod issue message
+ *          or an error message produced while reading/validating the request.
+ */
 export async function parseAndValidateForm<T>(
     request: Request,
     schema: z.ZodSchema<T>

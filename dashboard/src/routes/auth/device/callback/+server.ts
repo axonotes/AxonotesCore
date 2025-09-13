@@ -11,6 +11,26 @@ import {IN_DEVELOPMENT} from "$lib/utils";
 import {getTokenLifetimes} from "$lib/server/jwt";
 import {PUBLIC_ACCESS_TOKEN_COOKIE_NAME} from "$env/static/public";
 
+/**
+ * SvelteKit GET route handler for the WorkOS device flow callback.
+ *
+ * Exchanges the WorkOS authorization `code` (from the query) for a user and WorkOS access token,
+ * validates required fields (user.email and a string `sid` in the WorkOS token), generates
+ * temporary web access and refresh tokens, sets three cookies (public access token, HttpOnly refresh
+ * token, and WorkOS session id), and then redirects the client to the device gate flow with the
+ * original `state` (used as `user_code`).
+ *
+ * On missing `code` or `state`, or on any authentication/validation failure, the handler redirects
+ * to /auth/device/error with an appropriate error query (`invalid_request` or `auth_failed`).
+ *
+ * Cookies set:
+ * - PUBLIC_ACCESS_TOKEN_COOKIE_NAME: non-HttpOnly access token for client-side use (SameSite=lax).
+ * - REFRESH_TOKEN_COOKIE_NAME: HttpOnly refresh token (SameSite=strict).
+ * - WORKOS_SESSION_ID_COOKIE_NAME: HttpOnly WorkOS session id (`sid`) (SameSite=lax).
+ *
+ * Cookie `secure` flags depend on the IN_DEVELOPMENT flag; cookie lifetimes use token lifetimes or a
+ * one-week TTL for the WorkOS session id.
+ */
 export async function GET({url, cookies}) {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state"); // This is our user_code

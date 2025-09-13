@@ -61,8 +61,13 @@ if (
 }
 
 /**
- * Clean JWT payload by removing JWT-specific claims
- * This prevents conflicts when generating new tokens
+ * Return a UserTokenPayload with standard JWT claim fields removed.
+ *
+ * Removes `exp`, `iat`, `nbf`, and `jti` from a decoded JWT payload to avoid
+ * claim conflicts when creating a new token.
+ *
+ * @param payload - Decoded JWT payload (may include standard JWT claims)
+ * @returns The payload cast to `UserTokenPayload` without `exp`, `iat`, `nbf`, or `jti`
  */
 function cleanJWTPayload(payload: any): UserTokenPayload {
     const {exp, iat, nbf, jti, ...cleanPayload} = payload;
@@ -70,7 +75,15 @@ function cleanJWTPayload(payload: any): UserTokenPayload {
 }
 
 /**
- * Signs a payload to generate a short-lived ACCESS token.
+ * Generate a signed, short-lived access JWT for the given user payload.
+ *
+ * The function removes any existing JWT claim fields (exp, iat, nbf, jti) from
+ * `payload` before signing. Use `options.accessTokenLifetime` to override the
+ * default web access token lifetime.
+ *
+ * @param payload - The user JWT payload; claim fields will be stripped before signing.
+ * @param options - Optional lifetimes to override defaults (only `accessTokenLifetime` is used).
+ * @returns A signed JWT access token string.
  */
 export function generateAccessToken(
     payload: UserTokenPayload,
@@ -90,7 +103,15 @@ export function generateAccessToken(
 }
 
 /**
- * Signs a payload to generate a long-lived REFRESH token.
+ * Generate a signed refresh JWT for the given user payload.
+ *
+ * The payload is sanitized to remove any existing JWT claim fields before signing.
+ * The token lifetime is taken from `options.refreshTokenLifetime` when provided,
+ * otherwise the module's default refresh lifetime is used.
+ *
+ * @param payload - The user payload to embed in the token (will be cleaned of standard JWT claims)
+ * @param options - Optional overrides for token lifetimes
+ * @returns A signed JWT string representing a refresh token
  */
 export function generateRefreshToken(
     payload: UserTokenPayload,
@@ -110,7 +131,9 @@ export function generateRefreshToken(
 }
 
 /**
- * Generate tokens specifically for web clients (shorter lifetimes)
+ * Generate an access token and refresh token using the web (shorter) lifetimes.
+ *
+ * @returns An object containing `accessToken` and `refreshToken` as signed JWT strings.
  */
 export function generateWebTokens(payload: UserTokenPayload) {
     return {
@@ -126,7 +149,12 @@ export function generateWebTokens(payload: UserTokenPayload) {
 }
 
 /**
- * Generate tokens specifically for desktop clients (longer lifetimes)
+ * Create an access token and a refresh token using the desktop (longer) lifetimes.
+ *
+ * The provided `payload` is signed into both tokens and intended for desktop clients.
+ *
+ * @param payload - JWT payload to embed in the tokens; `client_type` is expected to indicate the client (e.g., `"desktop"`).
+ * @returns An object with `accessToken` and `refreshToken` strings signed with the desktop token lifetimes.
  */
 export function generateDesktopTokens(payload: UserTokenPayload) {
     return {
@@ -142,7 +170,12 @@ export function generateDesktopTokens(payload: UserTokenPayload) {
 }
 
 /**
- * Generate tokens based on client type
+ * Generate an access token and refresh token for the given user payload.
+ *
+ * Chooses desktop token lifetimes when `payload.client_type === "desktop"`, otherwise uses web lifetimes.
+ *
+ * @param payload - The user JWT payload; its `client_type` field controls which token lifetimes are used.
+ * @returns An object with `accessToken` and `refreshToken` strings.
  */
 export function generateTokens(payload: UserTokenPayload) {
     if (payload.client_type === "desktop") {
@@ -153,7 +186,10 @@ export function generateTokens(payload: UserTokenPayload) {
 }
 
 /**
- * Get token lifetime in milliseconds for client use
+ * Return access and refresh token lifetimes in milliseconds for the specified client type.
+ *
+ * @param isDesktop - If true, use desktop token lifetimes; otherwise use web lifetimes.
+ * @returns An object with `accessTokenMs` and `refreshTokenMs` (both numbers, milliseconds).
  */
 export function getTokenLifetimes(isDesktop: boolean = false) {
     if (isDesktop) {
@@ -170,8 +206,12 @@ export function getTokenLifetimes(isDesktop: boolean = false) {
 }
 
 /**
- * Verifies any JWT (access or refresh) using the PUBLIC key.
- * @returns The decoded payload, or null if verification fails.
+ * Verifies a JWT (access or refresh) and returns the decoded payload.
+ *
+ * Verification includes signature and standard claim checks; returns `null` if the token is invalid,
+ * expired, or cannot be decoded.
+ *
+ * @returns The decoded `UserTokenPayload` on success, or `null` on verification failure.
  */
 export function verifyToken(token: string): UserTokenPayload | null {
     try {
