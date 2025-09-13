@@ -1,7 +1,10 @@
 import {json} from "@sveltejs/kit";
 import {desktopAuthManager} from "$lib/server/oauth";
 import {rateLimiter} from "$lib/server/rate-limiter";
-import {InputValidator} from "$lib/server/input-validator";
+import {
+    deviceTokenSchema,
+    parseAndValidateForm,
+} from "$lib/server/validation-schemas";
 
 export async function GET({url, request}) {
     try {
@@ -88,17 +91,29 @@ export async function GET({url, request}) {
 
 export async function POST({request}) {
     try {
-        // 1. Input validation
-        const validation = await InputValidator.validateFormData(request);
-        if (!validation.valid) {
+        // 1. Parse and validate form data with Zod
+        const validation = await parseAndValidateForm(
+            request,
+            deviceTokenSchema
+        );
+        if (!validation.success) {
+            // Map Zod errors to OAuth2 errors
+            let oauthError = "invalid_request";
+            if (validation.error.includes("grant type")) {
+                oauthError = "unsupported_grant_type";
+            }
+
             return json(
                 {
-                    error: "invalid_request",
+                    error: oauthError,
                     error_description: validation.error,
                 },
                 {status: 400}
             );
         }
+
+        const {grant_type, device_code, code_verifier, client_id} =
+            validation.data;
 
         // 2. Rate limiting
         const clientId = rateLimiter.getClientIdentifier(request);
@@ -118,75 +133,10 @@ export async function POST({request}) {
             );
         }
 
-        // 3. Parse form data with error handling
-        let formData: FormData;
-        try {
-            formData = await request.formData();
-        } catch (error) {
-            return json(
-                {
-                    error: "invalid_request",
-                    error_description: "Invalid form data",
-                },
-                {status: 400}
-            );
-        }
-
-        const grant_type = formData.get("grant_type")?.toString();
-        const device_code = formData.get("device_code")?.toString();
-        const code_verifier = formData.get("code_verifier")?.toString();
-        const client_id = formData.get("client_id")?.toString();
-
-        // Validate field lengths
-        const fieldValidations = [
-            InputValidator.validateFieldLength(grant_type, "grant_type"),
-            InputValidator.validateFieldLength(device_code, "device_code"),
-            InputValidator.validateFieldLength(code_verifier, "code_verifier"),
-            InputValidator.validateFieldLength(client_id, "client_id"),
-        ];
-
-        for (const validation of fieldValidations) {
-            if (!validation.valid) {
-                return json(
-                    {
-                        error: "invalid_request",
-                        error_description: validation.error,
-                    },
-                    {status: 400}
-                );
-            }
-        }
-
-        // Validate grant type
-        if (grant_type !== "urn:ietf:params:oauth:grant-type:device_code") {
-            return json(
-                {
-                    error: "unsupported_grant_type",
-                    error_description:
-                        "Only device_code grant type is supported",
-                },
-                {status: 400}
-            );
-        }
-
-        // Validate required parameters
-        const requiredParams = {device_code, code_verifier};
-        const paramValidation =
-            InputValidator.validateRequiredParams(requiredParams);
-        if (!paramValidation.valid) {
-            return json(
-                {
-                    error: "invalid_request",
-                    error_description: paramValidation.error,
-                },
-                {status: 400}
-            );
-        }
-
-        // Exchange device code for tokens
+        // 3. Exchange device code for tokens
         const tokenResponse = await desktopAuthManager.exchangeDeviceToken(
-            device_code!,
-            code_verifier!
+            device_code,
+            code_verifier
         );
 
         return json(tokenResponse, {status: 200});

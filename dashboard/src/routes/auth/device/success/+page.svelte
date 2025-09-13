@@ -1,6 +1,5 @@
 <script lang="ts">
     import {CheckCircle} from "@lucide/svelte";
-    import {onMount} from "svelte";
 </script>
 
 <div class="grid w-full items-center lg:mt-24">

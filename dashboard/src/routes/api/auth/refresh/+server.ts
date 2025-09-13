@@ -29,14 +29,7 @@ export async function POST({cookies, request}) {
         throw error(401, "Invalid or expired refresh token.");
     }
 
-    const accessTokenPayload: UserTokenPayload = {
-        sub: payload.sub,
-        iss: payload.iss,
-        email: payload.email,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        client_type: payload.client_type,
-    };
+    const accessTokenPayload: UserTokenPayload = {...payload};
 
     const refreshedTokens = generateTokens(accessTokenPayload);
     if (payload.client_type === "web") {
