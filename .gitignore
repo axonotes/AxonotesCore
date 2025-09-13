@@ -32,3 +32,9 @@ ehthumbs.db
 *.key
 credentials.*
 secrets.*
+
+# --- Build outputs ---
+bin
+
+# --- Node ---
+node_modules

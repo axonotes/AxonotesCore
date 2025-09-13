@@ -1,34 +1,32 @@
-use spacetimedb::{ReducerContext, Table};
+use spacetimedb::{reducer, ReducerContext, Table};
 
-#[spacetimedb::table(name = person)]
-pub struct Person {
-    name: String
-}
+// Module declarations
+mod reducers;
+mod tables;
+mod utils;
 
-#[spacetimedb::reducer(init)]
-pub fn init(_ctx: &ReducerContext) {
-    // Called when the module is initially published
-}
+// Re-export important items for easy access
+pub use reducers::*;
+pub use tables::*;
+pub use utils::*;
 
-#[spacetimedb::reducer(client_connected)]
-pub fn identity_connected(_ctx: &ReducerContext) {
-    // Called everytime a new client connects
-}
+pub use tables::user::user;
 
-#[spacetimedb::reducer(client_disconnected)]
-pub fn identity_disconnected(_ctx: &ReducerContext) {
-    // Called everytime a client disconnects
-}
-
-#[spacetimedb::reducer]
-pub fn add(ctx: &ReducerContext, name: String) {
-    ctx.db.person().insert(Person { name });
-}
-
-#[spacetimedb::reducer]
-pub fn say_hello(ctx: &ReducerContext) {
-    for person in ctx.db.person().iter() {
-        log::info!("Hello, {}!", person.name);
+// Client connected reducer needs to be in lib.rs for SpacetimeDB to find it
+#[reducer(client_connected)]
+pub fn client_connected(ctx: &ReducerContext) {
+    if let Some(_user) = ctx.db.user().identity().find(ctx.sender) {
+        // User already exists, do nothing
+    } else {
+        ctx.db.user().insert(User {
+            identity: ctx.sender,
+            public_key: None,
+            encrypted_backup_key: None,
+            encrypted_private_key: None,
+            public_signing_key: None,
+            encrypted_private_signing_key: None,
+            encrypted_private_backup_signing_key: None,
+            argon_salt: None,
+        });
     }
-    log::info!("Hello, World!");
 }
