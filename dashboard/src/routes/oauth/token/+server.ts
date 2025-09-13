@@ -6,7 +6,7 @@ import {
     parseAndValidateForm,
 } from "$lib/server/validation-schemas";
 
-const noStore = {"Cache-Control": "no-store", "Pragma": "no-cache"};
+const noStore = {"Cache-Control": "no-store", Pragma: "no-cache"};
 
 export async function POST({request}) {
     try {
@@ -47,10 +47,13 @@ export async function POST({request}) {
                     error_description:
                         "Too many requests. Please try again later.",
                 },
-                {status: 429, headers: {
-                    ...noStore,
-                    "Retry-After": String(rateLimit.retryAfter ?? 60),
-                }}
+                {
+                    status: 429,
+                    headers: {
+                        ...noStore,
+                        "Retry-After": String(rateLimit.retryAfter ?? 60),
+                    },
+                }
             );
         }
 
@@ -74,7 +77,7 @@ export async function POST({request}) {
                     error: "invalid_grant",
                     error_description: "Refresh token client_type mismatch",
                 },
-                { status: 400, headers: noStore }
+                {status: 400, headers: noStore}
             );
         }
 
