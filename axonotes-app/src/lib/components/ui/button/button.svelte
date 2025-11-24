@@ -62,6 +62,7 @@
 </script>
 
 {#if href}
+  <!-- eslint-disable -->
   <a
     bind:this={ref}
     data-slot="button"
