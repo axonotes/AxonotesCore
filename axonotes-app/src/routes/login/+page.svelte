@@ -15,6 +15,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import {Loader2} from "@lucide/svelte";
+  import * as m from "$lib/paraglide/messages.js";
 
   onMount(async () => {
     await initAuth();
@@ -35,9 +36,11 @@
 >
   <Card class="mx-4 w-full max-w-md">
     <CardHeader class="space-y-1">
-      <CardTitle class="text-center text-2xl font-bold">Welcome Back</CardTitle>
+      <CardTitle class="text-center text-2xl font-bold"
+        >{m.login_title()}</CardTitle
+      >
       <CardDescription class="text-center">
-        Sign in to your account to continue
+        {m.login_description()}
       </CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
@@ -49,15 +52,15 @@
       >
         {#if $isLoading}
           <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-          Authenticating...
+          {m.login_authenticating()}
         {:else}
-          Sign in with WorkOS
+          {m.login_button()}
         {/if}
       </Button>
 
       {#if $isLoading}
         <p class="text-muted-foreground text-center text-sm">
-          Check your browser to complete authentication
+          {m.login_check_browser()}
         </p>
       {/if}
     </CardContent>

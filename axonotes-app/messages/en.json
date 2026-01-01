@@ -1,0 +1,17 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "dashboard_title": "Dashboard",
+  "dashboard_welcome": "Welcome back, {name}!",
+  "dashboard_welcome_default": "Welcome back, User!",
+  "profile_info_title": "Profile Info",
+  "profile_info_description": "Your account details",
+  "profile_name_label": "Name",
+  "profile_email_label": "Email",
+  "profile_status_label": "Status",
+  "profile_status_active": "Active",
+  "login_title": "Welcome Back",
+  "login_description": "Sign in to your account to continue",
+  "login_button": "Sign in with WorkOS",
+  "login_authenticating": "Authenticating...",
+  "login_check_browser": "Check your browser to complete authentication"
+}
