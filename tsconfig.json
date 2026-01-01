@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext"
+  },
+  "include": ["axogen/**/*", "*.ts"],
+  "exclude": ["node_modules", "axonotes-app"]
+}
