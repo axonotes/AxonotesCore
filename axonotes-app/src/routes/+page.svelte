@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {activeProfile} from "$lib/stores/authStore";
+  import {activeProfile} from "$lib/stores/app";
   import {
     Card,
     CardContent,

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Successful</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div class="min-h-screen flex items-center justify-center bg-background p-4">
+    <div class="w-full max-w-md">
+        <div class="bg-card rounded-lg border border-border shadow-sm p-8">
+            <div class="flex flex-col items-center text-center space-y-6">
+                <div class="rounded-full bg-primary/10 p-3">
+                    <i data-lucide="check-circle" class="w-12 h-12 text-primary"></i>
+                </div>
+
+                <div class="space-y-2">
+                    <h1 class="text-2xl font-semibold text-card-foreground">
+                        Authentication Successful!
+                    </h1>
+                    <p class="text-muted-foreground">
+                        You have been successfully authenticated.
+                    </p>
+                </div>
+
+                <div class="w-full pt-4">
+                    <div class="rounded-lg bg-muted/50 p-4 border border-border">
+                        <p class="text-sm text-muted-foreground">
+                            You can safely close this window and return to the application.
+                        </p>
+                    </div>
+                </div>
+
+                <button
+                        onclick="window.close()"
+                        class="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium py-2.5 px-4 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                    Close Window
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    lucide.createIcons();
+
+    // Auto-close after 5 seconds
+    setTimeout(() => {
+        window.close();
+    }, 5000);
+</script>
+</body>
+</html>

@@ -4,20 +4,23 @@
   import LightSwitch from "$lib/components/LightSwitch.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import {onMount} from "svelte";
-  import {activeProfile, initAuth} from "$lib/stores/authStore";
+  import {app, isInitialized, activeProfile, databaseUnlocked, needsUnlock} from "$lib/stores/app";
   import ProfileSwitcher from "$lib/components/ProfileSwitcher.svelte";
 
   let {children} = $props();
 
-  let isInitialized = $state(false);
-
   onMount(async () => {
-    await initAuth();
-    isInitialized = true;
+    await app.initialize();
 
-    // Check if we need to redirect to login
-    if (!$activeProfile && window.location.pathname !== "/login") {
+    // Handle redirects after initialization
+    const path = window.location.pathname;
+
+    if ($needsUnlock && path !== "/unlock") {
+      window.location.href = "/unlock";
+    } else if ($databaseUnlocked && !$activeProfile && path !== "/login" && path !== "/unlock") {
       window.location.href = "/login";
+    } else if ($activeProfile && (path === "/login" || path === "/unlock")) {
+      window.location.href = "/";
     }
   });
 </script>
@@ -30,15 +33,15 @@
 
   <!-- Content area -->
   <div class="flex-1 overflow-auto">
-    {#if isInitialized}
-      {#if $activeProfile}
+    {#if $isInitialized}
+      {#if $activeProfile && $databaseUnlocked}
         <!-- App layout with profile switcher -->
         <div class="bg-background min-h-full">
           <!-- Header -->
           <header class="border-b">
             <div class="container flex h-16 items-center justify-between px-4">
               <div class="flex items-center gap-2">
-                <h1 class="text-xl font-bold">My App</h1>
+                <h1 class="text-xl font-bold">Axonotes</h1>
               </div>
 
               <div class="flex items-center gap-3">
@@ -56,7 +59,7 @@
           </main>
         </div>
       {:else}
-        <!-- Show login page if no active profile -->
+        <!-- Show login/unlock page if no active profile or database locked -->
         <div class="relative min-h-full">
           <div class="absolute top-0 right-0 p-3.5">
             <LightSwitch />

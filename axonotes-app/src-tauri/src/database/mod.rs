@@ -1,0 +1,354 @@
+mod profiles;
+mod schema;
+
+use once_cell::sync::OnceCell;
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use crate::crypto;
+use crate::workos_auth::Profile;
+
+static DB: OnceCell<Arc<Mutex<Database>>> = OnceCell::new();
+static DB_PATH: OnceCell<PathBuf> = OnceCell::new();
+static APP_CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub unlock_mode: String, // "none", "pin", "pass"
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            unlock_mode: "none".to_string(),
+        }
+    }
+}
+
+pub struct Database {
+    conn: Connection,
+}
+
+impl Database {
+    fn new(conn: Connection) -> Self {
+        Self { conn }
+    }
+
+    fn get_conn(&self) -> &Connection {
+        &self.conn
+    }
+}
+
+/// Initialize database paths (call this first in Tauri setup)
+pub fn init_paths(app_data_dir: PathBuf) -> Result<(), String> {
+    let db_path = app_data_dir.join("app.db");
+    let config_path = app_data_dir.join("app_config.toml");
+
+    DB_PATH
+        .set(db_path)
+        .map_err(|_| "Database path already initialized")?;
+
+    APP_CONFIG_PATH
+        .set(config_path)
+        .map_err(|_| "Config path already initialized")?;
+
+    Ok(())
+}
+
+/// Get the current unlock mode from config file
+pub fn get_unlock_mode() -> Result<String, String> {
+    let config = read_app_config()?;
+
+    // If config file doesn't exist, create it with default
+    let config_path = APP_CONFIG_PATH.get().ok_or("Config path not initialized")?;
+    if !config_path.exists() {
+        write_app_config(&config)?;
+    }
+
+    Ok(config.unlock_mode)
+}
+
+/// Set unlock mode (backend only - can set any mode including "none")
+pub fn set_unlock_mode(mode: String) -> Result<(), String> {
+    if mode != "none" && mode != "pin" && mode != "pass" {
+        return Err("Invalid unlock mode. Must be 'none', 'pin', or 'pass'".to_string());
+    }
+
+    let mut config = read_app_config().unwrap_or_default();
+    config.unlock_mode = mode;
+    write_app_config(&config)?;
+
+    Ok(())
+}
+
+/// Switch unlock mode UI (frontend - can only switch between pin ↔ pass)
+pub fn switch_unlock_mode_ui(new_mode: String) -> Result<(), String> {
+    let current_mode = get_unlock_mode()?;
+
+    // Validate: can only switch between pin and pass
+    if (current_mode == "pin" && new_mode != "pass")
+        || (current_mode == "pass" && new_mode != "pin")
+    {
+        return Err(format!(
+            "Can only switch between 'pin' and 'pass'. Current mode: {}, requested: {}",
+            current_mode, new_mode
+        ));
+    }
+
+    set_unlock_mode(new_mode)?;
+    Ok(())
+}
+
+/// Unlock and initialize the database
+pub async fn unlock_db(password: Option<String>) -> Result<(), String> {
+    // Check if already unlocked - prevent double initialization
+    if DB.get().is_some() {
+        return Ok(()); // Already unlocked, nothing to do
+    }
+
+    let db_path = DB_PATH.get().ok_or("Database path not initialized")?;
+    let unlock_mode = get_unlock_mode()?;
+
+    // Validate password requirement
+    match unlock_mode.as_str() {
+        "none" => {
+            if password.is_some() {
+                return Err("Password provided but unlock mode is 'none'".to_string());
+            }
+        }
+        "pin" | "pass" => {
+            if password.is_none() {
+                return Err(format!("Password required for unlock mode '{}'", unlock_mode));
+            }
+        }
+        _ => return Err("Invalid unlock mode".to_string()),
+    }
+
+    // Open connection
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    // Set encryption key if needed
+    if let Some(ref pwd) = password {
+        let key = crypto::hash::derive_database_key(pwd);
+        let key_hex = hex::encode(&key);
+
+        conn.execute(&format!("PRAGMA key = \"x'{}'\";", key_hex), [])
+            .map_err(|e| format!("Failed to set encryption key: {}", e))?;
+    }
+
+    // Test that we can access the database (verify key is correct)
+    conn.execute("SELECT count(*) FROM sqlite_master", [])
+        .map_err(|_| "Failed to unlock database. Incorrect password?".to_string())?;
+
+    // Initialize schema
+    schema::init_schema(&conn).map_err(|e| format!("Failed to initialize schema: {}", e))?;
+
+    // Store in global state
+    let db = Database::new(conn);
+    DB.set(Arc::new(Mutex::new(db)))
+        .map_err(|_| "Database already initialized")?;
+
+    Ok(())
+}
+
+/// Check if database is unlocked
+pub async fn is_unlocked() -> bool {
+    DB.get().is_some()
+}
+
+/// Wipe the database (delete file and reset to 'none' mode)
+pub async fn wipe_db() -> Result<(), String> {
+    let db_path = DB_PATH.get().ok_or("Database path not initialized")?;
+
+    // Delete database file
+    if db_path.exists() {
+        fs::remove_file(db_path).map_err(|e| format!("Failed to delete database: {}", e))?;
+    }
+
+    // Reset unlock mode to none
+    set_unlock_mode("none".to_string())?;
+
+    Ok(())
+}
+
+/// Set encryption on database (transition from 'none' to 'pin'/'pass')
+pub async fn set_encryption(new_password: String, mode: String) -> Result<(), String> {
+    // Validate mode
+    if mode != "pin" && mode != "pass" {
+        return Err("Mode must be 'pin' or 'pass'".to_string());
+    }
+    let db = get_db().await?;
+    let db_path = DB_PATH.get().ok_or("Database path not initialized")?;
+
+    // Create a temporary database with encryption
+    let temp_path = db_path.with_extension("db.tmp");
+    let new_conn = Connection::open(&temp_path).map_err(|e| e.to_string())?;
+
+    // Set new encryption key
+    let key = crypto::hash::derive_database_key(&new_password);
+    let key_hex = hex::encode(&key);
+    new_conn
+        .execute(&format!("PRAGMA key = \"x'{}'\";", key_hex), [])
+        .map_err(|e| e.to_string())?;
+
+    // Use SQLCipher's export to copy data
+    let db_guard = db.lock().await;
+    let old_conn = db_guard.get_conn();
+
+    // Attach new database
+    old_conn
+        .execute(
+            &format!("ATTACH DATABASE '{}' AS encrypted KEY \"x'{}'\"", temp_path.display(), key_hex),
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Export all data
+    old_conn
+        .execute("SELECT sqlcipher_export('encrypted')", [])
+        .map_err(|e| format!("Failed to export database: {}", e))?;
+
+    old_conn
+        .execute("DETACH DATABASE encrypted", [])
+        .map_err(|e| e.to_string())?;
+
+    drop(db_guard);
+    drop(db);
+
+    // Replace old database with new encrypted one
+    fs::rename(&temp_path, db_path).map_err(|e| format!("Failed to replace database: {}", e))?;
+
+    // Update unlock mode to the specified mode
+    set_unlock_mode(mode)?;
+
+    Ok(())
+}
+
+/// Remove encryption from database (transition from 'pin'/'pass' to 'none')
+pub async fn remove_encryption() -> Result<(), String> {
+    let db = get_db().await?;
+    let db_path = DB_PATH.get().ok_or("Database path not initialized")?;
+
+    // Create unencrypted temporary database
+    let temp_path = db_path.with_extension("db.tmp");
+    let _new_conn = Connection::open(&temp_path).map_err(|e| e.to_string())?;
+
+    let db_guard = db.lock().await;
+    let old_conn = db_guard.get_conn();
+
+    // Attach unencrypted database
+    old_conn
+        .execute(&format!("ATTACH DATABASE '{}' AS plaintext KEY ''", temp_path.display()), [])
+        .map_err(|e| e.to_string())?;
+
+    // Export to unencrypted database
+    old_conn
+        .execute("SELECT sqlcipher_export('plaintext')", [])
+        .map_err(|e| format!("Failed to export database: {}", e))?;
+
+    old_conn
+        .execute("DETACH DATABASE plaintext", [])
+        .map_err(|e| e.to_string())?;
+
+    drop(db_guard);
+    drop(db);
+
+    // Replace old database with new unencrypted one
+    fs::rename(&temp_path, db_path).map_err(|e| format!("Failed to replace database: {}", e))?;
+
+    // Update unlock mode to "none"
+    set_unlock_mode("none".to_string())?;
+
+    Ok(())
+}
+
+// ========================================
+// Profile Operations (proxies to profiles module)
+// ========================================
+
+pub async fn get_active_profile() -> Result<Option<Profile>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::get_active(db.get_conn()).map_err(|e| e.to_string())
+}
+
+pub async fn get_all_profiles() -> Result<Vec<Profile>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::get_all(db.get_conn()).map_err(|e| e.to_string())
+}
+
+pub async fn save_profile(profile: Profile, set_active: bool) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::save(db.get_conn(), &profile, set_active).map_err(|e| e.to_string())
+}
+
+pub async fn set_active_profile(profile_id: String) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::set_active(db.get_conn(), &profile_id).map_err(|e| e.to_string())
+}
+
+pub async fn delete_profile(profile_id: String) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::delete(db.get_conn(), &profile_id).map_err(|e| e.to_string())
+}
+
+pub async fn refresh_active_profile_token() -> Result<String, String> {
+    let profile = get_active_profile()
+        .await?
+        .ok_or("No active profile")?;
+
+    let refresh_token = profile
+        .refresh_token
+        .ok_or("No refresh token available")?;
+
+    let new_access_token = crate::workos_auth::refresh_access_token(&refresh_token).await?;
+
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::update_access_token(db.get_conn(), &profile.id, &new_access_token)
+        .map_err(|e| e.to_string())?;
+
+    Ok(new_access_token)
+}
+
+// ========================================
+// Internal Helpers
+// ========================================
+
+async fn get_db() -> Result<Arc<Mutex<Database>>, String> {
+    DB.get()
+        .ok_or_else(|| "Database not initialized. Call unlock_db first.".to_string())
+        .cloned()
+}
+
+fn read_app_config() -> Result<AppConfig, String> {
+    let config_path = APP_CONFIG_PATH
+        .get()
+        .ok_or("Config path not initialized")?;
+
+    if !config_path.exists() {
+        return Ok(AppConfig::default());
+    }
+
+    let contents = fs::read_to_string(config_path).map_err(|e| e.to_string())?;
+    toml::from_str(&contents).map_err(|e| format!("Failed to parse config: {}", e))
+}
+
+fn write_app_config(config: &AppConfig) -> Result<(), String> {
+    let config_path = APP_CONFIG_PATH
+        .get()
+        .ok_or("Config path not initialized")?;
+
+    let contents = toml::to_string(config).map_err(|e| e.to_string())?;
+    fs::write(config_path, contents).map_err(|e| e.to_string())?;
+
+    Ok(())
+}

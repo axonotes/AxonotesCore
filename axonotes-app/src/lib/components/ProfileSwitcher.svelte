@@ -1,11 +1,5 @@
 <script lang="ts">
-  import {
-    profilesState,
-    activeProfile,
-    switchProfile,
-    logout,
-    startLogin,
-  } from "$lib/stores/authStore";
+  import {app, activeProfile, allProfiles} from "$lib/stores/app";
   import {Button} from "$lib/components/ui/button";
   import {
     DropdownMenu,
@@ -29,15 +23,20 @@
   }
 
   async function handleSwitchProfile(profileId: string) {
-    await switchProfile(profileId);
+    await app.switchProfile(profileId);
   }
 
   async function handleLogout(profileId: string) {
-    await logout(profileId);
+    await app.logout(profileId);
+
+    // If no profiles left, redirect to login
+    if ($allProfiles.length === 0) {
+      window.location.href = "/login";
+    }
   }
 
   async function handleAddAccount() {
-    await startLogin();
+    await app.startLogin();
   }
 </script>
 
@@ -52,12 +51,8 @@
             </AvatarFallback>
           </Avatar>
           <div class="flex flex-col items-start overflow-hidden">
-            <span class="truncate text-sm font-medium"
-              >{$activeProfile.name}</span
-            >
-            <span class="text-muted-foreground truncate text-xs"
-              >{$activeProfile.email}</span
-            >
+            <span class="truncate text-sm font-medium">{$activeProfile.name}</span>
+            <span class="text-muted-foreground truncate text-xs">{$activeProfile.email}</span>
           </div>
         {:else}
           <User class="h-4 w-4" />
@@ -72,11 +67,8 @@
     <DropdownMenuSeparator />
 
     <DropdownMenuGroup>
-      {#each $profilesState.profiles as profile (profile.id)}
-        <DropdownMenuItem
-          class="flex items-center gap-2"
-          onclick={() => handleSwitchProfile(profile.id)}
-        >
+      {#each $allProfiles as profile (profile.id)}
+        <DropdownMenuItem class="flex items-center gap-2" onclick={() => handleSwitchProfile(profile.id)}>
           <Avatar class="h-6 w-6">
             <AvatarFallback class="text-xs">
               {getInitials(profile.name)}
@@ -84,9 +76,7 @@
           </Avatar>
           <div class="flex flex-1 flex-col overflow-hidden">
             <span class="truncate text-sm font-medium">{profile.name}</span>
-            <span class="text-muted-foreground truncate text-xs"
-              >{profile.email}</span
-            >
+            <span class="text-muted-foreground truncate text-xs">{profile.email}</span>
           </div>
           {#if profile.id === $activeProfile?.id}
             <Check class="h-4 w-4" />
@@ -104,10 +94,7 @@
 
     {#if $activeProfile}
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        class="text-destructive focus:text-destructive"
-        onclick={() => handleLogout($activeProfile.id)}
-      >
+      <DropdownMenuItem class="text-destructive focus:text-destructive" onclick={() => handleLogout($activeProfile.id)}>
         <LogOut class="mr-2 h-4 w-4" />
         <span>Sign out</span>
       </DropdownMenuItem>

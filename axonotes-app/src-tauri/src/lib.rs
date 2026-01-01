@@ -1,10 +1,11 @@
 use tauri::Manager;
 use tauri_plugin_decorum::WebviewWindowExt;
-use crate::oauth::OAuthState;
 
 mod config;
-mod oauth;
-mod profiles;
+mod workos_auth;
+mod database;
+mod commands;
+mod crypto;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -13,17 +14,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
-        .manage(OAuthState::default())
         .invoke_handler(tauri::generate_handler![
-            oauth::start_oauth_flow,
-            oauth::exchange_code_for_token,
-            oauth::refresh_access_token,
-            profiles::get_profiles,
-            profiles::add_profile,
-            profiles::remove_profile,
-            profiles::set_active_profile,
-            profiles::get_active_profile,
-            profiles::update_profile_token,
+            commands::auth_cmd::start_login,
+            commands::auth_cmd::logout,
+            commands::database_cmd::get_unlock_mode,
+            commands::database_cmd::switch_unlock_mode,
+            commands::database_cmd::unlock_database,
+            commands::database_cmd::is_database_unlocked,
+            commands::database_cmd::wipe_database,
+            commands::database_cmd::set_database_encryption,
+            commands::database_cmd::remove_database_encryption,
+            commands::profile_cmd::get_active_profile,
+            commands::profile_cmd::get_all_profiles,
+            commands::profile_cmd::switch_profile,
+            commands::profile_cmd::refresh_token,
+            
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();
@@ -33,6 +38,12 @@ pub fn run() {
             {
                 main_window.make_transparent().unwrap();
             }
+
+            let app_data_dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&app_data_dir).expect("Failed to create app_data_dir.");
+
+            database::init_paths(app_data_dir)
+                .map_err(|e| format!("Failed to initialize database paths: {}", e))?;
 
             Ok(())
         })
