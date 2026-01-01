@@ -10,6 +10,11 @@
     "core:window:allow-center",
     "core:window:allow-set-focus",
     "core:window:allow-set-title",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
     "core:webview:default",
     "core:webview:allow-webview-position",
     "core:webview:allow-webview-size",
@@ -18,6 +23,7 @@
     "core:menu:default",
     "core:tray:default",
     "shell:allow-open",
-    "store:default"
+    "store:default",
+    "decorum:allow-show-snap-overlay"
   ]
 }

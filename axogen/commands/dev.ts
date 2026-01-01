@@ -17,7 +17,7 @@ export const devCmd = cmd({
     await generateRustBindings();
 
     const isLinux = process.platform === "linux";
-    const command = `${isLinux ? "__NV_DISABLE_EXPLICIT_SYNC=1 " : ""}bun run tauri dev`;
+    const command = `${isLinux ? "WEBKIT_DISABLE_DMABUF_RENDERER=1 " : ""}bun run tauri dev`;
     await liveExec(command, {
       cwd: "./axonotes-app",
       outputPrefix: "DEV",

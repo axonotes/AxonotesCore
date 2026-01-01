@@ -3,7 +3,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, Manager, State, Window};
+use tauri::{Emitter, State, Window};
 use tauri_plugin_store::StoreExt;
 use tiny_http::{Response, Server};
 
@@ -46,7 +46,7 @@ struct UserInfo {
 
 // Generate PKCE code verifier (base64url encoded random string)
 fn generate_code_verifier() -> String {
-    let random_bytes: Vec<u8> = (0..32).map(|_| rand::thread_rng().gen::<u8>()).collect();
+    let random_bytes: Vec<u8> = (0..32).map(|_| rand::rng().random::<u8>()).collect();
     URL_SAFE_NO_PAD.encode(random_bytes)
 }
 

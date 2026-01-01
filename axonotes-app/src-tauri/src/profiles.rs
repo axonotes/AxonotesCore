@@ -1,6 +1,5 @@
 use crate::oauth::{Profile, ProfilesState};
 use serde_json::json;
-use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
 #[tauri::command]
