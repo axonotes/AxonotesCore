@@ -3,7 +3,6 @@ mod schema;
 
 use crate::crypto;
 use crate::workos_auth::Profile;
-use hex::ToHex;
 use once_cell::sync::OnceCell;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use url::quirks::password;
 
 static DB: OnceCell<Arc<Mutex<Database>>> = OnceCell::new();
 static DB_PATH: OnceCell<PathBuf> = OnceCell::new();

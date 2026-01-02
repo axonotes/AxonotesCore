@@ -4,12 +4,10 @@ use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
 use tiny_http::{Response, Server};
 use tokio::sync::Mutex;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{sleep, Duration};
 
 const SUCCESS_HTML: &str = include_str!("html/success.html");
 const ERROR_HTML: &str = include_str!("html/error.html");

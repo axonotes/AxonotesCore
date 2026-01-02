@@ -442,9 +442,6 @@ mod tests {
 
     #[test]
     fn test_validate_checksum_with_valid_indices() {
-        // Use the known valid mnemonic "abandon abandon ... about"
-        let wordlist: Vec<&str> = WORDLIST.lines().collect();
-
         // "abandon" is typically index 0, "about" is typically index 3
         let indices = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3];
 
