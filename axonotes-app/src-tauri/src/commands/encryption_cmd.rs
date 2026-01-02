@@ -7,9 +7,10 @@ use crate::crypto::hash::{
     derive_key, MASTER_PASSWORD_ENCRYPTION_CONTEXT, MASTER_PASSWORD_SIGNING_CONTEXT,
 };
 use crate::crypto::x25519::generate_x25519_keys;
-use crate::database;
 use crate::database::keys::Keys;
+use crate::{database, stdb};
 
+/// This function can only be called once per active user since it creates a new profile on the stdb instance
 #[tauri::command]
 pub async fn set_master_password(password: String) -> Result<String, String> {
     let (private_encryption_key, public_encryption_key) = generate_x25519_keys();
@@ -52,7 +53,17 @@ pub async fn set_master_password(password: String) -> Result<String, String> {
     })
     .await?;
 
-    // TODO: store keys in stdb
+    // Store on stdb
+    stdb::active_profile()
+        .create_user(
+            public_encryption_key.to_vec(),
+            pwd_encrypted_private_encryption_key,
+            mnemonic_encrypted_private_encryption_key,
+            public_signing_key.to_vec(),
+            pwd_encrypted_private_signing_key,
+            mnemonic_encrypted_private_signing_key,
+        )
+        .await?;
 
     Ok(mnemonic)
 }

@@ -1,3 +1,8 @@
+[app]
+name="AxonotesApp"
+version="0.0.1"
+environment="development"
+
 [oauth]
 client_id="client_01JX2EAD13T3F7W9K57M08ZT58"
 authorization_url="https://api.workos.com/user_management/authorize"
@@ -7,7 +12,6 @@ callback_port=8080
 provider="authkit"
 scopes=["profile", "email"]
 
-[app]
-name="AxonotesApp"
-version="0.0.1"
-environment="development"
+[stdb]
+default_host_uri="http://localhost:3000"
+default_module_name="axonotes"

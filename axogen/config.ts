@@ -22,6 +22,10 @@ export const OAuthSchema = z.object({
       environment: z.enum(["development", "staging", "production"]).optional(),
     })
     .optional(),
+  stdb: z.object({
+    default_host_uri: z.url().min(1),
+    default_module_name: z.string().min(1),
+  }),
 });
 
 export const config = loadFile("config.toml", "toml", OAuthSchema);

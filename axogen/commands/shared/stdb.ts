@@ -1,5 +1,6 @@
 import {liveExec} from "@axonotes/axogen";
 import {throwIfToolMissing} from "../../utils/tool-detection";
+import {config} from "../../config";
 
 export async function generateRustBindings() {
   await throwIfToolMissing("Cargo", "cargo", "--version", "https://rustup.rs/");
@@ -45,8 +46,7 @@ export async function publishSpacetimeModule(deleteData: boolean = false) {
   const flags = [deleteFlag].join(" ").trim();
 
   await liveExec(
-    "spacetime publish --server local --project-path axonotes-stdb axonotes " +
-      flags,
+    `spacetime publish --server local --project-path axonotes-stdb ${config.stdb.default_module_name} ${flags}`,
     {
       outputPrefix: "SPACETIME-PUBLISH",
     }

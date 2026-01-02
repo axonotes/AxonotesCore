@@ -5,6 +5,8 @@ mod commands;
 mod config;
 mod crypto;
 mod database;
+mod stdb;
+mod stdb_bindings;
 mod workos_auth;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

@@ -86,6 +86,29 @@ impl Default for AppConfig {
 }
 {% endif %}
 
+{% if stdb -%}
+/// SpacetimeDB configuration
+pub struct StdbConfig {
+    pub default_host_uri: &'static str,
+    pub default_module_name: &'static str,
+}
+
+impl StdbConfig {
+    pub fn new() -> Self {
+        Self {
+            default_host_uri: "{{ stdb.default_host_uri }}",
+            default_module_name: "{{ stdb.default_module_name }}",
+        }
+    }
+}
+
+impl Default for StdbConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+{% endif %}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,4 +128,13 @@ mod tests {
         assert!(url.contains("code_challenge=test_challenge"));
         assert!(url.contains("code_challenge_method=S256"));
     }
+
+    {% if stdb -%}
+    #[test]
+    fn test_stdb_config() {
+        let config = StdbConfig::new();
+        assert!(!config.default_host_uri.is_empty());
+        assert!(!config.default_module_name.is_empty());
+    }
+    {% endif %}
 }
