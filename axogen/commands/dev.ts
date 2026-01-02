@@ -1,5 +1,5 @@
 import {cmd, liveExec} from "@axonotes/axogen";
-import {generateRustBindings, publishSpacetimeModule} from "./shared/stdb";
+import {generateRustBindings} from "./shared/stdb";
 import {throwIfToolMissing} from "../utils/tool-detection";
 
 export const devCmd = cmd({

@@ -1,4 +1,4 @@
-use rand::rngs::{OsRng};
+use rand::rngs::OsRng;
 use rand::TryRngCore;
 use sha2::{Digest, Sha256};
 
@@ -13,7 +13,9 @@ pub fn get_passphrase() -> Result<String, Box<dyn std::error::Error>> {
 
     // Generate 16 bytes (128 bits) of entropy for 12 words
     let mut entropy = [0u8; 16];
-    OsRng.try_fill_bytes(&mut entropy).expect("Failed to fill OsRng with entropy");
+    OsRng
+        .try_fill_bytes(&mut entropy)
+        .expect("Failed to fill OsRng with entropy");
 
     // Calculate checksum: first 4 bits of SHA256(entropy)
     let hash = Sha256::digest(entropy);
@@ -73,7 +75,8 @@ pub fn validate_and_correct_passphrase(input: &str) -> (bool, String) {
         }
 
         // Try prefix match
-        let matches: Vec<_> = words.iter()
+        let matches: Vec<_> = words
+            .iter()
             .enumerate()
             .filter(|(_, &w)| w.starts_with(&lower))
             .collect();
@@ -176,13 +179,17 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
     for i in 1..=a_len {
         for j in 1..=b_len {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
             matrix[i][j] = std::cmp::min(
                 std::cmp::min(
-                    matrix[i - 1][j] + 1,      // deletion
-                    matrix[i][j - 1] + 1       // insertion
+                    matrix[i - 1][j] + 1, // deletion
+                    matrix[i][j - 1] + 1, // insertion
                 ),
-                matrix[i - 1][j - 1] + cost    // substitution
+                matrix[i - 1][j - 1] + cost, // substitution
             );
         }
     }
@@ -257,15 +264,22 @@ mod tests {
     #[test]
     fn test_validate_wrong_word_count() {
         let invalid_inputs = vec![
-            "word",                                    // 1 word
-            "word word word word word",                // 5 words
-            "word word word word word word word",      // 7 words
+            "word",                               // 1 word
+            "word word word word word",           // 5 words
+            "word word word word word word word", // 7 words
         ];
 
         for input in invalid_inputs {
             let (is_valid, corrected) = validate_and_correct_passphrase(input);
-            assert!(!is_valid, "Should reject input with {} words", input.split_whitespace().count());
-            assert_eq!(corrected, "", "Should return empty string for invalid word count");
+            assert!(
+                !is_valid,
+                "Should reject input with {} words",
+                input.split_whitespace().count()
+            );
+            assert_eq!(
+                corrected, "",
+                "Should return empty string for invalid word count"
+            );
         }
     }
 
@@ -283,7 +297,11 @@ mod tests {
             // (checksum validation is separate)
             let corrected_count = corrected.as_str().split_whitespace().count();
             if !corrected.is_empty() {
-                assert_eq!(corrected_count, count, "Should process {}-word mnemonic", count);
+                assert_eq!(
+                    corrected_count, count,
+                    "Should process {}-word mnemonic",
+                    count
+                );
             }
         }
     }
@@ -438,17 +456,17 @@ mod tests {
         // Test a prefix that matches multiple words
         // "ab" could match "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract", "absurd"
         let wordlist: Vec<&str> = WORDLIST.lines().collect();
-        let ab_matches: Vec<_> = wordlist.iter()
-            .filter(|&&w| w.starts_with("ab"))
-            .collect();
+        let ab_matches: Vec<_> = wordlist.iter().filter(|&&w| w.starts_with("ab")).collect();
 
         if ab_matches.len() > 1 {
             let mnemonic = "ab ab ab ab ab ab ab ab ab ab ab ab";
             let (is_valid, corrected) = validate_and_correct_passphrase(mnemonic);
 
             // Should fail because "ab" is ambiguous
-            assert!(!is_valid || !corrected.is_empty(),
-                    "Should handle ambiguous prefix somehow");
+            assert!(
+                !is_valid || !corrected.is_empty(),
+                "Should handle ambiguous prefix somehow"
+            );
         }
     }
 
@@ -459,7 +477,11 @@ mod tests {
             let passphrase = get_passphrase().unwrap();
             let (is_valid, corrected) = validate_and_correct_passphrase(passphrase.as_str());
 
-            assert!(is_valid, "Generated passphrase should validate: {}", passphrase);
+            assert!(
+                is_valid,
+                "Generated passphrase should validate: {}",
+                passphrase
+            );
             assert_eq!(corrected, passphrase, "Corrected should match original");
         }
     }

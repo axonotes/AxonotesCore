@@ -1,58 +1,63 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="{{dark_class}}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Authentication Failed</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
-</head>
-<body>
-<div class="min-h-screen flex items-center justify-center bg-background p-4">
-    <div class="w-full max-w-md">
-        <div class="bg-card rounded-lg border border-border shadow-sm p-8">
-            <div class="flex flex-col items-center text-center space-y-6">
-                <div class="rounded-full bg-destructive/10 p-3">
-                    <i data-lucide="alert-circle" class="w-12 h-12 text-destructive"></i>
-                </div>
-
-                <div class="space-y-2">
-                    <h1 class="text-2xl font-semibold text-card-foreground">
-                        Authentication Failed
-                    </h1>
-                    <p class="text-muted-foreground">
-                        We encountered an issue during authentication.
-                    </p>
-                </div>
-
-                <div class="w-full pt-2">
-                    <div class="rounded-lg bg-destructive/10 p-4 border border-destructive/20">
-                        <p class="text-sm text-destructive font-medium">
-                            {{error}}
-                        </p>
-                    </div>
-                </div>
-
-                <div class="w-full space-y-3">
-                    <button
-                            onclick="window.close()"
-                            class="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium py-2.5 px-4 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                        Close Window
-                    </button>
-
-                    <p class="text-xs text-muted-foreground">
-                        Please try again or contact support if the issue persists.
-                    </p>
-                </div>
+  </head>
+  <body>
+    <div
+      class="bg-background flex min-h-screen items-center justify-center p-4"
+    >
+      <div class="w-full max-w-md">
+        <div class="bg-card border-border rounded-lg border p-8 shadow-sm">
+          <div class="flex flex-col items-center space-y-6 text-center">
+            <div class="bg-destructive/10 rounded-full p-3">
+              <i
+                data-lucide="alert-circle"
+                class="text-destructive h-12 w-12"
+              ></i>
             </div>
-        </div>
-    </div>
-</div>
 
-<script>
-    lucide.createIcons();
-</script>
-</body>
+            <div class="space-y-2">
+              <h1 class="text-card-foreground text-2xl font-semibold">
+                Authentication Failed
+              </h1>
+              <p class="text-muted-foreground">
+                We encountered an issue during authentication.
+              </p>
+            </div>
+
+            <div class="w-full pt-2">
+              <div
+                class="bg-destructive/10 border-destructive/20 rounded-lg border p-4"
+              >
+                <p class="text-destructive text-sm font-medium">{{error}}</p>
+              </div>
+            </div>
+
+            <div class="w-full space-y-3">
+              <button
+                onclick="window.close()"
+                class="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring w-full rounded-md px-4 py-2.5 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                Close Window
+              </button>
+
+              <p class="text-muted-foreground text-xs">
+                Please try again or contact support if the issue persists.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      lucide.createIcons();
+    </script>
+  </body>
 </html>

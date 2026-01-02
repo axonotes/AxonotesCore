@@ -1,5 +1,5 @@
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2, Params, Version,
 };
 
@@ -7,8 +7,8 @@ use argon2::{
 /// ~300ms on desktop, ~1s on mobile
 /// Provides ~24,000+ years brute-force resistance
 const MEMORY_COST: u32 = 19456; // 19 MB (OWASP minimum)
-const TIME_COST: u32 = 2;       // iterations
-const PARALLELISM: u32 = 2;     // threads
+const TIME_COST: u32 = 2; // iterations
+const PARALLELISM: u32 = 2; // threads
 
 // ========================================
 // Public API - Simple & Clean
@@ -141,21 +141,30 @@ mod tests {
     fn test_derive_key_deterministic() {
         let key1 = derive_key("password", "test");
         let key2 = derive_key("password", "test");
-        assert_eq!(key1, key2, "Same password and context should derive same key");
+        assert_eq!(
+            key1, key2,
+            "Same password and context should derive same key"
+        );
     }
 
     #[test]
     fn test_derive_key_different_context() {
         let key1 = derive_key("password", "context1");
         let key2 = derive_key("password", "context2");
-        assert_ne!(key1, key2, "Different contexts should produce different keys");
+        assert_ne!(
+            key1, key2,
+            "Different contexts should produce different keys"
+        );
     }
 
     #[test]
     fn test_derive_key_different_password() {
         let key1 = derive_key("password1", "test");
         let key2 = derive_key("password2", "test");
-        assert_ne!(key1, key2, "Different passwords should produce different keys");
+        assert_ne!(
+            key1, key2,
+            "Different passwords should produce different keys"
+        );
     }
 
     #[test]
@@ -163,8 +172,14 @@ mod tests {
         let password = "MySecurePassword123";
         let hash = hash(password);
 
-        assert!(verify(password, hash.as_str()), "Correct password should verify");
-        assert!(!verify("WrongPassword", hash.as_str()), "Wrong password should not verify");
+        assert!(
+            verify(password, hash.as_str()),
+            "Correct password should verify"
+        );
+        assert!(
+            !verify("WrongPassword", hash.as_str()),
+            "Wrong password should not verify"
+        );
     }
 
     #[test]
@@ -197,26 +212,42 @@ mod tests {
     #[test]
     fn benchmark() {
         println!("\n=== Argon2id Performance ===");
-        println!("Config: {}MB memory, {} iterations, {} parallelism\n",
-                 MEMORY_COST / 1024, TIME_COST, PARALLELISM);
+        println!(
+            "Config: {}MB memory, {} iterations, {} parallelism\n",
+            MEMORY_COST / 1024,
+            TIME_COST,
+            PARALLELISM
+        );
 
         // Test derive_key
         let start = Instant::now();
         let _key = derive_key("ABC12345", "database");
         let derive_time = start.elapsed();
-        println!("derive_key: {:?} ({:.2}ms)", derive_time, derive_time.as_secs_f64() * 1000.0);
+        println!(
+            "derive_key: {:?} ({:.2}ms)",
+            derive_time,
+            derive_time.as_secs_f64() * 1000.0
+        );
 
         // Test hash
         let start = Instant::now();
         let hash_result = hash("MyPassword123");
         let hash_time = start.elapsed();
-        println!("hash:       {:?} ({:.2}ms)", hash_time, hash_time.as_secs_f64() * 1000.0);
+        println!(
+            "hash:       {:?} ({:.2}ms)",
+            hash_time,
+            hash_time.as_secs_f64() * 1000.0
+        );
 
         // Test verify
         let start = Instant::now();
         let _verified = verify("MyPassword123", hash_result.as_str());
         let verify_time = start.elapsed();
-        println!("verify:     {:?} ({:.2}ms)", verify_time, verify_time.as_secs_f64() * 1000.0);
+        println!(
+            "verify:     {:?} ({:.2}ms)",
+            verify_time,
+            verify_time.as_secs_f64() * 1000.0
+        );
 
         // Brute-force estimate
         let single_hash = derive_time.as_secs_f64();

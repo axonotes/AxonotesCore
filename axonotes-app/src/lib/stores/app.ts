@@ -22,7 +22,10 @@ export const isLoading = writable(false);
 /**
  * Derived state
  */
-export const isAuthenticated = derived(activeProfile, ($profile) => $profile !== null);
+export const isAuthenticated = derived(
+  activeProfile,
+  ($profile) => $profile !== null
+);
 
 export const needsUnlock = derived(
   [databaseUnlocked, databaseMode],
@@ -63,8 +66,12 @@ export const app = {
           // Auto-unlock failed - DB might be encrypted but config says "none"
           // This is a state desync - don't crash, just leave it locked
           console.error("[App] Auto-unlock failed:", unlockError);
-          console.warn("[App] Database may be encrypted. Config says mode='none' but DB file might be encrypted.");
-          console.warn("[App] User will need to manually unlock or wipe the database.");
+          console.warn(
+            "[App] Database may be encrypted. Config says mode='none' but DB file might be encrypted."
+          );
+          console.warn(
+            "[App] User will need to manually unlock or wipe the database."
+          );
           databaseUnlocked.set(false);
           // Don't throw - let initialization continue
         }
@@ -102,7 +109,9 @@ export const app = {
       activeProfile.set(active);
       allProfiles.set(all);
 
-      console.log(`[App] Loaded auth: active=${active?.email}, total=${all.length}`);
+      console.log(
+        `[App] Loaded auth: active=${active?.email}, total=${all.length}`
+      );
     } catch (error) {
       console.error("[App] Failed to load auth:", error);
       // Don't throw - this might happen if DB is empty

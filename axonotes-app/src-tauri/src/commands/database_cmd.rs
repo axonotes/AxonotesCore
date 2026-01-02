@@ -26,10 +26,7 @@ pub async fn wipe_database() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn set_database_encryption(
-    new_password: String,
-    mode: String,
-) -> Result<(), String> {
+pub async fn set_database_encryption(new_password: String, mode: String) -> Result<(), String> {
     database::set_encryption(new_password, mode).await
 }
 

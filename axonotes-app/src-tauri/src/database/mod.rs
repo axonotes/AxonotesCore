@@ -177,10 +177,7 @@ async fn reencrypt(new_password: &str) -> Result<(), String> {
 }
 
 /// Set encryption on database (transition from 'none' to 'pin'/'pass')
-pub async fn set_encryption(
-    new_password: String,
-    mode: String,
-) -> Result<(), String> {
+pub async fn set_encryption(new_password: String, mode: String) -> Result<(), String> {
     // Validate mode
     if mode != "pin" && mode != "pass" {
         return Err("Mode must be 'pin' or 'pass'".to_string());

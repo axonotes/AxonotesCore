@@ -46,7 +46,7 @@ export class AuthService {
     });
 
     // Get current theme
-    let darkMode = mode.current === "dark";
+    const darkMode = mode.current === "dark";
 
     // Get auth URL and open browser
     const authUrl = await invoke<string>("start_login", {

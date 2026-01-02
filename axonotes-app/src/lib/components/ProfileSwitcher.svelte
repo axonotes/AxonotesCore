@@ -11,7 +11,14 @@
     DropdownMenuGroup,
   } from "$lib/components/ui/dropdown-menu";
   import {Avatar, AvatarFallback} from "$lib/components/ui/avatar";
-  import {Check, ChevronDown, LogOut, Plus, Settings, User} from "@lucide/svelte";
+  import {
+    Check,
+    ChevronDown,
+    LogOut,
+    Plus,
+    Settings,
+    User,
+  } from "@lucide/svelte";
 
   function getInitials(name: string): string {
     return name
@@ -51,8 +58,12 @@
             </AvatarFallback>
           </Avatar>
           <div class="flex flex-col items-start overflow-hidden">
-            <span class="truncate text-sm font-medium">{$activeProfile.name}</span>
-            <span class="text-muted-foreground truncate text-xs">{$activeProfile.email}</span>
+            <span class="truncate text-sm font-medium"
+              >{$activeProfile.name}</span
+            >
+            <span class="text-muted-foreground truncate text-xs"
+              >{$activeProfile.email}</span
+            >
           </div>
         {:else}
           <User class="h-4 w-4" />
@@ -68,7 +79,10 @@
 
     <DropdownMenuGroup>
       {#each $allProfiles as profile (profile.id)}
-        <DropdownMenuItem class="flex items-center gap-2" onclick={() => handleSwitchProfile(profile.id)}>
+        <DropdownMenuItem
+          class="flex items-center gap-2"
+          onclick={() => handleSwitchProfile(profile.id)}
+        >
           <Avatar class="h-6 w-6">
             <AvatarFallback class="text-xs">
               {getInitials(profile.name)}
@@ -76,7 +90,9 @@
           </Avatar>
           <div class="flex flex-1 flex-col overflow-hidden">
             <span class="truncate text-sm font-medium">{profile.name}</span>
-            <span class="text-muted-foreground truncate text-xs">{profile.email}</span>
+            <span class="text-muted-foreground truncate text-xs"
+              >{profile.email}</span
+            >
           </div>
           {#if profile.id === $activeProfile?.id}
             <Check class="h-4 w-4" />
@@ -99,7 +115,10 @@
 
     {#if $activeProfile}
       <DropdownMenuSeparator />
-      <DropdownMenuItem class="text-destructive focus:text-destructive" onclick={() => handleLogout($activeProfile.id)}>
+      <DropdownMenuItem
+        class="text-destructive focus:text-destructive"
+        onclick={() => handleLogout($activeProfile.id)}
+      >
         <LogOut class="mr-2 h-4 w-4" />
         <span>Sign out</span>
       </DropdownMenuItem>

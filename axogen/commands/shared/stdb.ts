@@ -1,5 +1,5 @@
 import {liveExec} from "@axonotes/axogen";
-import {detectTool, throwIfToolMissing} from "../../utils/tool-detection";
+import {throwIfToolMissing} from "../../utils/tool-detection";
 
 export async function generateRustBindings() {
   await throwIfToolMissing("Cargo", "cargo", "--version", "https://rustup.rs/");

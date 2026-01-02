@@ -4,7 +4,13 @@
   import LightSwitch from "$lib/components/LightSwitch.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import {onMount} from "svelte";
-  import {app, isInitialized, activeProfile, databaseUnlocked, needsUnlock} from "$lib/stores/app";
+  import {
+    app,
+    isInitialized,
+    activeProfile,
+    databaseUnlocked,
+    needsUnlock,
+  } from "$lib/stores/app";
   import ProfileSwitcher from "$lib/components/ProfileSwitcher.svelte";
 
   let {children} = $props();
@@ -17,7 +23,12 @@
 
     if ($needsUnlock && path !== "/unlock") {
       window.location.href = "/unlock";
-    } else if ($databaseUnlocked && !$activeProfile && path !== "/login" && path !== "/unlock") {
+    } else if (
+      $databaseUnlocked &&
+      !$activeProfile &&
+      path !== "/login" &&
+      path !== "/unlock"
+    ) {
       window.location.href = "/login";
     } else if ($activeProfile && (path === "/login" || path === "/unlock")) {
       window.location.href = "/";

@@ -1,11 +1,11 @@
 use tauri::Manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 
-mod config;
-mod workos_auth;
-mod database;
 mod commands;
+mod config;
 mod crypto;
+mod database;
+mod workos_auth;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -28,7 +28,6 @@ pub fn run() {
             commands::profile_cmd::get_all_profiles,
             commands::profile_cmd::switch_profile,
             commands::profile_cmd::refresh_token,
-            
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();

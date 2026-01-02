@@ -198,7 +198,8 @@ where
                 tokio::spawn(async move {
                     sleep(Duration::from_secs(3)).await;
                     // Make a dummy request to unblock the server
-                    let _ = reqwest::get(format!("http://127.0.0.1:{}/shutdown", shutdown_port)).await;
+                    let _ =
+                        reqwest::get(format!("http://127.0.0.1:{}/shutdown", shutdown_port)).await;
                 });
             } else if let Some(error) = params.get("error") {
                 let error_description = params
@@ -231,7 +232,8 @@ where
                 tokio::spawn(async move {
                     sleep(Duration::from_secs(3)).await;
                     // Make a dummy request to unblock the server
-                    let _ = reqwest::get(format!("http://127.0.0.1:{}/shutdown", shutdown_port)).await;
+                    let _ =
+                        reqwest::get(format!("http://127.0.0.1:{}/shutdown", shutdown_port)).await;
                 });
             }
         }

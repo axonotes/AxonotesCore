@@ -2,7 +2,13 @@
   import {DatabaseService} from "$lib/services/database";
   import {databaseMode} from "$lib/stores/app";
   import {Button} from "$lib/components/ui/button";
-  import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "$lib/components/ui/card";
+  import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+  } from "$lib/components/ui/card";
   import {Input} from "$lib/components/ui/input";
   import {Label} from "$lib/components/ui/label";
   import {Badge} from "$lib/components/ui/badge";
@@ -31,7 +37,10 @@
         return;
       }
 
-      if (mode === "pin" && (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))) {
+      if (
+        mode === "pin" &&
+        (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))
+      ) {
         error = "PIN must be exactly 8 characters (0-9, A-Z uppercase only)";
         return;
       }
@@ -51,7 +60,11 @@
   }
 
   async function handleRemoveEncryption() {
-    if (!confirm("Remove database encryption? This will make your data unencrypted.")) {
+    if (
+      !confirm(
+        "Remove database encryption? This will make your data unencrypted."
+      )
+    ) {
       return;
     }
 
@@ -138,10 +151,15 @@
         </div>
 
         {#if $databaseMode === "none"}
-          <div class="flex items-start gap-2 rounded-md border border-yellow-500/20 bg-yellow-500/10 p-3">
-            <AlertCircle class="mt-0.5 h-4 w-4 text-yellow-700 dark:text-yellow-400" />
+          <div
+            class="flex items-start gap-2 rounded-md border border-yellow-500/20 bg-yellow-500/10 p-3"
+          >
+            <AlertCircle
+              class="mt-0.5 h-4 w-4 text-yellow-700 dark:text-yellow-400"
+            />
             <p class="text-sm text-yellow-700 dark:text-yellow-400">
-              Your database is not encrypted. Set a password for better security.
+              Your database is not encrypted. Set a password for better
+              security.
             </p>
           </div>
         {/if}
@@ -151,9 +169,15 @@
     <!-- Set/Change Encryption -->
     <Card>
       <CardHeader>
-        <CardTitle>{$databaseMode === "none" ? "Set Encryption" : "Change Password"}</CardTitle>
+        <CardTitle
+          >{$databaseMode === "none"
+            ? "Set Encryption"
+            : "Change Password"}</CardTitle
+        >
         <CardDescription>
-          {$databaseMode === "none" ? "Encrypt your database" : "Update encryption password"}
+          {$databaseMode === "none"
+            ? "Encrypt your database"
+            : "Update encryption password"}
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -171,18 +195,24 @@
         </div>
 
         <div class="space-y-2">
-          <Label for="new-password">New {mode === "pin" ? "PIN" : "Password"}</Label>
+          <Label for="new-password"
+            >New {mode === "pin" ? "PIN" : "Password"}</Label
+          >
           <Input
             id="new-password"
             type="password"
-            placeholder={mode === "pin" ? "8 characters (0-9A-Z)" : "Enter password"}
+            placeholder={mode === "pin"
+              ? "8 characters (0-9A-Z)"
+              : "Enter password"}
             bind:value={password}
             disabled={loading}
           />
         </div>
 
         <div class="space-y-2">
-          <Label for="confirm-password">Confirm {mode === "pin" ? "PIN" : "Password"}</Label>
+          <Label for="confirm-password"
+            >Confirm {mode === "pin" ? "PIN" : "Password"}</Label
+          >
           <Input
             id="confirm-password"
             type="password"
@@ -193,7 +223,7 @@
         </div>
 
         {#if error}
-          <p class="text-sm text-destructive">{error}</p>
+          <p class="text-destructive text-sm">{error}</p>
         {/if}
 
         {#if success}
@@ -206,7 +236,11 @@
           </Button>
 
           {#if $databaseMode !== "none"}
-            <Button variant="outline" onclick={handleRemoveEncryption} disabled={loading}>
+            <Button
+              variant="outline"
+              onclick={handleRemoveEncryption}
+              disabled={loading}
+            >
               Remove Encryption
             </Button>
           {/if}
@@ -226,21 +260,27 @@
         <CardContent class="space-y-4">
           <div class="flex items-center justify-between">
             <div class="space-y-1">
-              <p class="text-sm font-medium">Current Mode: {$databaseMode.toUpperCase()}</p>
+              <p class="text-sm font-medium">
+                Current Mode: {$databaseMode.toUpperCase()}
+              </p>
               <p class="text-muted-foreground text-xs">
                 {$databaseMode === "pin"
                   ? "Switch to Password mode to allow any password length and characters"
                   : "Switch to PIN mode to use an 8-character alphanumeric code"}
               </p>
             </div>
-            <Button variant="outline" onclick={handleSwitchMode} disabled={loading}>
+            <Button
+              variant="outline"
+              onclick={handleSwitchMode}
+              disabled={loading}
+            >
               <RefreshCw class="mr-2 h-4 w-4" />
               Switch to {$databaseMode === "pin" ? "Password" : "PIN"}
             </Button>
           </div>
 
           {#if error}
-            <p class="text-sm text-destructive">{error}</p>
+            <p class="text-destructive text-sm">{error}</p>
           {/if}
 
           {#if success}

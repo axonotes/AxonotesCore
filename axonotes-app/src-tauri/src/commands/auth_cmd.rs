@@ -1,11 +1,8 @@
-use tauri::{AppHandle, Emitter};
 use crate::{database, workos_auth};
+use tauri::{AppHandle, Emitter};
 
 #[tauri::command]
-pub async fn start_login(
-    app: AppHandle,
-    dark_mode: bool,
-) -> Result<String, String> {
+pub async fn start_login(app: AppHandle, dark_mode: bool) -> Result<String, String> {
     let auth_url = workos_auth::start_auth_flow(dark_mode, move |result| {
         match result {
             Ok(profile) => {
@@ -26,7 +23,8 @@ pub async fn start_login(
                 let _ = app.emit("login-error", &error);
             }
         }
-    }).await?;
+    })
+    .await?;
 
     Ok(auth_url)
 }
