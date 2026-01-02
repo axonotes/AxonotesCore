@@ -68,13 +68,13 @@ fn generate_code_challenge(verifier: &str) -> String {
 ///
 /// The callback will be called with Ok(Profile) on success or Err(String) on failure.
 /// The callback server will automatically shut down after handling the OAuth response.
-pub async fn start_auth_flow<F>(callback: F) -> Result<String, String>
+pub async fn start_auth_flow<F>(dark_mode: bool, callback: F) -> Result<String, String>
 where
     F: FnOnce(Result<Profile, String>) + Send + 'static,
 {
     let config = OAuthConfig::new();
     let code_verifier = generate_code_verifier();
-    let code_challenge = generate_code_challenge(&code_verifier);
+    let code_challenge = generate_code_challenge(code_verifier.as_str());
 
     // Store the verifier
     {
@@ -83,12 +83,12 @@ where
     }
 
     // Build authorization URL
-    let auth_url = config.get_auth_url(&code_challenge);
+    let auth_url = config.get_auth_url(code_challenge.as_str());
 
     // Start callback server in background
     let callback_port = config.callback_port;
     tokio::spawn(async move {
-        if let Err(e) = run_callback_server(callback_port, callback).await {
+        if let Err(e) = run_callback_server(dark_mode, callback_port, callback).await {
             eprintln!("Callback server error: {}", e);
         }
     });
@@ -126,12 +126,15 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<String, String>
     Ok(refresh_response.access_token)
 }
 
-async fn run_callback_server<F>(port: u16, callback: F) -> Result<(), String>
+async fn run_callback_server<F>(dark_mode: bool, port: u16, callback: F) -> Result<(), String>
 where
     F: FnOnce(Result<Profile, String>) + Send + 'static,
 {
     let address = format!("127.0.0.1:{}", port);
     let server = Server::http(&address).map_err(|e| e.to_string())?;
+
+    // Prepare dark mode class
+    let dark_class = if dark_mode { "dark" } else { "" };
 
     // Create a flag to track if callback has been invoked
     let callback_invoked = Arc::new(AtomicBool::new(false));
@@ -145,9 +148,9 @@ where
             let mut callback_time: std::option::Option<Instant> = None;
 
             for request in server.incoming_requests() {
-                // Check if we should shut down (1 minute after callback)
+                // Check if we should shut down (3 seconds after callback)
                 if let Some(cb_time) = callback_time {
-                    if cb_time.elapsed() >= std::time::Duration::from_secs(60) {
+                    if cb_time.elapsed() >= std::time::Duration::from_secs(3) {
                         break;
                     }
                 }
@@ -175,12 +178,13 @@ where
 
                     if let Some(code) = params.get("code") {
                         // Send success response to browser
-                        let response = Response::from_string(SUCCESS_HTML).with_header(
+                        let success_html = SUCCESS_HTML.replace("{{dark_class}}", dark_class);
+                        let response = Response::from_string(success_html).with_header(
                             tiny_http::Header::from_bytes(
                                 &b"Content-Type"[..],
                                 &b"text/html; charset=utf-8"[..],
                             )
-                            .unwrap(),
+                                .unwrap(),
                         );
                         let _ = request.respond(response);
 
@@ -207,14 +211,16 @@ where
                             .map(|s| s.as_str())
                             .unwrap_or(error);
 
-                        let error_html = ERROR_HTML.replace("{{error}}", error_description);
+                        let error_html = ERROR_HTML
+                            .replace("{{dark_class}}", dark_class).as_str()
+                            .replace("{{error}}", error_description);
 
                         let response = Response::from_string(error_html).with_header(
                             tiny_http::Header::from_bytes(
                                 &b"Content-Type"[..],
                                 &b"text/html; charset=utf-8"[..],
                             )
-                            .unwrap(),
+                                .unwrap(),
                         );
                         let _ = request.respond(response);
 

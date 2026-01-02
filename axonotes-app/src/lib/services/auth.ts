@@ -1,6 +1,7 @@
 import {invoke} from "@tauri-apps/api/core";
 import {listen, type UnlistenFn} from "@tauri-apps/api/event";
 import {open} from "@tauri-apps/plugin-shell";
+import {mode} from "mode-watcher";
 
 export interface Profile {
   id: string;
@@ -44,8 +45,13 @@ export class AuthService {
       callbacks.onError(event.payload);
     });
 
+    // Get current theme
+    let darkMode = mode.current === "dark";
+
     // Get auth URL and open browser
-    const authUrl = await invoke<string>("start_login");
+    const authUrl = await invoke<string>("start_login", {
+      darkMode,
+    });
     await open(authUrl);
 
     return [unlistenSuccess, unlistenError];

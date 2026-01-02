@@ -2,8 +2,11 @@ use tauri::{AppHandle, Emitter};
 use crate::{database, workos_auth};
 
 #[tauri::command]
-pub async fn start_login(app: AppHandle) -> Result<String, String> {
-    let auth_url = workos_auth::start_auth_flow(move |result| {
+pub async fn start_login(
+    app: AppHandle,
+    dark_mode: bool,
+) -> Result<String, String> {
+    let auth_url = workos_auth::start_auth_flow(dark_mode, move |result| {
         match result {
             Ok(profile) => {
                 // Save profile to database and set as active
