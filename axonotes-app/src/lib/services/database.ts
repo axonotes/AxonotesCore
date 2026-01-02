@@ -35,8 +35,14 @@ export class DatabaseService {
    * @param password - New password
    * @param mode - "pin" or "pass"
    */
-  static async setEncryption(password: string, mode: "pin" | "pass"): Promise<void> {
-    await invoke("set_database_encryption", {newPassword: password, mode});
+  static async setEncryption(
+    password: string,
+    mode: "pin" | "pass"
+  ): Promise<void> {
+    await invoke("set_database_encryption", {
+      newPassword: password,
+      mode,
+    });
   }
 
   /**

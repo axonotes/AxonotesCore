@@ -1,9 +1,10 @@
 <script lang="ts">
-  import {app, isLoading, activeProfile} from "$lib/stores/app";
+  import {app, isLoading, activeProfile, databaseMode} from "$lib/stores/app";
   import {Button} from "$lib/components/ui/button";
   import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "$lib/components/ui/card";
   import {Input} from "$lib/components/ui/input";
   import {Label} from "$lib/components/ui/label";
+  import {Badge} from "$lib/components/ui/badge";
   import {Loader2, Lock} from "@lucide/svelte";
 
   let password = $state("");
@@ -13,7 +14,12 @@
     error = "";
 
     if (!password) {
-      error = "Please enter your password";
+      error = $databaseMode === "pin" ? "Please enter your PIN" : "Please enter your password";
+      return;
+    }
+
+    if ($databaseMode === "pin" && (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))) {
+      error = "PIN must be exactly 8 characters (0-9, A-Z uppercase only)";
       return;
     }
 
@@ -28,7 +34,8 @@
       }
     } catch (err) {
       console.error("Unlock error:", err);
-      error = "Incorrect password. Please try again.";
+      error = `Incorrect ${$databaseMode === "pin" ? "PIN" : "password"}. Please try again.`;
+      password = "";
     }
   }
 </script>
@@ -43,8 +50,13 @@
       </div>
       <CardTitle class="text-center text-2xl font-bold">Unlock Database</CardTitle>
       <CardDescription class="text-center">
-        Enter your password to continue
+        Enter your {$databaseMode === "pin" ? "PIN" : "password"} to continue
       </CardDescription>
+      <div class="flex justify-center pt-2">
+        <Badge variant="outline" class="border-primary/20 bg-primary/10 text-primary">
+          Mode: {$databaseMode.toUpperCase()}
+        </Badge>
+      </div>
     </CardHeader>
     <CardContent>
       <form
@@ -55,15 +67,20 @@
         class="space-y-4"
       >
         <div class="space-y-2">
-          <Label for="password">Password</Label>
+          <Label for="password">{$databaseMode === "pin" ? "PIN" : "Password"}</Label>
           <Input
             id="password"
             type="password"
-            placeholder="Enter your password"
+            placeholder={$databaseMode === "pin" ? "8 characters (0-9A-Z)" : "Enter your password"}
             bind:value={password}
             disabled={$isLoading}
             autofocus
           />
+          {#if $databaseMode === "pin"}
+            <p class="text-muted-foreground text-xs">
+              PIN must be exactly 8 characters using only 0-9 and A-Z (uppercase)
+            </p>
+          {/if}
         </div>
 
         {#if error}

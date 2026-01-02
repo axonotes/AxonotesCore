@@ -6,7 +6,7 @@
   import {Input} from "$lib/components/ui/input";
   import {Label} from "$lib/components/ui/label";
   import {Badge} from "$lib/components/ui/badge";
-  import {AlertCircle, Lock, Trash2} from "@lucide/svelte";
+  import {AlertCircle, Lock, Trash2, RefreshCw} from "@lucide/svelte";
 
   let password = $state("");
   let confirmPassword = $state("");
@@ -37,7 +37,7 @@
       }
 
       await DatabaseService.setEncryption(password, mode);
-      success = `Encryption set! Mode: ${mode}. Reloading...`;
+      success = `Encryption ${$databaseMode === "none" ? "set" : "updated"}! Mode: ${mode}. Reloading...`;
       password = "";
       confirmPassword = "";
 
@@ -62,6 +62,25 @@
     try {
       await DatabaseService.removeEncryption();
       success = "Encryption removed! Reloading...";
+
+      // Reload to re-initialize
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      error = err.toString();
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleSwitchMode() {
+    loading = true;
+    error = "";
+    success = "";
+
+    try {
+      const newMode: "pin" | "pass" = $databaseMode === "pin" ? "pass" : "pin";
+      await DatabaseService.switchMode(newMode);
+      success = `Switched to ${newMode} mode! Reloading...`;
 
       // Reload to re-initialize
       setTimeout(() => window.location.reload(), 1500);
@@ -194,6 +213,42 @@
         </div>
       </CardContent>
     </Card>
+
+    <!-- Switch Mode -->
+    {#if $databaseMode === "pin" || $databaseMode === "pass"}
+      <Card class="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Switch Unlock Mode</CardTitle>
+          <CardDescription>
+            Switch between PIN and Password mode without changing your password
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="space-y-1">
+              <p class="text-sm font-medium">Current Mode: {$databaseMode.toUpperCase()}</p>
+              <p class="text-muted-foreground text-xs">
+                {$databaseMode === "pin"
+                  ? "Switch to Password mode to allow any password length and characters"
+                  : "Switch to PIN mode to use an 8-character alphanumeric code"}
+              </p>
+            </div>
+            <Button variant="outline" onclick={handleSwitchMode} disabled={loading}>
+              <RefreshCw class="mr-2 h-4 w-4" />
+              Switch to {$databaseMode === "pin" ? "Password" : "PIN"}
+            </Button>
+          </div>
+
+          {#if error}
+            <p class="text-sm text-destructive">{error}</p>
+          {/if}
+
+          {#if success}
+            <p class="text-sm text-green-600 dark:text-green-400">{success}</p>
+          {/if}
+        </CardContent>
+      </Card>
+    {/if}
 
     <!-- Danger Zone -->
     <Card class="border-destructive/50 lg:col-span-2">

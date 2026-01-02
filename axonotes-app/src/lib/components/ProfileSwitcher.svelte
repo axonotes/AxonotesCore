@@ -11,7 +11,7 @@
     DropdownMenuGroup,
   } from "$lib/components/ui/dropdown-menu";
   import {Avatar, AvatarFallback} from "$lib/components/ui/avatar";
-  import {Check, ChevronDown, LogOut, Plus, User} from "@lucide/svelte";
+  import {Check, ChevronDown, LogOut, Plus, Settings, User} from "@lucide/svelte";
 
   function getInitials(name: string): string {
     return name
@@ -86,6 +86,11 @@
     </DropdownMenuGroup>
 
     <DropdownMenuSeparator />
+
+    <DropdownMenuItem onclick={() => (window.location.href = "/settings")}>
+      <Settings class="mr-2 h-4 w-4" />
+      <span>Settings</span>
+    </DropdownMenuItem>
 
     <DropdownMenuItem onclick={handleAddAccount}>
       <Plus class="mr-2 h-4 w-4" />

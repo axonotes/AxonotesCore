@@ -12,13 +12,7 @@ pub async fn switch_unlock_mode(new_mode: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn unlock_database(password: String) -> Result<(), String> {
-    // Convert empty string to None
-    let pwd = if password.is_empty() {
-        None
-    } else {
-        Some(password)
-    };
-    database::unlock_db(pwd).await
+    database::unlock_db(password).await
 }
 
 #[tauri::command]
