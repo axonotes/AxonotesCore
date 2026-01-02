@@ -15,7 +15,7 @@ const PARALLELISM: u32 = 2; // threads
 // ========================================
 
 pub const MASTER_PASSWORD_ENCRYPTION_CONTEXT: &str = "mp_encryption_context";
-pub const MASTER_PASSWORD_KEY_SIGNING_CONTEXT: &str = "mp_signing_context";
+pub const MASTER_PASSWORD_SIGNING_CONTEXT: &str = "mp_signing_context";
 
 /// Derive a deterministic 32-byte encryption key from a password
 ///
