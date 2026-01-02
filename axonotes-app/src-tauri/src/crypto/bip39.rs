@@ -2,9 +2,11 @@ use rand::rngs::OsRng;
 use rand::TryRngCore;
 use sha2::{Digest, Sha256};
 
+use super::hash;
+
 const WORDLIST: &str = include_str!("bip39-en.txt");
 
-pub fn get_passphrase() -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_mnemonic() -> Result<String, Box<dyn std::error::Error>> {
     let words: Vec<&str> = WORDLIST.lines().collect();
 
     if words.len() != 2048 {
@@ -44,6 +46,18 @@ pub fn get_passphrase() -> Result<String, Box<dyn std::error::Error>> {
     }
 
     Ok(mnemonic.join(" "))
+}
+
+pub const MNEMONIC_KEY_ENCRYPTION_CONTEXT: &str = "encryption_context";
+pub const MNEMONIC_KEY_SIGNING_CONTEXT: &str = "signing_context";
+
+/**
+ * Use function with
+ * - `MNEMONIC_KEY_ENCRYPTION_CONTEXT` or
+ * - `MNEMONIC_KEY_SIGNING_CONTEXT`
+ */
+pub fn mnemonic_to_key(mnemonic: &str, context: &str) -> Vec<u8> {
+    hash::derive_key(mnemonic, context)
 }
 
 pub fn validate_and_correct_passphrase(input: &str) -> (bool, String) {
@@ -209,7 +223,7 @@ mod tests {
 
     #[test]
     fn test_get_passphrase_generates_12_words() {
-        let result = get_passphrase();
+        let result = get_mnemonic();
         assert!(result.is_ok(), "Should generate passphrase successfully");
 
         let passphrase = result.unwrap();
@@ -219,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_get_passphrase_words_are_valid() {
-        let result = get_passphrase().unwrap();
+        let result = get_mnemonic().unwrap();
         let words: Vec<&str> = result.as_str().split_whitespace().collect();
         let wordlist: Vec<&str> = WORDLIST.lines().collect();
 
@@ -235,9 +249,9 @@ mod tests {
     #[test]
     fn test_get_passphrase_is_unique() {
         // Generate multiple passphrases and ensure they're different
-        let passphrase1 = get_passphrase().unwrap();
-        let passphrase2 = get_passphrase().unwrap();
-        let passphrase3 = get_passphrase().unwrap();
+        let passphrase1 = get_mnemonic().unwrap();
+        let passphrase2 = get_mnemonic().unwrap();
+        let passphrase3 = get_mnemonic().unwrap();
 
         assert_ne!(passphrase1, passphrase2, "Passphrases should be unique");
         assert_ne!(passphrase2, passphrase3, "Passphrases should be unique");
@@ -256,7 +270,7 @@ mod tests {
     #[test]
     fn test_validate_generated_passphrase() {
         // A generated passphrase should always be valid
-        let passphrase = get_passphrase().unwrap();
+        let passphrase = get_mnemonic().unwrap();
         let (is_valid, _) = validate_and_correct_passphrase(passphrase.as_str());
         assert!(is_valid, "Generated passphrase should be valid");
     }
@@ -474,7 +488,7 @@ mod tests {
     fn test_roundtrip_generate_and_validate() {
         // Generate 10 passphrases and ensure they all validate
         for _ in 0..10 {
-            let passphrase = get_passphrase().unwrap();
+            let passphrase = get_mnemonic().unwrap();
             let (is_valid, corrected) = validate_and_correct_passphrase(passphrase.as_str());
 
             assert!(
