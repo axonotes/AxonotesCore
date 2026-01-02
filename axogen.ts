@@ -4,6 +4,7 @@ import {installCmd} from "./axogen/commands/install";
 import {devCmd} from "./axogen/commands/dev";
 import {fmtCmd} from "./axogen/commands/fmt";
 import {stdbCmd} from "./axogen/commands/stdb";
+import {testCmd} from "./axogen/commands/test";
 
 export default defineConfig({
   targets: {
@@ -14,5 +15,6 @@ export default defineConfig({
     dev: devCmd,
     fmt: fmtCmd,
     stdb: stdbCmd,
+    test: testCmd,
   },
 });
