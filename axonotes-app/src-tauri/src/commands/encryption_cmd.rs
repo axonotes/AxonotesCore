@@ -7,6 +7,8 @@ use crate::crypto::hash::{
     derive_key, MASTER_PASSWORD_ENCRYPTION_CONTEXT, MASTER_PASSWORD_SIGNING_CONTEXT,
 };
 use crate::crypto::x25519::generate_x25519_keys;
+use crate::database;
+use crate::database::keys::Keys;
 
 #[tauri::command]
 pub async fn set_master_password(password: String) -> Result<String, String> {
@@ -40,7 +42,17 @@ pub async fn set_master_password(password: String) -> Result<String, String> {
     )
     .unwrap();
 
-    // TODO: store keys
+    // Store in local db
+    database::save_active_user_keys(Keys {
+        user_id: "".to_string(), // This is allowed to be empty since 'save_active_user_keys' overwrites with active user id
+        public_encryption_key: public_encryption_key.to_vec(),
+        private_encryption_key: private_encryption_key.to_vec(),
+        public_signing_key: public_signing_key.to_vec(),
+        private_signing_key: private_signing_key.to_vec(),
+    })
+    .await?;
+
+    // TODO: store keys in stdb
 
     Ok(mnemonic)
 }

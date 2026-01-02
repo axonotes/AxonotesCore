@@ -32,5 +32,17 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Create keys table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS keys (
+            user_id TEXT PRIMARY KEY,
+            public_encryption_key BLOB,
+            private_encryption_key BLOB,
+            public_signing_key BLOB,
+            private_signing_key BLOB
+        )",
+        [],
+    )?;
+
     Ok(())
 }

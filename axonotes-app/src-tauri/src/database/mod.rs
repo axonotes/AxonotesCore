@@ -1,7 +1,9 @@
-mod profiles;
-mod schema;
+pub(crate) mod keys;
+pub(crate) mod profiles;
+pub(crate) mod schema;
 
 use crate::crypto;
+use crate::database::keys::Keys;
 use crate::workos_auth::Profile;
 use once_cell::sync::OnceCell;
 use rusqlite::Connection;
@@ -248,6 +250,34 @@ pub async fn refresh_active_profile_token() -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     Ok(new_access_token)
+}
+
+// ========================================
+// Keys Operations (proxies to keys module)
+// ========================================
+
+pub async fn save_keys(keys: Keys) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    keys::save(db.get_conn(), keys).map_err(|e| e.to_string())
+}
+
+pub async fn save_active_user_keys(keys: Keys) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    keys::save_active_user_keys(db.get_conn(), keys).map_err(|e| e.to_string())
+}
+
+pub async fn get_keys(user_id: &str) -> Result<Option<Keys>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    keys::get_keys(db.get_conn(), user_id).map_err(|e| e.to_string())
+}
+
+pub async fn get_active_user_keys() -> Result<Option<Keys>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    keys::get_active_user_keys(db.get_conn()).map_err(|e| e.to_string())
 }
 
 // ========================================
