@@ -48,5 +48,6 @@ hex = "0.4.3"
 toml = "0.9.8"
 chacha20poly1305 = "0.10.1"
 x25519-dalek = {version = "2.0.1", features = ["static_secrets"]}
-# Must be 0.6.4 for x25519-dalek
+ed25519-dalek = {version = "2.2.0", features = ["rand_core"]}
+# Must be 0.6.4 for x25519-dalek and ed25519-dalek
 rand_core = {version = "0.6.4", features = ["getrandom"]}
