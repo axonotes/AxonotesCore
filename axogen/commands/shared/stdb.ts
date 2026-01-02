@@ -11,7 +11,7 @@ export async function generateRustBindings() {
   );
 
   await liveExec(
-    "spacetime generate --lang rust --out-dir axonotes-app/src-tauri/src/stdb_bindings --project-path axonotes-stdb",
+    "spacetime generate --lang rust --out-dir axonotes-app/src-tauri/src/stdb_bindings --project-path axonotes-stdb -y",
     {
       outputPrefix: "SPACETIME-RUST",
     }

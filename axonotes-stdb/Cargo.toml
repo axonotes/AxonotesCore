@@ -11,3 +11,6 @@ crate-type = ["cdylib"]
 [dependencies]
 spacetimedb = "1.11.*"
 log = "0.4"
+ed25519-dalek = {version = "2.2.0", features = ["rand_core"]}
+# Must be 0.6.4 for x25519-dalek and ed25519-dalek
+rand_core = {version = "0.6.4", features = ["getrandom"]}
