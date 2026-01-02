@@ -14,12 +14,18 @@ const PARALLELISM: u32 = 2; // threads
 // Public API - Simple & Clean
 // ========================================
 
+pub const MASTER_PASSWORD_ENCRYPTION_CONTEXT: &str = "mp_encryption_context";
+pub const MASTER_PASSWORD_KEY_SIGNING_CONTEXT: &str = "mp_signing_context";
+
 /// Derive a deterministic 32-byte encryption key from a password
 ///
 /// Use this for encryption keys where you need the same password
 /// to always produce the same key (e.g., database encryption).
 ///
 /// The context parameter ensures different purposes produce different keys.
+///
+/// Use `MASTER_PASSWORD_ENCRYPTION_CONTEXT` or `MASTER_PASSWORD_KEY_SIGNING_CONTEXT` for
+/// master password key derive.
 ///
 /// # Examples
 ///
