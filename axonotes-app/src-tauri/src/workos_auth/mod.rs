@@ -1,13 +1,15 @@
+use crate::config::OAuthConfig;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tiny_http::{Response, Server};
 use tokio::sync::Mutex;
-
-use crate::config::OAuthConfig;
+use tokio::time::{timeout, Duration};
 
 const SUCCESS_HTML: &str = include_str!("html/success.html");
 const ERROR_HTML: &str = include_str!("html/error.html");
@@ -131,79 +133,120 @@ where
     let address = format!("127.0.0.1:{}", port);
     let server = Server::http(&address).map_err(|e| e.to_string())?;
 
-    for request in server.incoming_requests() {
-        let url = format!("http://localhost:{}{}", port, request.url());
+    // Create a flag to track if callback has been invoked
+    let callback_invoked = Arc::new(AtomicBool::new(false));
+    let callback = Arc::new(Mutex::new(Some(callback)));
 
-        // Handle CSS file request
-        if url.contains("/styles.css") {
-            let response = Response::from_string(STYLES_CSS).with_header(
-                tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/css; charset=utf-8"[..])
-                    .unwrap(),
-            );
-            let _ = request.respond(response);
-            continue;
-        }
+    // Spawn server handling in a separate task
+    let server_handle = tokio::task::spawn_blocking({
+        let callback = callback.clone();
+        let callback_invoked = callback_invoked.clone();
+        move || {
+            let mut callback_time: std::option::Option<Instant> = None;
 
-        if url.contains("/callback") {
-            // Parse query parameters
-            let parsed_url = url::Url::parse(&url).map_err(|e| e.to_string())?;
-            let params: std::collections::HashMap<_, _> =
-                parsed_url.query_pairs().into_owned().collect();
-
-            if let Some(code) = params.get("code") {
-                // Send success response to browser
-                let response = Response::from_string(SUCCESS_HTML).with_header(
-                    tiny_http::Header::from_bytes(
-                        &b"Content-Type"[..],
-                        &b"text/html; charset=utf-8"[..],
-                    )
-                        .unwrap(),
-                );
-                let _ = request.respond(response);
-
-                // Exchange code for token in background
-                let code = code.clone();
-                tokio::spawn(async move {
-                    // Small delay to ensure the HTML page fully loads
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                    match exchange_code_for_token(code).await {
-                        Ok(profile) => callback(Ok(profile)),
-                        Err(error) => callback(Err(error)),
+            for request in server.incoming_requests() {
+                // Check if we should shut down (1 minute after callback)
+                if let Some(cb_time) = callback_time {
+                    if cb_time.elapsed() >= std::time::Duration::from_secs(60) {
+                        break;
                     }
-                });
+                }
 
-                break;
-            } else if let Some(error) = params.get("error") {
-                let error_description = params
-                    .get("error_description")
-                    .map(|s| s.as_str())
-                    .unwrap_or(error);
+                let url = format!("http://localhost:{}{}", port, request.url());
 
-                let error_html = ERROR_HTML.replace("{{error}}", error_description);
-
-                let response = Response::from_string(error_html).with_header(
-                    tiny_http::Header::from_bytes(
-                        &b"Content-Type"[..],
-                        &b"text/html; charset=utf-8"[..],
-                    )
+                // Handle CSS file request
+                if url.contains("/styles.css") {
+                    let response = Response::from_string(STYLES_CSS).with_header(
+                        tiny_http::Header::from_bytes(
+                            &b"Content-Type"[..],
+                            &b"text/css; charset=utf-8"[..],
+                        )
                         .unwrap(),
-                );
-                let _ = request.respond(response);
+                    );
+                    let _ = request.respond(response);
+                    continue;
+                }
 
-                // Call callback with error
-                let error_msg = error_description.to_string();
-                tokio::spawn(async move {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                    callback(Err(error_msg));
-                });
+                if url.contains("/callback") {
+                    // Parse query parameters
+                    let parsed_url = url::Url::parse(&url).ok()?;
+                    let params: std::collections::HashMap<_, _> =
+                        parsed_url.query_pairs().into_owned().collect();
 
-                break;
+                    if let Some(code) = params.get("code") {
+                        // Send success response to browser
+                        let response = Response::from_string(SUCCESS_HTML).with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Content-Type"[..],
+                                &b"text/html; charset=utf-8"[..],
+                            )
+                            .unwrap(),
+                        );
+                        let _ = request.respond(response);
+
+                        // Exchange code for token and invoke callback
+                        let code = code.clone();
+                        let rt = tokio::runtime::Handle::current();
+                        rt.block_on(async {
+                            if !callback_invoked.swap(true, Ordering::SeqCst) {
+                                let callback_fn = callback.lock().await.take();
+                                if let Some(cb) = callback_fn {
+                                    match exchange_code_for_token(code).await {
+                                        Ok(profile) => cb(Ok(profile)),
+                                        Err(error) => cb(Err(error)),
+                                    }
+                                }
+                            }
+                        });
+
+                        // Mark the time we called the callback
+                        callback_time = Some(std::time::Instant::now());
+                    } else if let Some(error) = params.get("error") {
+                        let error_description = params
+                            .get("error_description")
+                            .map(|s| s.as_str())
+                            .unwrap_or(error);
+
+                        let error_html = ERROR_HTML.replace("{{error}}", error_description);
+
+                        let response = Response::from_string(error_html).with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Content-Type"[..],
+                                &b"text/html; charset=utf-8"[..],
+                            )
+                            .unwrap(),
+                        );
+                        let _ = request.respond(response);
+
+                        // Call callback with error
+                        let error_msg = error_description.to_string();
+                        if !callback_invoked.swap(true, Ordering::SeqCst) {
+                            let rt = tokio::runtime::Handle::current();
+                            rt.block_on(async {
+                                let callback_fn = callback.lock().await.take();
+                                if let Some(cb) = callback_fn {
+                                    cb(Err(error_msg));
+                                }
+                            });
+                        }
+
+                        // Mark the time we called the callback
+                        callback_time = Some(std::time::Instant::now());
+                    }
+                }
             }
+            Some(())
+        }
+    });
+
+    // Wait for either 10 minute timeout or server completion
+    match timeout(Duration::from_secs(600), server_handle).await {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            // Timeout occurred - server was up for 10 minutes
+            Ok(())
         }
     }
-
-    Ok(())
 }
 
 async fn exchange_code_for_token(code: String) -> Result<Profile, String> {
@@ -214,7 +257,7 @@ async fn exchange_code_for_token(code: String) -> Result<Profile, String> {
         let mut state = AUTH_STATE.lock().await;
         state.code_verifier.take()
     }
-        .ok_or("Code verifier not found")?;
+    .ok_or("Code verifier not found")?;
 
     let client = reqwest::Client::new();
     let params = [
@@ -246,8 +289,8 @@ async fn exchange_code_for_token(code: String) -> Result<Profile, String> {
         token_response.user.first_name.unwrap_or_default(),
         token_response.user.last_name.unwrap_or_default()
     )
-        .trim()
-        .to_string();
+    .trim()
+    .to_string();
 
     Ok(Profile {
         id: token_response.user.id,
