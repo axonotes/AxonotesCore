@@ -1,7 +1,13 @@
 <script lang="ts">
   import {app, isLoading, activeProfile} from "$lib/stores/app";
   import {Button} from "$lib/components/ui/button";
-  import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "$lib/components/ui/card";
+  import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+  } from "$lib/components/ui/card";
   import {Input} from "$lib/components/ui/input";
   import {Label} from "$lib/components/ui/label";
   import {Badge} from "$lib/components/ui/badge";
@@ -57,7 +63,7 @@
     const chars = pastedData.slice(0, 8).split("");
 
     // Validate all characters
-    if (chars.every(char => /^[0-9A-Z]$/.test(char))) {
+    if (chars.every((char) => /^[0-9A-Z]$/.test(char))) {
       chars.forEach((char, i) => {
         pinDigits[i] = char;
         if (pinInputs[i]) {
@@ -76,11 +82,17 @@
     error = "";
 
     if (!password) {
-      error = currentMode === "pin" ? "Please enter your PIN" : "Please enter your password";
+      error =
+        currentMode === "pin"
+          ? "Please enter your PIN"
+          : "Please enter your password";
       return;
     }
 
-    if (currentMode === "pin" && (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))) {
+    if (
+      currentMode === "pin" &&
+      (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))
+    ) {
       error = "PIN must be exactly 8 characters (0-9, A-Z uppercase only)";
       return;
     }
@@ -102,7 +114,7 @@
       // Clear PIN inputs on error
       if (currentMode === "pin") {
         pinDigits = Array(8).fill("");
-        pinInputs.forEach(input => {
+        pinInputs.forEach((input) => {
           if (input) input.value = "";
         });
         pinInputs[0]?.focus();
@@ -111,26 +123,29 @@
   }
 </script>
 
-<div
-        class="flex min-h-screen items-center justify-center bg-background p-4"
->
+<div class="bg-background flex min-h-screen items-center justify-center p-4">
   <Card class="relative w-full max-w-md pb-14">
     <CardHeader class="space-y-3">
       <div class="flex items-center justify-center">
-        <div class="rounded-full bg-primary/10 p-3">
-          <Lock class="h-8 w-8 text-primary" />
+        <div class="bg-primary/10 rounded-full p-3">
+          <Lock class="text-primary h-8 w-8" />
         </div>
       </div>
 
       <div class="space-y-1">
-        <CardTitle class="text-center text-2xl font-bold">Welcome Back</CardTitle>
+        <CardTitle class="text-center text-2xl font-bold"
+          >Welcome Back</CardTitle
+        >
         <CardDescription class="text-center">
           Please unlock your database to continue
         </CardDescription>
       </div>
 
       <div class="flex justify-center">
-        <Badge variant="outline" class="border-primary/20 bg-primary/10 text-primary">
+        <Badge
+          variant="outline"
+          class="border-primary/20 bg-primary/10 text-primary"
+        >
           <div class="flex items-center gap-1.5">
             {#if currentMode === "pin"}
               <Hash class="h-3 w-3" />
@@ -146,32 +161,33 @@
 
     <CardContent>
       <form
-              onsubmit={(e) => {
+        onsubmit={(e) => {
           e.preventDefault();
           handleUnlock();
         }}
-              class="space-y-4"
+        class="space-y-4"
       >
         {#if currentMode === "pin"}
           <!-- PIN Input with 8 boxes -->
           <div class="space-y-2">
             <Label>Enter your PIN</Label>
-            <div class="flex gap-2 justify-center" onpaste={handlePinPaste}>
+            <div class="flex justify-center gap-2" onpaste={handlePinPaste}>
               {#each Array(8) as _, i}
                 <input
-                        bind:this={pinInputs[i]}
-                        type="text"
-                        maxlength="1"
-                        class="h-12 w-10 text-center text-lg font-mono uppercase rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={$isLoading}
-                        autofocus={i === 0}
-                        oninput={(e) => handlePinInput(i, e)}
-                        onkeydown={(e) => handlePinKeydown(i, e)}
+                  bind:this={pinInputs[i]}
+                  type="text"
+                  maxlength="1"
+                  class="border-input bg-background focus:ring-ring h-12 w-10 rounded-md border text-center font-mono text-lg uppercase focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={$isLoading}
+                  autofocus={i === 0}
+                  oninput={(e) => handlePinInput(i, e)}
+                  onkeydown={(e) => handlePinKeydown(i, e)}
                 />
               {/each}
             </div>
-            <p class="text-xs text-muted-foreground text-center">
-              PIN must be exactly 8 characters using only 0-9 and A-Z (uppercase)
+            <p class="text-muted-foreground text-center text-xs">
+              PIN must be exactly 8 characters using only 0-9 and A-Z
+              (uppercase)
             </p>
           </div>
         {:else}
@@ -179,13 +195,13 @@
           <div class="space-y-2">
             <Label for="password">Enter your password</Label>
             <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    bind:value={password}
-                    disabled={$isLoading}
-                    autofocus
-                    class="font-mono"
+              id="password"
+              type="password"
+              placeholder="Enter your password"
+              bind:value={password}
+              disabled={$isLoading}
+              autofocus
+              class="font-mono"
             />
           </div>
         {/if}
@@ -209,13 +225,13 @@
     </CardContent>
 
     <!-- Mode toggle button -->
-    <div class="absolute bottom-4 right-4">
+    <div class="absolute right-4 bottom-4">
       <Button
-              variant="ghost"
-              size="sm"
-              onclick={toggleMode}
-              disabled={$isLoading}
-              class="text-xs"
+        variant="ghost"
+        size="sm"
+        onclick={toggleMode}
+        disabled={$isLoading}
+        class="text-xs"
       >
         {#if currentMode === "pin"}
           <KeyRound class="mr-1.5 h-3 w-3" />

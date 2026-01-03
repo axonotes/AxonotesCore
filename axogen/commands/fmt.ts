@@ -23,9 +23,6 @@ export const fmtCmd = cmd({
       "https://rustup.rs/"
     );
 
-    await liveExec("eslint --fix .", {
-      outputPrefix: "ES-LINT",
-    });
     await liveExec("prettier -w .", {
       outputPrefix: "PRETTIER",
     });
@@ -36,6 +33,11 @@ export const fmtCmd = cmd({
     await liveExec("cargo fmt", {
       cwd: "./axonotes-stdb",
       outputPrefix: "CARGO-STDB",
+    });
+
+    // Run last so sorin doesn't overlook it
+    await liveExec("eslint --fix .", {
+      outputPrefix: "ES-LINT",
     });
   },
 });
