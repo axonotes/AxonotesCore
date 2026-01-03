@@ -172,7 +172,7 @@
           <div class="space-y-2">
             <Label>Enter your PIN</Label>
             <div class="flex justify-center gap-2" onpaste={handlePinPaste}>
-              {#each Array(8) as _, i}
+              {#each Array(8) as _, i (i)}
                 <input
                   bind:this={pinInputs[i]}
                   type="text"
