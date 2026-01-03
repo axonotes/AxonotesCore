@@ -3,6 +3,7 @@ use crate::tables::{
     private_document_version_tag, Document, DocumentBatch, DocumentKey, DocumentVersionTag,
 };
 use crate::utils::auth::verify_message;
+use crate::utils::uuid::generate_uuid;
 use crate::Role;
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 
@@ -129,7 +130,7 @@ pub fn rotate_document_keys(
     // Insert new keys for all authorized users
     for user_key in user_keys {
         ctx.db.private_document_key().insert(DocumentKey {
-            key_id: uuid::Uuid::new_v4().to_string(),
+            key_id: generate_uuid(ctx).to_string(),
             doc_id: doc_id.clone(),
             user_id: user_key.user_id,
             key_timestamp: new_key_timestamp,

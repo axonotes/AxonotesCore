@@ -3,6 +3,7 @@ use crate::tables::{
     DocumentPermission, Role,
 };
 use crate::utils::auth::verify_message;
+use crate::utils::uuid::generate_uuid;
 use crate::{private_document_metadata, Document};
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 
@@ -100,7 +101,7 @@ pub fn add_user_to_document(
     ctx.db
         .private_document_permission()
         .insert(DocumentPermission {
-            permission_id: uuid::Uuid::new_v4().to_string(),
+            permission_id: generate_uuid(ctx).to_string(),
             doc_id: doc_id.clone(),
             user_id: new_user_id,
             role,
@@ -109,7 +110,7 @@ pub fn add_user_to_document(
     // Insert all historical keys for the new user
     for key in encrypted_keys {
         ctx.db.private_document_key().insert(DocumentKey {
-            key_id: uuid::Uuid::new_v4().to_string(),
+            key_id: generate_uuid(ctx).to_string(),
             doc_id: doc_id.clone(),
             user_id: new_user_id,
             key_timestamp: key.key_timestamp,

@@ -1,4 +1,5 @@
 use crate::tables::{private_document_permission, private_live_block, LiveBlock};
+use crate::utils::uuid::generate_uuid;
 use spacetimedb::{ReducerContext, Table, Timestamp};
 
 /// Try to acquire a lock on a block for editing
@@ -60,7 +61,7 @@ pub fn try_lock_block(
     } else {
         // Create new lock
         ctx.db.private_live_block().insert(LiveBlock {
-            live_block_id: uuid::Uuid::new_v4().to_string(),
+            live_block_id: generate_uuid(ctx).to_string(),
             doc_id,
             block_id,
             user_id: ctx.sender,

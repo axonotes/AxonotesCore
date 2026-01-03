@@ -3,6 +3,7 @@ use crate::tables::{
     Document, DocumentKey, DocumentMetadata, DocumentPermission, Role,
 };
 use crate::utils::auth::verify_message;
+use crate::utils::uuid::generate_uuid;
 use crate::{private_document_batch, private_document_version_tag, private_live_block};
 use spacetimedb::{ReducerContext, Table};
 
@@ -38,7 +39,7 @@ pub fn create_document(
 
     // Insert owner's document keys
     ctx.db.private_document_key().insert(DocumentKey {
-        key_id: uuid::Uuid::new_v4().to_string(),
+        key_id: generate_uuid(ctx).to_string(),
         doc_id: doc_id.clone(),
         user_id: ctx.sender,
         key_timestamp,
@@ -49,7 +50,7 @@ pub fn create_document(
     ctx.db
         .private_document_permission()
         .insert(DocumentPermission {
-            permission_id: uuid::Uuid::new_v4().to_string(),
+            permission_id: generate_uuid(ctx).to_string(),
             doc_id: doc_id.clone(),
             user_id: ctx.sender,
             role: Role::Owner,
@@ -57,7 +58,7 @@ pub fn create_document(
 
     // Insert default metadata
     ctx.db.private_document_metadata().insert(DocumentMetadata {
-        meta_id: uuid::Uuid::new_v4().to_string(),
+        meta_id: generate_uuid(ctx).to_string(),
         user_id: ctx.sender,
         doc_id,
         encrypted_blob: encrypted_metadata_blob,

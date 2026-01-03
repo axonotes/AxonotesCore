@@ -1,4 +1,5 @@
 use crate::tables::{private_document_metadata, private_document_permission, DocumentMetadata};
+use crate::utils::uuid::generate_uuid;
 use spacetimedb::{ReducerContext, Table};
 
 /// Create document metadata for the current user
@@ -35,7 +36,7 @@ pub fn create_document_metadata(
 
     // Insert metadata
     ctx.db.private_document_metadata().insert(DocumentMetadata {
-        meta_id: uuid::Uuid::new_v4().to_string(),
+        meta_id: generate_uuid(ctx).to_string(),
         user_id: ctx.sender,
         doc_id,
         encrypted_blob,
