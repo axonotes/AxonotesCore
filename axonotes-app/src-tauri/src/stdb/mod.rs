@@ -2,7 +2,7 @@ use crate::config::StdbConfig;
 use crate::stdb_bindings::*;
 use once_cell::sync::OnceCell;
 use spacetimedb_sdk::__codegen::log;
-use spacetimedb_sdk::{DbContext, Error, Identity, Table};
+use spacetimedb_sdk::{DbContext, Error};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 
 mod callbacks;
 pub(crate) mod context;
+mod reducer_helper;
 
 pub use context::ProfileStdbContext;
 

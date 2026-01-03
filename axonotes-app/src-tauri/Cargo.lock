@@ -297,6 +297,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "once_cell",
+ "paste",
  "rand 0.9.2",
  "rand_core 0.6.4",
  "reqwest",

@@ -1,5 +1,13 @@
-use super::*;
+use crate::call_reducer_await;
 use crate::encryption::UserKeysEncrypted;
+use crate::stdb::{
+    disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
+    is_profile_connected,
+};
+use crate::stdb_bindings::*;
+use spacetimedb_sdk::{DbContext, Identity, Table};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// A context for performing SpacetimeDB operations for a specific profile
 ///
@@ -91,7 +99,21 @@ impl ProfileStdbContext {
     }
 
     // ==========================================
-    // Public API - User Operations
+    // Getters
+    // ==========================================
+
+    /// Get cached user data from SpacetimeDB (if available)
+    pub async fn get_cached_user(&self) -> Result<Option<User>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        // The 'user' view only shows current user's data (filtered by JWT)
+        let user = conn.db.user().iter().next();
+        Ok(user)
+    }
+
+    // ==========================================
+    // Reducer wrappers
     // ==========================================
 
     /// Create a new user in SpacetimeDB with encryption keys
@@ -99,18 +121,25 @@ impl ProfileStdbContext {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
 
-        conn.reducers
-            .create_user(
-                stdb_keys.public_encryption_key,
-                stdb_keys.pwd_encrypted_private_encryption_key,
-                stdb_keys.mnemonic_encrypted_private_encryption_key,
-                stdb_keys.public_signing_key,
-                stdb_keys.pwd_encrypted_private_signing_key,
-                stdb_keys.mnemonic_encrypted_private_signing_key,
-            )
-            .map_err(|e| e.to_string())?;
+        let public_encryption_key = stdb_keys.public_encryption_key;
+        let pwd_encrypted_private_encryption_key = stdb_keys.pwd_encrypted_private_encryption_key;
+        let mnemonic_encrypted_private_encryption_key =
+            stdb_keys.mnemonic_encrypted_private_encryption_key;
+        let public_signing_key = stdb_keys.public_signing_key;
+        let pwd_encrypted_private_signing_key = stdb_keys.pwd_encrypted_private_signing_key;
+        let mnemonic_encrypted_private_signing_key =
+            stdb_keys.mnemonic_encrypted_private_signing_key;
 
-        Ok(())
+        call_reducer_await!(
+            conn,
+            create_user,
+            public_encryption_key,
+            pwd_encrypted_private_encryption_key,
+            mnemonic_encrypted_private_encryption_key,
+            public_signing_key,
+            pwd_encrypted_private_signing_key,
+            mnemonic_encrypted_private_signing_key
+        )
     }
 
     /// Update encryption keys (requires signature for verification)
@@ -122,29 +151,313 @@ impl ProfileStdbContext {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
 
-        conn.reducers
-            .set_encryption_keys(
-                stdb_keys.public_encryption_key,
-                stdb_keys.pwd_encrypted_private_encryption_key,
-                stdb_keys.mnemonic_encrypted_private_encryption_key,
-                stdb_keys.public_signing_key,
-                stdb_keys.pwd_encrypted_private_signing_key,
-                stdb_keys.mnemonic_encrypted_private_signing_key,
-                signature,
-            )
-            .map_err(|e| e.to_string())?;
+        let public_encryption_key = stdb_keys.public_encryption_key;
+        let pwd_encrypted_private_encryption_key = stdb_keys.pwd_encrypted_private_encryption_key;
+        let mnemonic_encrypted_private_encryption_key =
+            stdb_keys.mnemonic_encrypted_private_encryption_key;
+        let public_signing_key = stdb_keys.public_signing_key;
+        let pwd_encrypted_private_signing_key = stdb_keys.pwd_encrypted_private_signing_key;
+        let mnemonic_encrypted_private_signing_key =
+            stdb_keys.mnemonic_encrypted_private_signing_key;
 
-        Ok(())
+        call_reducer_await!(
+            conn,
+            set_encryption_keys,
+            public_encryption_key,
+            pwd_encrypted_private_encryption_key,
+            mnemonic_encrypted_private_encryption_key,
+            public_signing_key,
+            pwd_encrypted_private_signing_key,
+            mnemonic_encrypted_private_signing_key,
+            signature
+        )
     }
 
-    /// Get cached user data from SpacetimeDB (if available)
-    pub async fn get_cached_user(&self) -> Result<Option<User>, String> {
+    /// Upload a batch of patches for a document
+    pub async fn upload_batch(
+        &self,
+        batch_id: String,
+        doc_id: String,
+        timestamp: u64,
+        encrypted_data: Vec<u8>,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
 
-        // The 'user' view only shows current user's data (filtered by JWT)
-        let user = conn.db.user().iter().next();
-        Ok(user)
+        call_reducer_await!(
+            conn,
+            upload_batch,
+            batch_id,
+            doc_id,
+            timestamp,
+            encrypted_data,
+            signature
+        )
+    }
+
+    /// Creates a new document owned by the caller
+    pub async fn create_document(
+        &self,
+        doc_id: String,
+        new_public_signing_key: Vec<u8>,
+        key_timestamp: u64,
+        encrypted_key_data: Vec<u8>, // DocumentKeyData encrypted for owner
+        encrypted_metadata_blob: Vec<u8>, // Default path "/Untitled.doc"
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            create_document,
+            doc_id,
+            new_public_signing_key,
+            key_timestamp,
+            encrypted_key_data,
+            encrypted_metadata_blob
+        )
+    }
+
+    /// Deletes a document and all related data
+    /// Only the owner can delete a document
+    pub async fn delete_document(&self, doc_id: String, signature: Vec<u8>) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, delete_document, doc_id, signature)
+    }
+
+    /// Rotate document keys (called after user removal)
+    ///
+    /// This is a CRITICAL atomic operation that:
+    /// 1. Updates document's current signing key
+    /// 2. Deletes old keys for revoked users (already done in remove_user)
+    /// 3. Inserts new keys for all remaining users
+    /// 4. Stores snapshot batches for ALL blocks
+    /// 5. Re-encrypts all version tags with new key
+    pub async fn rotate_document_keys(
+        &self,
+        doc_id: String,
+        new_key_timestamp: u64,
+        new_public_signing_key: Vec<u8>,
+        user_keys: Vec<UserKeyEntry>,
+        snapshot_batches: Vec<SnapshotBatch>,
+        re_encrypted_tags: Vec<ReEncryptedTag>,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            rotate_document_keys,
+            doc_id,
+            new_key_timestamp,
+            new_public_signing_key,
+            user_keys,
+            snapshot_batches,
+            re_encrypted_tags,
+            signature
+        )
+    }
+
+    /// Try to acquire a lock on a block for editing
+    /// Returns error if block is locked by someone else
+    pub async fn try_lock_block(
+        &self,
+        doc_id: String,
+        block_id: u64,
+        encrypted_content: Vec<u8>,
+        encrypted_username: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            try_lock_block,
+            doc_id,
+            block_id,
+            encrypted_content,
+            encrypted_username
+        )
+    }
+
+    /// Update live block content (while maintaining lock)
+    pub async fn update_live_block(
+        &self,
+        doc_id: String,
+        block_id: u64,
+        encrypted_content: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, update_live_block, doc_id, block_id, encrypted_content)
+    }
+
+    /// Unlock a block (change to focused state or delete)
+    pub async fn unlock_block(
+        &self,
+        doc_id: String,
+        block_id: u64,
+        delete: bool, // true = delete row, false = set locked_at to None
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, unlock_block, doc_id, block_id, delete)
+    }
+
+    /// Create document metadata for the current user
+    /// Called when user gains access to a document
+    pub async fn create_document_metadata(
+        &self,
+        doc_id: String,
+        encrypted_blob: Vec<u8>, // path, tags, etc.
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, create_document_metadata, doc_id, encrypted_blob)
+    }
+
+    /// Update document metadata (path, tags)
+    pub async fn update_document_metadata(
+        &self,
+        doc_id: String,
+        encrypted_blob: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, update_document_metadata, doc_id, encrypted_blob)
+    }
+
+    /// Delete document metadata
+    pub async fn delete_document_metadata(&self, doc_id: String) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, delete_document_metadata, doc_id)
+    }
+
+    /// Add a user to a document
+    /// Owner or Editor can add users
+    /// Editors cannot assign Owner role
+    pub async fn add_user_to_document(
+        &self,
+        doc_id: String,
+        new_user_id: Identity,
+        role: Role,
+        encrypted_keys: Vec<EncryptedKeyEntry>,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            add_user_to_document,
+            doc_id,
+            new_user_id,
+            role,
+            encrypted_keys,
+            signature
+        )
+    }
+
+    /// Remove a user from a document
+    /// ALWAYS triggers key rotation
+    /// Owner/Editor can remove users (except Owner)
+    pub async fn remove_user_from_document(
+        &self,
+        doc_id: String,
+        removed_user_id: Identity,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            remove_user_from_document,
+            doc_id,
+            removed_user_id,
+            signature
+        )
+    }
+
+    /// Change a user's role (Editor ↔ Reader)
+    /// NO key rotation needed
+    pub async fn change_user_role(
+        &self,
+        doc_id: String,
+        target_user_id: Identity,
+        new_role: Role,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            change_user_role,
+            doc_id,
+            target_user_id,
+            new_role,
+            signature
+        )
+    }
+
+    /// Transfer ownership to another user
+    /// Old owner becomes Editor
+    pub async fn transfer_ownership(
+        &self,
+        doc_id: String,
+        new_owner_id: Identity,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, transfer_ownership, doc_id, new_owner_id, signature)
+    }
+
+    /// Create a version tag for a document
+    /// Only Owner or Editor can create tags
+    pub async fn create_version_tag(
+        &self,
+        tag_id: String,
+        doc_id: String,
+        encrypted_blob: Vec<u8>, // tag_name, timestamp, created_by, created_at
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            create_version_tag,
+            tag_id,
+            doc_id,
+            encrypted_blob,
+            signature
+        )
+    }
+
+    /// Delete a version tag
+    /// Only Owner can delete tags
+    pub async fn delete_version_tag(
+        &self,
+        tag_id: String,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, delete_version_tag, tag_id, signature)
     }
 }
 

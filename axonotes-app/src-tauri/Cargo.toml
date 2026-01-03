@@ -25,6 +25,9 @@ tauri-plugin-store = "2.4.0"
 tauri-plugin-shell = "2.3.1"
 tauri-plugin-decorum = "1.1.1"
 
+# Macros
+paste = "1.0.15"
+
 # OAuth dependencies
 reqwest = {version = "0.12.23", features = ["json"] }
 tokio = {version = "1.47.1", features = ["full"] }
