@@ -1,36 +1,86 @@
 <script lang="ts">
-  import {app, isLoading, activeProfile, databaseMode} from "$lib/stores/app";
+  import {app, isLoading, activeProfile} from "$lib/stores/app";
   import {Button} from "$lib/components/ui/button";
-  import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-  } from "$lib/components/ui/card";
+  import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "$lib/components/ui/card";
   import {Input} from "$lib/components/ui/input";
   import {Label} from "$lib/components/ui/label";
   import {Badge} from "$lib/components/ui/badge";
-  import {Loader2, Lock} from "@lucide/svelte";
+  import {Alert, AlertDescription} from "$lib/components/ui/alert";
+  import {Loader2, Lock, KeyRound, Hash} from "@lucide/svelte";
+  import type {UnlockMode} from "$lib/services/database";
 
+  let currentMode = $state<UnlockMode>("pass");
   let password = $state("");
+  let pinDigits = $state<string[]>(Array(8).fill(""));
   let error = $state("");
+  let pinInputs: HTMLInputElement[] = [];
+
+  function toggleMode() {
+    currentMode = currentMode === "pass" ? "pin" : "pass";
+    password = "";
+    pinDigits = Array(8).fill("");
+    error = "";
+  }
+
+  function handlePinInput(index: number, event: Event) {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.toUpperCase();
+
+    // Only allow 0-9 and A-Z
+    if (value && !/^[0-9A-Z]$/.test(value)) {
+      input.value = "";
+      return;
+    }
+
+    pinDigits[index] = value;
+
+    // Auto-advance to next input
+    if (value && index < 7) {
+      pinInputs[index + 1]?.focus();
+    }
+
+    // Update combined password
+    password = pinDigits.join("");
+  }
+
+  function handlePinKeydown(index: number, event: KeyboardEvent) {
+    // Handle backspace
+    if (event.key === "Backspace" && !pinDigits[index] && index > 0) {
+      pinInputs[index - 1]?.focus();
+    }
+  }
+
+  function handlePinPaste(event: ClipboardEvent) {
+    // Handle clipboard paste
+    event.preventDefault();
+    const pastedData = event.clipboardData?.getData("text").toUpperCase() || "";
+    const chars = pastedData.slice(0, 8).split("");
+
+    // Validate all characters
+    if (chars.every(char => /^[0-9A-Z]$/.test(char))) {
+      chars.forEach((char, i) => {
+        pinDigits[i] = char;
+        if (pinInputs[i]) {
+          pinInputs[i].value = char;
+        }
+      });
+      password = pinDigits.join("");
+
+      // Focus the next empty input or the last one
+      const nextEmptyIndex = chars.length < 8 ? chars.length : 7;
+      pinInputs[nextEmptyIndex]?.focus();
+    }
+  }
 
   async function handleUnlock() {
     error = "";
 
     if (!password) {
-      error =
-        $databaseMode === "pin"
-          ? "Please enter your PIN"
-          : "Please enter your password";
+      error = currentMode === "pin" ? "Please enter your PIN" : "Please enter your password";
       return;
     }
 
-    if (
-      $databaseMode === "pin" &&
-      (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))
-    ) {
+    if (currentMode === "pin" && (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))) {
       error = "PIN must be exactly 8 characters (0-9, A-Z uppercase only)";
       return;
     }
@@ -46,67 +96,104 @@
       }
     } catch (err) {
       console.error("Unlock error:", err);
-      error = `Incorrect ${$databaseMode === "pin" ? "PIN" : "password"}. Please try again.`;
+      error = `Incorrect ${currentMode === "pin" ? "PIN" : "password"}. Please try again.`;
       password = "";
+
+      // Clear PIN inputs on error
+      if (currentMode === "pin") {
+        pinDigits = Array(8).fill("");
+        pinInputs.forEach(input => {
+          if (input) input.value = "";
+        });
+        pinInputs[0]?.focus();
+      }
     }
   }
 </script>
 
 <div
-  class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800"
+        class="flex min-h-screen items-center justify-center bg-background p-4"
 >
-  <Card class="mx-4 w-full max-w-md">
-    <CardHeader class="space-y-1">
+  <Card class="relative w-full max-w-md pb-14">
+    <CardHeader class="space-y-3">
       <div class="flex items-center justify-center">
-        <Lock class="text-primary mb-2 h-12 w-12" />
+        <div class="rounded-full bg-primary/10 p-3">
+          <Lock class="h-8 w-8 text-primary" />
+        </div>
       </div>
-      <CardTitle class="text-center text-2xl font-bold"
-        >Unlock Database</CardTitle
-      >
-      <CardDescription class="text-center">
-        Enter your {$databaseMode === "pin" ? "PIN" : "password"} to continue
-      </CardDescription>
-      <div class="flex justify-center pt-2">
-        <Badge
-          variant="outline"
-          class="border-primary/20 bg-primary/10 text-primary"
-        >
-          Mode: {$databaseMode.toUpperCase()}
+
+      <div class="space-y-1">
+        <CardTitle class="text-center text-2xl font-bold">Welcome Back</CardTitle>
+        <CardDescription class="text-center">
+          Please unlock your database to continue
+        </CardDescription>
+      </div>
+
+      <div class="flex justify-center">
+        <Badge variant="outline" class="border-primary/20 bg-primary/10 text-primary">
+          <div class="flex items-center gap-1.5">
+            {#if currentMode === "pin"}
+              <Hash class="h-3 w-3" />
+              PIN
+            {:else}
+              <KeyRound class="h-3 w-3" />
+              Password
+            {/if}
+          </div>
         </Badge>
       </div>
     </CardHeader>
+
     <CardContent>
       <form
-        onsubmit={(e) => {
+              onsubmit={(e) => {
           e.preventDefault();
           handleUnlock();
         }}
-        class="space-y-4"
+              class="space-y-4"
       >
-        <div class="space-y-2">
-          <Label for="password"
-            >{$databaseMode === "pin" ? "PIN" : "Password"}</Label
-          >
-          <Input
-            id="password"
-            type="password"
-            placeholder={$databaseMode === "pin"
-              ? "8 characters (0-9A-Z)"
-              : "Enter your password"}
-            bind:value={password}
-            disabled={$isLoading}
-            autofocus
-          />
-          {#if $databaseMode === "pin"}
-            <p class="text-muted-foreground text-xs">
-              PIN must be exactly 8 characters using only 0-9 and A-Z
-              (uppercase)
+        {#if currentMode === "pin"}
+          <!-- PIN Input with 8 boxes -->
+          <div class="space-y-2">
+            <Label>Enter your PIN</Label>
+            <div class="flex gap-2 justify-center" onpaste={handlePinPaste}>
+              {#each Array(8) as _, i}
+                <input
+                        bind:this={pinInputs[i]}
+                        type="text"
+                        maxlength="1"
+                        class="h-12 w-10 text-center text-lg font-mono uppercase rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={$isLoading}
+                        autofocus={i === 0}
+                        oninput={(e) => handlePinInput(i, e)}
+                        onkeydown={(e) => handlePinKeydown(i, e)}
+                />
+              {/each}
+            </div>
+            <p class="text-xs text-muted-foreground text-center">
+              PIN must be exactly 8 characters using only 0-9 and A-Z (uppercase)
             </p>
-          {/if}
-        </div>
+          </div>
+        {:else}
+          <!-- Password Input -->
+          <div class="space-y-2">
+            <Label for="password">Enter your password</Label>
+            <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    bind:value={password}
+                    disabled={$isLoading}
+                    autofocus
+                    class="font-mono"
+            />
+          </div>
+        {/if}
 
         {#if error}
-          <p class="text-destructive text-sm">{error}</p>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         {/if}
 
         <Button class="w-full" type="submit" disabled={$isLoading}>
@@ -114,10 +201,30 @@
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Unlocking...
           {:else}
-            Unlock
+            <Lock class="mr-2 h-4 w-4" />
+            Unlock Database
           {/if}
         </Button>
       </form>
     </CardContent>
+
+    <!-- Mode toggle button -->
+    <div class="absolute bottom-4 right-4">
+      <Button
+              variant="ghost"
+              size="sm"
+              onclick={toggleMode}
+              disabled={$isLoading}
+              class="text-xs"
+      >
+        {#if currentMode === "pin"}
+          <KeyRound class="mr-1.5 h-3 w-3" />
+          Use Password
+        {:else}
+          <Hash class="mr-1.5 h-3 w-3" />
+          Use PIN
+        {/if}
+      </Button>
+    </div>
   </Card>
 </div>
