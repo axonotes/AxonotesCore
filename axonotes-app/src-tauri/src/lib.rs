@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod crypto;
 mod database;
+mod encryption;
 mod stdb;
 mod stdb_bindings;
 mod workos_auth;
@@ -31,6 +32,14 @@ pub fn run() {
             commands::profile_cmd::switch_profile,
             commands::profile_cmd::refresh_token,
             commands::encryption_cmd::create_stdb_user,
+            commands::encryption_cmd::does_stdb_user_exist,
+            commands::encryption_cmd::do_stdb_keys_need_sync,
+            commands::encryption_cmd::sync_stdb_keys_with_pwd,
+            commands::encryption_cmd::sync_stdb_keys_with_mnemonic,
+            commands::encryption_cmd::update_pwd_from_mnemonic,
+            commands::encryption_cmd::update_mnemonic_from_pwd,
+            commands::encryption_cmd::update_pwd_from_pwd,
+            commands::encryption_cmd::update_mnemonic_from_mnemonic,
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();

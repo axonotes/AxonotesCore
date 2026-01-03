@@ -1,4 +1,5 @@
 use super::*;
+use crate::encryption::UserKeysEncrypted;
 
 /// A context for performing SpacetimeDB operations for a specific profile
 ///
@@ -94,26 +95,18 @@ impl ProfileStdbContext {
     // ==========================================
 
     /// Create a new user in SpacetimeDB with encryption keys
-    pub async fn create_user(
-        &self,
-        public_encryption_key: Vec<u8>,
-        pwd_encrypted_private_encryption_key: Vec<u8>,
-        mnemonic_encrypted_private_encryption_key: Vec<u8>,
-        public_signing_key: Vec<u8>,
-        pwd_encrypted_private_signing_key: Vec<u8>,
-        mnemonic_encrypted_private_signing_key: Vec<u8>,
-    ) -> Result<(), String> {
+    pub async fn create_user(&self, stdb_keys: UserKeysEncrypted) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
 
         conn.reducers
             .create_user(
-                public_encryption_key,
-                pwd_encrypted_private_encryption_key,
-                mnemonic_encrypted_private_encryption_key,
-                public_signing_key,
-                pwd_encrypted_private_signing_key,
-                mnemonic_encrypted_private_signing_key,
+                stdb_keys.public_encryption_key,
+                stdb_keys.pwd_encrypted_private_encryption_key,
+                stdb_keys.mnemonic_encrypted_private_encryption_key,
+                stdb_keys.public_signing_key,
+                stdb_keys.pwd_encrypted_private_signing_key,
+                stdb_keys.mnemonic_encrypted_private_signing_key,
             )
             .map_err(|e| e.to_string())?;
 
@@ -123,12 +116,7 @@ impl ProfileStdbContext {
     /// Update encryption keys (requires signature for verification)
     pub async fn update_encryption_keys(
         &self,
-        public_encryption_key: Vec<u8>,
-        pwd_encrypted_private_encryption_key: Vec<u8>,
-        mnemonic_encrypted_private_encryption_key: Vec<u8>,
-        public_signing_key: Vec<u8>,
-        pwd_encrypted_private_signing_key: Vec<u8>,
-        mnemonic_encrypted_private_signing_key: Vec<u8>,
+        stdb_keys: UserKeysEncrypted,
         signature: Vec<u8>,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
@@ -136,12 +124,12 @@ impl ProfileStdbContext {
 
         conn.reducers
             .set_encryption_keys(
-                public_encryption_key,
-                pwd_encrypted_private_encryption_key,
-                mnemonic_encrypted_private_encryption_key,
-                public_signing_key,
-                pwd_encrypted_private_signing_key,
-                mnemonic_encrypted_private_signing_key,
+                stdb_keys.public_encryption_key,
+                stdb_keys.pwd_encrypted_private_encryption_key,
+                stdb_keys.mnemonic_encrypted_private_encryption_key,
+                stdb_keys.public_signing_key,
+                stdb_keys.pwd_encrypted_private_signing_key,
+                stdb_keys.mnemonic_encrypted_private_signing_key,
                 signature,
             )
             .map_err(|e| e.to_string())?;
@@ -158,4 +146,16 @@ impl ProfileStdbContext {
         let user = conn.db.user().iter().next();
         Ok(user)
     }
+}
+
+pub fn get_message_to_sign(stdb_keys: UserKeysEncrypted) -> Vec<u8> {
+    let vecs = [
+        stdb_keys.public_encryption_key,
+        stdb_keys.pwd_encrypted_private_encryption_key,
+        stdb_keys.mnemonic_encrypted_private_encryption_key,
+        stdb_keys.public_signing_key,
+        stdb_keys.pwd_encrypted_private_signing_key,
+        stdb_keys.mnemonic_encrypted_private_signing_key,
+    ];
+    vecs.concat()
 }
