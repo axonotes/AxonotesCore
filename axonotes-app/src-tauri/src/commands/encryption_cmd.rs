@@ -10,9 +10,9 @@ use crate::crypto::x25519::generate_x25519_keys;
 use crate::database::keys::Keys;
 use crate::{database, stdb};
 
-/// This function can only be called once per active user since it creates a new profile on the stdb instance
+/// This function can only be called once per user since it creates a new profile on the stdb server
 #[tauri::command]
-pub async fn set_master_password(password: String) -> Result<String, String> {
+pub async fn create_stdb_user(password: String) -> Result<String, String> {
     let (private_encryption_key, public_encryption_key) = generate_x25519_keys();
     let (private_signing_key, public_signing_key) = generate_ed25519_keys();
 

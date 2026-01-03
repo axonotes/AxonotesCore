@@ -30,7 +30,7 @@ pub fn run() {
             commands::profile_cmd::get_all_profiles,
             commands::profile_cmd::switch_profile,
             commands::profile_cmd::refresh_token,
-            commands::encryption_cmd::set_master_password,
+            commands::encryption_cmd::create_stdb_user,
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();
