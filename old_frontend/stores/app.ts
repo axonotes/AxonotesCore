@@ -1,6 +1,6 @@
-import {writable, derived, get} from "svelte/store";
-import {DatabaseService, type UnlockMode} from "$lib/services/database";
-import {AuthService, type Profile} from "$lib/services/auth";
+import {derived, get, writable} from "svelte/store";
+import {DatabaseService, type UnlockMode} from "old_frontend/services/database";
+import {AuthService, type Profile} from "old_frontend/services/auth";
 
 /**
  * Application State

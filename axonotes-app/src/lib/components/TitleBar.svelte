@@ -1,6 +1,7 @@
 <script lang="ts">
   import {getCurrentWindow} from "@tauri-apps/api/window";
   import {Minus, Square, X} from "@lucide/svelte";
+  import LightSwitch from "$lib/components/LightSwitch.svelte";
 
   const appWindow = getCurrentWindow();
 
@@ -32,6 +33,8 @@
   <div class="flex items-center gap-2">
     <!-- App icon/logo here if you want -->
     <span class="text-sm font-semibold">Axonotes</span>
+
+    <LightSwitch />
   </div>
 
   <div class="flex items-center gap-1">
