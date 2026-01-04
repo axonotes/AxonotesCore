@@ -25,6 +25,10 @@ export async function unlockDatabase(password: string): Promise<void> {
     return invoke("unlock_database", { password });
 }
 
+export async function lockDatabase(): Promise<void> {
+    return invoke("lock_database");
+}
+
 export async function setDatabaseEncryption(newPassword: string, mode: UnlockMode): Promise<void> {
     return invoke("set_database_encryption", {newPassword, mode});
 }

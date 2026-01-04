@@ -2,6 +2,7 @@
   import {getCurrentWindow} from "@tauri-apps/api/window";
   import {Minus, Square, X} from "@lucide/svelte";
   import LightSwitch from "$lib/components/LightSwitch.svelte";
+  import LockDB from "$lib/components/LockDB.svelte";
 
   const appWindow = getCurrentWindow();
 
@@ -28,13 +29,15 @@
 
 <div
   data-tauri-drag-region
-  class="bg-background flex h-12 items-center justify-between border-b px-4 select-none"
+  class="bg-background flex h-12 items-center justify-between border-b px-4 select-none z-[1000]"
 >
   <div class="flex items-center gap-2">
     <!-- App icon/logo here if you want -->
     <span class="text-sm font-semibold">Axonotes</span>
 
     <LightSwitch />
+
+    <LockDB />
   </div>
 
   <div class="flex items-center gap-1">

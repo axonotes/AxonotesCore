@@ -14,7 +14,7 @@
       if (!isUnlocked) {
         await goto('/unlock');
       } else {
-        await goto('/app');
+        await goto('/login');
       }
     } catch (error) {
       console.error('Error checking database status:', error);
