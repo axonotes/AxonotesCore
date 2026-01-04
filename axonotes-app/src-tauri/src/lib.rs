@@ -1,6 +1,7 @@
 use tauri::Manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 
+mod batch_handler;
 mod commands;
 mod config;
 mod crypto;

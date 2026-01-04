@@ -37,7 +37,7 @@ pub struct DocumentBatch {
     #[primary_key]
     pub batch_id: String, // Random UUID
     pub doc_id: String,          // Document identifier
-    pub timestamp: u64,          // When the batch got created
+    pub timestamp: u128,         // When the batch got created
     pub encrypted_data: Vec<u8>, // block_id + patches (ChaCha20-Poly1305)
 }
 

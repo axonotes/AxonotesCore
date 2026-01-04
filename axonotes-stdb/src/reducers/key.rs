@@ -11,7 +11,7 @@ use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 #[derive(SpacetimeType, Clone)]
 pub struct SnapshotBatch {
     pub batch_id: String,
-    pub timestamp: u64,
+    pub timestamp: u128,
     pub encrypted_data: Vec<u8>,
 }
 

@@ -12,7 +12,7 @@ pub fn upload_batch(
     ctx: &ReducerContext,
     batch_id: String,
     doc_id: String,
-    timestamp: u64,
+    timestamp: u128,
     encrypted_data: Vec<u8>, // Contains block_id + patches (encrypted & signed)
     signature: Vec<u8>,      // Ed25519 signature (verified then discarded)
 ) -> Result<(), String> {

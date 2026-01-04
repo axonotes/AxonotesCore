@@ -15,8 +15,8 @@ mod callbacks;
 pub(crate) mod context;
 mod reducer_helper;
 
+use crate::batch_handler::sync::setup_batch_sync;
 pub use context::ProfileStdbContext;
-
 // ==========================================
 // Global State - One Connection Per Profile
 // ==========================================
@@ -129,6 +129,9 @@ pub(crate) async fn ensure_connection_for_profile(
         .on_applied(callbacks::on_subscription_applied)
         .on_error(callbacks::on_subscription_error)
         .subscribe(["SELECT * FROM user_metadata"]);
+
+    // Setup batch sync
+    setup_batch_sync(&conn).await?;
 
     // Run in background thread
     conn.run_threaded();

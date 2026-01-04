@@ -1,6 +1,7 @@
 [package]
 name = "axonotes-app"
 version = "0.1.0"
+# TODO: Update this ->
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"

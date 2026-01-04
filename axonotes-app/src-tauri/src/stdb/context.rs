@@ -201,7 +201,7 @@ impl ProfileStdbContext {
         &self,
         batch_id: String,
         doc_id: String,
-        timestamp: u64,
+        timestamp: u128,
         encrypted_data: Vec<u8>,
         signature: Vec<u8>,
     ) -> Result<(), String> {
