@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {RefreshCcw} from "@lucide/svelte";
+  import { RefreshCcw } from "@lucide/svelte";
 </script>
 
 <div class="grid h-full w-full items-center">

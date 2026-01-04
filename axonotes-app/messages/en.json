@@ -1,3 +1,21 @@
 {
-  "$schema": "https://inlang.com/schema/inlang-message-format"
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "auth_unlock_title": "Welcome back!",
+  "auth_unlock_description": "Enter your password to continue",
+  "auth_unlock_password_label": "Password",
+  "auth_unlock_password_placeholder": "Enter your password",
+  "auth_unlock_button_primary": "Unlock",
+  "auth_unlock_button_loading": "Unlocking...",
+  "auth_unlock_link_switch_pin": "Use PIN instead",
+  "auth_unlock_error_incorrect": "Incorrect password. Please try again.",
+  "auth_unlock_error_network": "Connection error. Please try again.",
+  "auth_unlock_pin_title": "Welcome back!",
+  "auth_unlock_pin_description": "Enter your 8-character PIN to continue",
+  "auth_unlock_pin_label": "PIN [0-9A-Z]",
+  "auth_unlock_pin_placeholder": "8 characters",
+  "auth_unlock_pin_button_primary": "Unlock",
+  "auth_unlock_pin_button_loading": "Unlocking...",
+  "auth_unlock_pin_link_switch_password": "Use password instead",
+  "auth_unlock_pin_error_incorrect": "Incorrect PIN. Please try again.",
+  "auth_unlock_pin_error_invalid": "PIN must be 8 alphanumeric characters (0-9, A-Z)"
 }
