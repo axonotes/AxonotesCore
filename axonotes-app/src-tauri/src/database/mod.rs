@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
-static DB: OnceCell<Arc<Mutex<Database>>> = OnceCell::new();
+static DB: RwLock<Option<Arc<Mutex<Database>>>> = RwLock::const_new(None);
 static DB_PATH: OnceCell<PathBuf> = OnceCell::new();
 static APP_CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
 
@@ -106,9 +106,11 @@ pub fn switch_unlock_mode_ui(new_mode: String) -> Result<(), String> {
 
 /// Unlock and initialize the database
 pub async fn unlock_db(password: String) -> Result<(), String> {
-    // Check if already unlocked - prevent double initialization
-    if DB.get().is_some() {
-        return Ok(()); // Already unlocked, nothing to do
+    let mut db_guard = DB.write().await;
+
+    // Check if already unlocked
+    if db_guard.is_some() {
+        return Ok(());
     }
 
     let db_path = DB_PATH.get().ok_or("Database path not initialized")?;
@@ -133,15 +135,22 @@ pub async fn unlock_db(password: String) -> Result<(), String> {
 
     // Store in global state
     let db = Database::new(conn);
-    DB.set(Arc::new(Mutex::new(db)))
-        .map_err(|_| "Database already initialized")?;
+    *db_guard = Some(Arc::new(Mutex::new(db)));
 
+    Ok(())
+}
+
+/// Lock the database (clear the connection)
+pub async fn lock_db() -> Result<(), String> {
+    let mut db = DB.write().await;
+    *db = None;
     Ok(())
 }
 
 /// Check if database is unlocked
 pub async fn is_unlocked() -> bool {
-    DB.get().is_some()
+    let db = DB.read().await;
+    db.is_some()
 }
 
 /// Wipe the database (delete file and reset to 'none' mode)
@@ -285,7 +294,8 @@ pub async fn get_active_user_keys() -> Result<Option<Keys>, String> {
 // ========================================
 
 async fn get_db() -> Result<Arc<Mutex<Database>>, String> {
-    DB.get()
+    let db = DB.read().await;
+    db.as_ref()
         .ok_or_else(|| "Database not initialized. Call unlock_db first.".to_string())
         .cloned()
 }

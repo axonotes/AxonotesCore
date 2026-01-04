@@ -16,6 +16,11 @@ pub async fn unlock_database(password: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn lock_database() -> Result<(), String> {
+    database::lock_db().await
+}
+
+#[tauri::command]
 pub async fn is_database_unlocked() -> Result<bool, String> {
     Ok(database::is_unlocked().await)
 }

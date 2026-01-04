@@ -24,6 +24,7 @@ pub fn run() {
             commands::database_cmd::get_unlock_mode,
             commands::database_cmd::switch_unlock_mode,
             commands::database_cmd::unlock_database,
+            commands::database_cmd::lock_database,
             commands::database_cmd::is_database_unlocked,
             commands::database_cmd::wipe_database,
             commands::database_cmd::set_database_encryption,
