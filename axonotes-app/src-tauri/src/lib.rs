@@ -8,6 +8,7 @@ mod database;
 mod encryption;
 mod stdb;
 mod stdb_bindings;
+mod utils;
 mod workos_auth;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,6 +41,11 @@ pub fn run() {
             commands::encryption_cmd::update_mnemonic_from_pwd,
             commands::encryption_cmd::update_pwd_from_pwd,
             commands::encryption_cmd::update_mnemonic_from_mnemonic,
+            commands::document_cmd::create_document,
+            commands::document_cmd::delete_document,
+            commands::document_cmd::get_document_meta,
+            commands::document_cmd::list_documents,
+            commands::document_cmd::update_document_metadata
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();

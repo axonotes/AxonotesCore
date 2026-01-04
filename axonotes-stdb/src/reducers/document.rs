@@ -20,7 +20,7 @@ pub fn create_document(
     ctx: &ReducerContext,
     doc_id: String,
     new_public_signing_key: Vec<u8>,
-    key_timestamp: u64,
+    key_timestamp: u128,
     encrypted_key_data: Vec<u8>, // DocumentKeyData encrypted for owner
     encrypted_metadata_blob: Vec<u8>, // Default path "/Untitled.doc"
 ) -> Result<(), String> {

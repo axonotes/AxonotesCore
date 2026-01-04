@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection, Result};
 
+#[derive(Clone)]
 pub struct Keys {
     pub user_id: String,
     pub public_encryption_key: Vec<u8>,

@@ -124,6 +124,12 @@ pub(crate) async fn ensure_connection_for_profile(
         .on_error(callbacks::on_subscription_error)
         .subscribe(["SELECT * FROM user"]);
 
+    // Subscribe to document metadata view
+    conn.subscription_builder()
+        .on_applied(callbacks::on_subscription_applied)
+        .on_error(callbacks::on_subscription_error)
+        .subscribe(["SELECT * FROM user_metadata"]);
+
     // Run in background thread
     conn.run_threaded();
 

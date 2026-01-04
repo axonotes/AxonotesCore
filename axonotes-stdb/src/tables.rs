@@ -25,7 +25,7 @@ pub struct Document {
     #[index(btree)]
     pub owner_id: Identity, // Document Owner
     pub current_public_signing_key: Vec<u8>, // Ed25519 public key (for signing batches)
-    pub key_timestamp: u64,                  // Current key version timestamp
+    pub key_timestamp: u128,                 // Current key version timestamp
 }
 
 // ==================== DOCUMENT BATCH ====================
@@ -53,7 +53,7 @@ pub struct DocumentKey {
     pub doc_id: String,    // Document identifier
     pub user_id: Identity, // Who the key belongs to
     #[index(btree)]
-    pub key_timestamp: u64, // Which key version
+    pub key_timestamp: u128, // Which key version
     pub encrypted_data: Vec<u8>, // Encrypted signing and encryption key with user's public key
 }
 

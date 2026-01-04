@@ -41,7 +41,7 @@ pub struct UserKeyEntry {
 pub fn rotate_document_keys(
     ctx: &ReducerContext,
     doc_id: String,
-    new_key_timestamp: u64,
+    new_key_timestamp: u128,
     new_public_signing_key: Vec<u8>,
     user_keys: Vec<UserKeyEntry>,
     snapshot_batches: Vec<SnapshotBatch>,

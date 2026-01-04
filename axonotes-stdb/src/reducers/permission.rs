@@ -9,7 +9,7 @@ use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 
 #[derive(SpacetimeType)]
 pub struct EncryptedKeyEntry {
-    pub key_timestamp: u64,
+    pub key_timestamp: u128,
     pub encrypted_data: Vec<u8>,
 }
 

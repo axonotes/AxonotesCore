@@ -1,10 +1,15 @@
 use crate::call_reducer_await;
-use crate::encryption::UserKeysEncrypted;
+use crate::database::get_active_user_keys;
+use crate::database::keys::Keys;
+use crate::encryption::document::DecryptVec;
+use crate::encryption::document::DecryptedDocumentMetadata;
+use crate::encryption::user::UserKeysEncrypted;
 use crate::stdb::{
     disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
     is_profile_connected,
 };
 use crate::stdb_bindings::*;
+use crate::utils::vec_array::ByteArrayConversion;
 use spacetimedb_sdk::{DbContext, Identity, Table};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -112,6 +117,24 @@ impl ProfileStdbContext {
         Ok(user)
     }
 
+    /// Get cached document metadata from SpacetimeDB
+    pub async fn get_cached_metadata(&self) -> Result<Vec<DecryptedDocumentMetadata>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let user_keys: Option<Keys> = get_active_user_keys().await?;
+        if let Some(user_keys) = user_keys {
+            let private_encryption_key = user_keys.private_encryption_key.as_array()?;
+            conn.db
+                .user_metadata()
+                .iter()
+                .collect::<Vec<_>>()
+                .decrypt_all(private_encryption_key)
+        } else {
+            Err("No active user keys available. Not synced with stdb?".to_string())
+        }
+    }
+
     // ==========================================
     // Reducer wrappers
     // ==========================================
@@ -201,7 +224,7 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         new_public_signing_key: Vec<u8>,
-        key_timestamp: u64,
+        key_timestamp: u128,
         encrypted_key_data: Vec<u8>, // DocumentKeyData encrypted for owner
         encrypted_metadata_blob: Vec<u8>, // Default path "/Untitled.doc"
     ) -> Result<(), String> {
@@ -239,7 +262,7 @@ impl ProfileStdbContext {
     pub async fn rotate_document_keys(
         &self,
         doc_id: String,
-        new_key_timestamp: u64,
+        new_key_timestamp: u128,
         new_public_signing_key: Vec<u8>,
         user_keys: Vec<UserKeyEntry>,
         snapshot_batches: Vec<SnapshotBatch>,

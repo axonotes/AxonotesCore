@@ -1,6 +1,6 @@
 use crate::crypto::bip39::get_mnemonic;
 use crate::database::keys::Keys;
-use crate::encryption::{
+use crate::encryption::user::{
     decrypted_to_encrypted, generate_decrypted_keys, mnemonic_encrypted_to_decrypted,
     pwd_encrypted_to_decrypted, reencrypt_with_new_mnemonic, reencrypt_with_new_password,
     sign_encryption_update, UserKeysDecrypted, UserKeysEncrypted,
