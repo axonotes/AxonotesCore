@@ -44,36 +44,6 @@
           {/if}
         </Button>
 
-        <div class="relative my-6">
-          <div class="absolute inset-0 flex items-center">
-            <span class="w-full border-t border-border/50"></span>
-          </div>
-          <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-card px-2 text-muted-foreground">
-              Secure Authentication
-            </span>
-          </div>
-        </div>
-
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <Label for="email">Work Email</Label>
-            <div class="relative">
-              <Mail class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="name@company.com" 
-                class="pl-10"
-                disabled={$isLoading}
-              />
-            </div>
-          </div>
-          <Button class="w-full mt-2" size="lg" disabled={$isLoading}>
-            Continue with Email
-            <ArrowRight class="ml-2 h-4 w-4" />
-          </Button>
-        </div>
       </CardContent>
       
       {#if $isLoading}
