@@ -1,7 +1,7 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand_core::OsRng;
 
-#[warn(dead_code)]
+#[allow(dead_code)]
 pub fn generate_ed25519_keys() -> ([u8; 32], [u8; 32]) {
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
@@ -12,7 +12,7 @@ pub fn generate_ed25519_keys() -> ([u8; 32], [u8; 32]) {
     (private_bytes, public_bytes)
 }
 
-#[warn(dead_code)]
+#[allow(dead_code)]
 pub fn sign_message(
     private_key: &[u8; 32],
     message: &[u8],
