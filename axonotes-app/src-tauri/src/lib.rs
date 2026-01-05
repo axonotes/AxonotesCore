@@ -48,7 +48,12 @@ pub fn run() {
             commands::document_cmd::delete_document,
             commands::document_cmd::get_document_meta,
             commands::document_cmd::list_documents,
-            commands::document_cmd::update_document_metadata
+            commands::document_cmd::update_document_metadata,
+            commands::collaboration_cmd::request_lock,
+            commands::collaboration_cmd::release_lock_focused,
+            commands::collaboration_cmd::release_lock_blur,
+            commands::collaboration_cmd::get_document_locks,
+            commands::collaboration_cmd::update_live_block
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());

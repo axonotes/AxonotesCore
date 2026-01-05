@@ -1,8 +1,10 @@
 use crate::call_reducer_await;
+use crate::crypto::chacha::encrypt;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::DecryptedDocumentMetadata;
 use crate::encryption::document::{DecryptDocumentMetaAndKeyVec, DecryptedDocumentKey};
+use crate::encryption::helpers::find_correct_decryption_key;
 use crate::encryption::live_block::DecryptLiveBlockVec;
 use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::encryption::user::UserKeysEncrypted;
@@ -11,7 +13,9 @@ use crate::stdb::{
     is_profile_connected,
 };
 use crate::stdb_bindings::*;
+use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
+use postcard::to_allocvec;
 use spacetimedb_sdk::{DbContext, Identity, Table};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -324,11 +328,33 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         block_id: u64,
-        encrypted_content: Vec<u8>,
-        encrypted_username: Vec<u8>,
+        content: Vec<u8>,
+        username: String,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
+
+        let cached_document_keys = self.get_cached_document_keys().await?;
+        let latest_document_key = find_correct_decryption_key(
+            doc_id.to_string(),
+            timestamp(),
+            cached_document_keys.as_slice(),
+        )?;
+
+        let username_blob =
+            to_allocvec(&username).map_err(|e| format!("Error serializing batch data: {}", e))?;
+
+        let encrypted_content = encrypt(
+            latest_document_key.key_data.encryption_key.as_slice(),
+            content.as_slice(),
+        )
+        .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
+
+        let encrypted_username = encrypt(
+            latest_document_key.key_data.encryption_key.as_slice(),
+            username_blob.as_slice(),
+        )
+        .map_err(|e| format!("Error when encrypting live block username: {}", e))?;
 
         call_reducer_await!(
             conn,
@@ -345,10 +371,23 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         block_id: u64,
-        encrypted_content: Vec<u8>,
+        content: Vec<u8>,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
+
+        let cached_document_keys = self.get_cached_document_keys().await?;
+        let latest_document_key = find_correct_decryption_key(
+            doc_id.to_string(),
+            timestamp(),
+            cached_document_keys.as_slice(),
+        )?;
+
+        let encrypted_content = encrypt(
+            latest_document_key.key_data.encryption_key.as_slice(),
+            content.as_slice(),
+        )
+        .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
 
         call_reducer_await!(conn, update_live_block, doc_id, block_id, encrypted_content)
     }
