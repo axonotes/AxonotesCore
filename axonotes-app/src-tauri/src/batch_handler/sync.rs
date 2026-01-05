@@ -135,7 +135,7 @@ async fn sync_single_batch(server_batch: DecryptedBatch) -> Result<Option<Confli
         };
 
         for pending in &pending_conflicts {
-            database::delete_batch(pending.batch_id.clone()).await?;
+            database::delete_batch(pending).await?;
         }
 
         Some(conflict)

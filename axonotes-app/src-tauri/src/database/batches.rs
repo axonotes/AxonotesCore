@@ -80,8 +80,8 @@ pub fn get_by_doc_and_block(
     Ok(batches)
 }
 
-/// Get batches newer than a given timestamp for a document
-pub fn get_after_timestamp(
+/// Get batches up to (and including) a given timestamp
+pub fn get_up_to_timestamp(
     conn: &Connection,
     doc_id: &str,
     after: u128,
@@ -89,7 +89,7 @@ pub fn get_after_timestamp(
     let mut stmt = conn.prepare(
         "SELECT batch_id, doc_id, timestamp, block_id, patches, pending
          FROM batches
-         WHERE doc_id = ?1 AND timestamp > ?2
+         WHERE doc_id = ?1 AND timestamp <= ?2
          ORDER BY timestamp ASC",
     )?;
 
@@ -100,8 +100,8 @@ pub fn get_after_timestamp(
     Ok(batches)
 }
 
-/// Get batches for a specific block within a document, newer than a given timestamp
-pub fn get_by_doc_and_block_after_timestamp(
+/// Get batches for a specific block up to (and including) a given timestamp
+pub fn get_by_doc_and_block_up_to_timestamp(
     conn: &Connection,
     doc_id: &str,
     block_id: u64,
@@ -110,7 +110,7 @@ pub fn get_by_doc_and_block_after_timestamp(
     let mut stmt = conn.prepare(
         "SELECT batch_id, doc_id, timestamp, block_id, patches, pending
          FROM batches
-         WHERE doc_id = ?1 AND block_id = ?2 AND timestamp > ?3
+         WHERE doc_id = ?1 AND block_id = ?2 AND timestamp <= ?3
          ORDER BY timestamp ASC",
     )?;
 

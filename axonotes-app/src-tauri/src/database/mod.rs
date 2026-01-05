@@ -4,6 +4,7 @@ pub(crate) mod keys;
 pub(crate) mod profiles;
 pub(crate) mod schema;
 
+use crate::batch_handler::document_manager::invalidate_block_cache;
 use crate::crypto;
 use crate::database::keys::Keys;
 use crate::encryption::batch::DecryptedBatch;
@@ -311,19 +312,35 @@ pub async fn get_active_user_keys() -> Result<Option<Keys>, String> {
 pub async fn save_batch(batch: DecryptedBatch) -> Result<(), String> {
     let db = get_db().await?;
     let db = db.lock().await;
-    batches::save(db.get_conn(), &batch).map_err(|e| e.to_string())
+    batches::save(db.get_conn(), &batch).map_err(|e| e.to_string())?;
+
+    invalidate_block_cache(batch.doc_id, batch.batch_data.block_id);
+    Ok(())
 }
 
 pub async fn save_pending_batch(batch: DecryptedBatch) -> Result<(), String> {
     let db = get_db().await?;
     let db = db.lock().await;
-    batches::save_pending(db.get_conn(), &batch).map_err(|e| e.to_string())
+    batches::save_pending(db.get_conn(), &batch).map_err(|e| e.to_string())?;
+
+    invalidate_block_cache(batch.doc_id, batch.batch_data.block_id);
+    Ok(())
 }
 
 pub async fn save_batches(batches_list: Vec<DecryptedBatch>) -> Result<(), String> {
+    let to_invalidate: Vec<_> = batches_list
+        .iter()
+        .map(|b| (b.doc_id.clone(), b.batch_data.block_id))
+        .collect();
+
     let db = get_db().await?;
     let db = db.lock().await;
-    batches::save_all(db.get_conn(), &batches_list).map_err(|e| e.to_string())
+    batches::save_all(db.get_conn(), &batches_list).map_err(|e| e.to_string())?;
+
+    for (doc_id, block_id) in to_invalidate {
+        invalidate_block_cache(doc_id, block_id);
+    }
+    Ok(())
 }
 
 pub async fn get_batches_by_doc(doc_id: String) -> Result<Vec<DecryptedBatch>, String> {
@@ -341,14 +358,14 @@ pub async fn get_batches_by_doc_and_block(
     batches::get_by_doc_and_block(db.get_conn(), &doc_id, block_id).map_err(|e| e.to_string())
 }
 
-pub async fn get_batches_by_doc_and_block_after_timestamp(
+pub async fn get_by_doc_and_block_up_to_timestamp(
     doc_id: String,
     block_id: u64,
     after: u128,
 ) -> Result<Vec<DecryptedBatch>, String> {
     let db = get_db().await?;
     let db = db.lock().await;
-    batches::get_by_doc_and_block_after_timestamp(db.get_conn(), &doc_id, block_id, after)
+    batches::get_by_doc_and_block_up_to_timestamp(db.get_conn(), &doc_id, block_id, after)
         .map_err(|e| e.to_string())
 }
 
@@ -376,12 +393,16 @@ pub async fn mark_batch_synced(batch_id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-pub async fn delete_batch(batch_id: String) -> Result<(), String> {
+pub async fn delete_batch(batch: &DecryptedBatch) -> Result<(), String> {
     let db = get_db().await?;
     let db = db.lock().await;
-    batches::delete(db.get_conn(), &batch_id)
+
+    batches::delete(db.get_conn(), &batch.batch_id)
         .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    invalidate_block_cache(batch.doc_id.to_string(), batch.batch_data.block_id);
+    Ok(())
 }
 
 // ========================================
