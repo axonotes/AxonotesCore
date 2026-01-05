@@ -37,7 +37,6 @@ async fn get_single_block(
 ) -> Result<Option<BlockData>, String> {
     let cache_key = (doc_id.clone(), block_id, timestamp);
 
-    // Check cache first
     if let Some(cached) = BLOCK_CACHE.get(&cache_key).await {
         return Ok(Some(cached));
     }
@@ -45,27 +44,33 @@ async fn get_single_block(
     let batches: Vec<DecryptedBatch> =
         database::get_by_doc_and_block_up_to_timestamp(doc_id, block_id, timestamp).await?;
 
-    let mut current_block_data: Option<BlockData> = None;
+    // Move CPU-bound patch processing to blocking thread pool
+    let current_block_data = tokio::task::spawn_blocking(move || {
+        let mut current_block_data: Option<BlockData> = None;
 
-    for batch in batches {
-        let mut current_time = batch.timestamp;
+        for batch in batches {
+            let mut current_time = batch.timestamp;
 
-        for patch in batch.batch_data.patches {
-            let (new_block, time_delta) = if let Some(ref cbd) = current_block_data {
-                decode_patch(&cbd.block, &patch)?
-            } else {
-                decode_initial_patch(&patch)?
-            };
-            current_time += (time_delta * 5) as u128;
-            current_block_data = Some(BlockData {
-                timestamp: current_time,
-                block_id: batch.batch_data.block_id,
-                block: new_block,
-            });
+            for patch in batch.batch_data.patches {
+                let (new_block, time_delta) = if let Some(ref cbd) = current_block_data {
+                    decode_patch(&cbd.block, &patch)?
+                } else {
+                    decode_initial_patch(&patch)?
+                };
+                current_time += (time_delta * 5) as u128;
+                current_block_data = Some(BlockData {
+                    timestamp: current_time,
+                    block_id: batch.batch_data.block_id,
+                    block: new_block,
+                });
+            }
         }
-    }
 
-    // Cache the result
+        Ok::<_, String>(current_block_data)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
     if let Some(ref block_data) = current_block_data {
         BLOCK_CACHE.insert(cache_key, block_data.clone()).await;
     }
@@ -523,9 +528,11 @@ mod tests {
     #[tokio::test]
     #[ignore] // Run with `cargo test bench_reconstruction_stress -- --ignored --nocapture`
     async fn bench_reconstruction_stress() {
+        use rayon::prelude::*;
+
         let doc_id = setup_test_db().await.expect("Failed to setup test db");
-        let doc_id = doc_id.as_str();
-        cleanup_test_batches(doc_id).await;
+        let doc_id_str = doc_id.as_str();
+        cleanup_test_batches(doc_id_str).await;
 
         let num_blocks: u64 = 100;
         let patches_per_block: usize = 100_000;
@@ -539,35 +546,47 @@ mod tests {
 
         let setup_start = Instant::now();
 
-        for block_id in 1..=num_blocks {
-            let mut patches = vec![];
-            let mut current_block = make_test_block(format!("block {} v0", block_id).as_str());
-            patches.push(make_initial_patch(&current_block));
+        // Create all batches in parallel (CPU-bound work)
+        let doc_id_clone = doc_id.clone();
+        let batches: Vec<_> = (1..=num_blocks)
+            .into_par_iter()
+            .map(|block_id| {
+                let mut patches = Vec::with_capacity(patches_per_block);
+                let mut current_block = make_test_block(&format!("block {} v0", block_id));
+                patches.push(make_initial_patch(&current_block));
 
-            for v in 1..patches_per_block {
-                let new_block = make_test_block(format!("block {} v{}", block_id, v).as_str());
-                patches.push(make_patch(&current_block, &new_block));
-                current_block = new_block;
-            }
+                for v in 1..patches_per_block {
+                    let new_block = make_test_block(&format!("block {} v{}", block_id, v));
+                    patches.push(make_patch(&current_block, &new_block));
+                    current_block = new_block;
+                }
 
-            let batch = make_test_batch(doc_id, block_id, 0, 100, patches);
-            database::save_batch(batch)
-                .await
-                .expect("Failed to save batch");
+                make_test_batch(&doc_id_clone, block_id, 0, 100, patches)
+            })
+            .collect();
 
-            if block_id % 10 == 0 {
-                println!("  Created block {}/{}", block_id, num_blocks);
-            }
+        println!("Batches created in {:?}", setup_start.elapsed());
+
+        // Save all batches in parallel
+        let save_start = Instant::now();
+        let save_futures: Vec<_> = batches
+            .into_iter()
+            .map(|batch| database::save_batch(batch))
+            .collect();
+
+        let results = join_all(save_futures).await;
+        for result in results {
+            result.expect("Failed to save batch");
         }
 
+        println!("Batches saved in {:?}", save_start.elapsed());
         println!("Setup completed in {:?}", setup_start.elapsed());
 
-        // Clear cache
+        // ... rest of benchmark unchanged
         invalidate_doc_cache(doc_id.to_string());
 
         let block_ids: Vec<u64> = (1..=num_blocks).collect();
 
-        // Benchmark cold
         println!("\n=== Running Cold Benchmark ===");
         let start = Instant::now();
         let result = get_blocks(doc_id.to_string(), block_ids.clone(), u128::MAX)
@@ -583,7 +602,6 @@ mod tests {
             cold_duration / (num_blocks as u32 * patches_per_block as u32)
         );
 
-        // Benchmark warm
         println!("\n=== Running Warm Benchmark ===");
         let start = Instant::now();
         let _ = get_blocks(doc_id.to_string(), block_ids.clone(), u128::MAX)
@@ -598,6 +616,6 @@ mod tests {
             cold_duration.as_nanos() as f64 / warm_duration.as_nanos() as f64
         );
 
-        cleanup_test_batches(doc_id).await;
+        cleanup_test_batches(doc_id_str).await;
     }
 }

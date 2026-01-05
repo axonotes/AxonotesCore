@@ -46,7 +46,7 @@ uuid = { version = "1.19.0", features = ["v4"] }
 rusqlite = { version = "0.38.0", features = ["bundled-sqlcipher", "bundled"] }
 spacetimedb-sdk = "1.11.1"
 r2d2 = "0.8.10"
-r2d2_sqlite = "0.32.0"
+r2d2_sqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
 
 # Crypto
 argon2 = "0.5"
@@ -66,3 +66,4 @@ xpatch = "0.3.1"
 # Performance
 moka = { version = "0.12.12", features = ["future"] }
 futures = "0.3.31"
+rayon = "1.11.0"
