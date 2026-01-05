@@ -1,0 +1,87 @@
+# axonotes Storage Service Configuration
+
+[jwt]
+# List of trusted JWT issuers
+# Keys will be auto-fetched from {issuer}/.well-known/jwks.json
+issuers = [
+    "https://api.workos.com/user_management/client_01JX2EAD13T3F7W9K57M08ZT58"
+]
+
+# Development mode - NEVER use in production!
+# When true, JWT signature verification is skipped (for local development only)
+dev_mode = false
+
+# Maximum age of upload signature timestamps in seconds (prevents replay attacks)
+# Default: 300 (5 minutes)
+signature_max_age_secs = 300
+
+[storage]
+# S3-compatible storage endpoint
+endpoint = "http://localhost:9000"
+
+# Bucket name for storing blobs
+bucket = "axonotes-blobs"
+
+# S3 credentials
+access_key = "minioadmin"
+secret_key = "minioadmin"
+
+# Optional: Region (required for some providers like Backblaze B2)
+# region = "us-west-004"
+
+# Maximum blob size in MB (default: 100 MB)
+max_blob_size_mb = 100
+
+[database]
+# SQLite database path (will be created if doesn't exist)
+# This is the path on the container and not on the host
+path = "/data/metadata.db"
+
+[rate_limits]
+# Rate limits per user per minute
+# These can be increased for development/benchmarking
+upload_per_minute = 10       # Uploads per minute per user
+download_per_minute = 100    # Downloads per minute per user
+quota_per_minute = 60        # Quota checks per minute per user
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+
+# Log file path
+# This is the path on the container and not on the host
+file = "/var/log/axonotes-storage/app.log"
+
+# Maximum log file size in MB (before rotation)
+max_size_mb = 100
+
+# Maximum age of log files in days
+max_age_days = 30
+
+# Compress rotated logs
+compress = true
+
+# Quota rules - evaluated in order, highest matching quota wins
+[[quota_rules.rule]]
+name = "enterprise_users"
+condition = 'jwt.contains("org_id") && jwt.plan == "enterprise"'
+quota_gb = 500
+
+[[quota_rules.rule]]
+name = "pro_users"
+condition = 'jwt.plan == "pro"'
+quota_gb = 50
+
+[[quota_rules.rule]]
+name = "beta_testers"
+condition = 'jwt.beta == true'
+quota_gb = 10
+
+[[quota_rules.rule]]
+name = "free_workos_users"
+condition = 'jwt.plan == "free"'
+quota_gb = 2
+
+# Default quota (REQUIRED - no fallback)
+[quota_rules.default]
+quota_gb = 1

@@ -34,6 +34,10 @@ export const fmtCmd = cmd({
       cwd: "./axonotes-stdb",
       outputPrefix: "CARGO-STDB",
     });
+    await liveExec("cargo fmt", {
+      cwd: "./axonotes-storage",
+      outputPrefix: "CARGO-STORAGE",
+    });
 
     // Run last so sorin doesn't overlook it
     await liveExec("eslint --fix .", {

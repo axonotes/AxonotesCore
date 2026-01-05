@@ -1,0 +1,78 @@
+# axonotes Storage Service - Development Environment
+#
+# Note: MinIO stopped publishing official images in October 2025.
+# Using Chainguard's free, continuously-built MinIO images instead.
+# Source: https://www.chainguard.dev/unchained/secure-and-free-minio-chainguard-containers
+#
+# AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
+# Generated from axogen/templates/storage/docker-compose.yml.njk
+# Edit root config.toml and run 'axogen storage dev' to regenerate
+
+services:
+  # MinIO S3-compatible storage (Chainguard build)
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axonotes
+
+  # MinIO client to create bucket
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/axonotes-blobs --ignore-existing;
+      echo 'Bucket axonotes-blobs created successfully';
+      exit 0;
+      "
+    networks:
+      - axonotes
+
+  # axonotes Storage Service
+  axonotes-storage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      CONFIG_PATH: /etc/axonotes/config.toml
+      RUST_LOG: info
+    volumes:
+      - ./config.toml:/etc/axonotes/config.toml:ro,z
+      - ./data:/data:z
+      - ./logs:/var/log/axonotes-storage:z
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - axonotes
+
+networks:
+  axonotes:
+    driver: bridge
+
+volumes:
+  minio-data:

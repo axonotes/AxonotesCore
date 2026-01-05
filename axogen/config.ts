@@ -26,6 +26,13 @@ export const OAuthSchema = z.object({
     default_host_uri: z.url().min(1),
     default_module_name: z.string().min(1),
   }),
+  storage: z
+    .object({
+      api_port: z.number().min(1024).max(65535).optional(),
+      minio_api_port: z.number().min(1024).max(65535).optional(),
+      minio_console_port: z.number().min(1024).max(65535).optional(),
+    })
+    .optional(),
 });
 
 export const config = loadFile("config.toml", "toml", OAuthSchema);
