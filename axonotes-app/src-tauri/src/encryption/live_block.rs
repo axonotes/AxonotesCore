@@ -162,6 +162,7 @@ mod tests {
             id,
             1234567890,
             BlockContent::ParagraphV1(ParagraphV1 {
+                deleted: None,
                 author: create_test_identity(),
                 group_id: "main".to_string(),
                 group_row: "0".to_string(),

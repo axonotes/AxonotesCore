@@ -15,11 +15,28 @@ pub fn encode_patch(
     Ok(Patch { delta, time_delta })
 }
 
+pub fn encode_initial_patch(tag: usize, time_delta: u8, new: &Block) -> Result<Patch, String> {
+    let new_bytes: Vec<u8> = serde_json::to_vec(new).map_err(|e| e.to_string())?;
+
+    let delta = xpatch::encode(tag, &[], new_bytes.as_slice(), true);
+
+    Ok(Patch { delta, time_delta })
+}
+
 /// returns new block and time_delta
 pub fn decode_patch(base: &Block, patch: &Patch) -> Result<(Block, u8), String> {
     let base_bytes: Vec<u8> = serde_json::to_vec(base).map_err(|e| e.to_string())?;
 
     let new_bytes = xpatch::decode(base_bytes.as_slice(), patch.delta.as_slice())?;
+
+    let block: Block = serde_json::from_slice(new_bytes.as_slice()).map_err(|e| e.to_string())?;
+
+    Ok((block, patch.time_delta))
+}
+
+/// returns new block and time_delta
+pub fn decode_initial_patch(patch: &Patch) -> Result<(Block, u8), String> {
+    let new_bytes = xpatch::decode(&[], patch.delta.as_slice())?;
 
     let block: Block = serde_json::from_slice(new_bytes.as_slice()).map_err(|e| e.to_string())?;
 
@@ -166,6 +183,22 @@ mod tests {
             id,
             1234567890,
             BlockContent::ParagraphV1(ParagraphV1 {
+                deleted: None, // not present initially
+                author: Identity::from_byte_array([0u8; 32]),
+                group_id: "main".to_string(),
+                group_row: "0".to_string(),
+                text: text.to_string(),
+                formatting: vec![],
+            }),
+        )
+    }
+
+    fn make_deleted_paragraph(id: u64, text: &str) -> Block {
+        Block::new(
+            id,
+            1234567890,
+            BlockContent::ParagraphV1(ParagraphV1 {
+                deleted: Some(true),
                 author: Identity::from_byte_array([0u8; 32]),
                 group_id: "main".to_string(),
                 group_row: "0".to_string(),
@@ -201,6 +234,55 @@ mod tests {
     }
 
     #[test]
+    fn new_block_has_no_deleted_field() {
+        let block = make_paragraph(1, "Fresh block");
+
+        let value: serde_json::Value = serde_json::to_value(&block).unwrap();
+
+        // deleted field should be null/absent for new blocks
+        assert!(
+            value.get("deleted").is_none() || value["deleted"].is_null(),
+            "new block should not have deleted field set"
+        );
+    }
+
+    #[test]
+    fn deleted_block_has_deleted_field() {
+        let block = make_deleted_paragraph(1, "Deleted block");
+
+        let value: serde_json::Value = serde_json::to_value(&block).unwrap();
+
+        assert_eq!(
+            value["deleted"], true,
+            "deleted block should have deleted: true"
+        );
+    }
+
+    #[test]
+    fn deletion_adds_deleted_field_via_patch() {
+        let base = make_paragraph(1, "Hello");
+
+        // simulate deletion by creating a new version with deleted: true
+        let deleted = make_deleted_paragraph(1, "Hello");
+
+        let patch = encode_patch(0, 50, &base, &deleted).unwrap();
+        let (decoded, time_delta) = decode_patch(&base, &patch).unwrap();
+
+        assert_eq!(time_delta, 50);
+
+        if let BlockContent::ParagraphV1(p) = &decoded.content {
+            assert_eq!(
+                p.deleted,
+                Some(true),
+                "decoded block should be marked deleted"
+            );
+            assert_eq!(p.text, "Hello", "text should be unchanged");
+        } else {
+            panic!("wrong block type");
+        }
+    }
+
+    #[test]
     fn patch_encode_decode_roundtrip() {
         let base = make_paragraph(1, "Hello");
         let new = make_paragraph(1, "Hello world");
@@ -213,6 +295,7 @@ mod tests {
 
         if let BlockContent::ParagraphV1(p) = &decoded.content {
             assert_eq!(p.text, "Hello world");
+            assert_eq!(p.deleted, None, "edited block should not be deleted");
         } else {
             panic!("wrong block type");
         }

@@ -29,6 +29,8 @@ pub struct FormatSpan {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParagraphV1 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted: Option<bool>,
     pub author: Identity,
     pub group_id: String,
     pub group_row: String,
@@ -39,6 +41,8 @@ pub struct ParagraphV1 {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HeadingV1 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted: Option<bool>,
     pub author: Identity,
     pub group_id: String,
     pub group_row: String,
@@ -48,6 +52,8 @@ pub struct HeadingV1 {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MetadataV1 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted: Option<bool>,
     pub author: Identity,
     pub group_id: String,
     pub group_row: String,
