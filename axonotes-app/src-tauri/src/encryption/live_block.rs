@@ -1,3 +1,4 @@
+use crate::batch_handler::block_types::Block;
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
 use crate::encryption::helpers::find_correct_decryption_key;
@@ -27,7 +28,7 @@ pub struct DecryptedLiveBlock {
     pub doc_id: String,
     pub block_id: u64,
     pub user_id: Identity,
-    pub content: Vec<u8>,
+    pub content: Block,
     pub username: String,
     pub locked_at: Option<u128>,
 }
@@ -49,11 +50,14 @@ impl LiveBlock {
         let decryption_key: &DecryptedDocumentKey =
             find_correct_decryption_key(self.doc_id.to_string(), timestamp, document_keys)?;
 
-        let content = decrypt(
+        let decrypted_content = decrypt(
             decryption_key.key_data.encryption_key.as_slice(),
             self.encrypted_content.as_slice(),
         )
         .map_err(|e| format!("Error while decrypting live block content: {}", e))?;
+
+        let content: Block =
+            serde_json::from_slice(decrypted_content.as_slice()).map_err(|e| e.to_string())?;
 
         let decrypted_username = decrypt(
             decryption_key.key_data.encryption_key.as_slice(),
@@ -92,9 +96,11 @@ impl DecryptedLiveBlock {
         let username_blob = to_allocvec(&self.username)
             .map_err(|e| format!("Error serializing batch data: {}", e))?;
 
+        let content_blob = serde_json::to_vec(&self.content).map_err(|e| e.to_string())?;
+
         let encrypted_content = encrypt(
             latest_document_key.key_data.encryption_key.as_slice(),
-            self.content.as_slice(),
+            content_blob.as_slice(),
         )
         .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
 
@@ -130,6 +136,7 @@ impl EncryptLiveBlockVec for Vec<DecryptedLiveBlock> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::batch_handler::block_types::*;
     use crate::encryption::document::{DecryptedDocumentKey, DecryptedKeyData};
     use spacetimedb_sdk::Identity;
 
@@ -150,6 +157,20 @@ mod tests {
         }
     }
 
+    fn create_test_block(id: u64, text: &str) -> Block {
+        Block::new(
+            id,
+            1234567890,
+            BlockContent::ParagraphV1(ParagraphV1 {
+                author: create_test_identity(),
+                group_id: "main".to_string(),
+                group_row: "0".to_string(),
+                text: text.to_string(),
+                formatting: vec![],
+            }),
+        )
+    }
+
     #[test]
     fn test_live_block_encrypt_decrypt_roundtrip() {
         let doc_id = "doc123";
@@ -162,19 +183,17 @@ mod tests {
             doc_id: doc_id.to_string(),
             block_id: 42,
             user_id: identity,
-            content: vec![1, 2, 3, 4, 5],
+            content: create_test_block(42, "Hello world"),
             username: "alice".to_string(),
             locked_at: Some(100),
         };
 
         let encrypted = original.encrypt(&document_key).expect("Encryption failed");
 
-        // Verify unencrypted fields preserved
         assert_eq!(encrypted.live_block_id, "lb1");
         assert_eq!(encrypted.doc_id, doc_id);
         assert_eq!(encrypted.block_id, 42);
         assert_eq!(encrypted.locked_at, Some(100));
-        // Encrypted fields should be non-empty
         assert!(!encrypted.encrypted_content.is_empty());
         assert!(!encrypted.encrypted_username.is_empty());
 
@@ -185,9 +204,15 @@ mod tests {
         assert_eq!(decrypted.live_block_id, original.live_block_id);
         assert_eq!(decrypted.doc_id, original.doc_id);
         assert_eq!(decrypted.block_id, original.block_id);
-        assert_eq!(decrypted.content, vec![1, 2, 3, 4, 5]);
         assert_eq!(decrypted.username, "alice");
         assert_eq!(decrypted.locked_at, Some(100));
+
+        // Verify block content
+        if let BlockContent::ParagraphV1(p) = &decrypted.content.content {
+            assert_eq!(p.text, "Hello world");
+        } else {
+            panic!("wrong block type");
+        }
     }
 
     #[test]
@@ -201,7 +226,7 @@ mod tests {
             doc_id: doc_id.to_string(),
             block_id: 0,
             user_id: create_test_identity(),
-            content: vec![],
+            content: create_test_block(0, ""),
             username: "bob".to_string(),
             locked_at: Some(50),
         };
@@ -211,7 +236,11 @@ mod tests {
             .decrypt(&document_keys)
             .expect("Decryption failed");
 
-        assert!(decrypted.content.is_empty());
+        if let BlockContent::ParagraphV1(p) = &decrypted.content.content {
+            assert!(p.text.is_empty());
+        } else {
+            panic!("wrong block type");
+        }
         assert_eq!(decrypted.username, "bob");
     }
 
@@ -226,7 +255,7 @@ mod tests {
             doc_id: doc_id.to_string(),
             block_id: 1,
             user_id: create_test_identity(),
-            content: vec![255, 254, 253],
+            content: create_test_block(1, "Unicode content 🚀"),
             username: "用户🚀".to_string(),
             locked_at: Some(100),
         };
@@ -252,7 +281,7 @@ mod tests {
                 doc_id: doc_id.to_string(),
                 block_id: 1,
                 user_id: identity,
-                content: vec![1, 2, 3],
+                content: create_test_block(1, "First"),
                 username: "user1".to_string(),
                 locked_at: Some(100),
             },
@@ -261,7 +290,7 @@ mod tests {
                 doc_id: doc_id.to_string(),
                 block_id: 2,
                 user_id: identity,
-                content: vec![4, 5, 6],
+                content: create_test_block(2, "Second"),
                 username: "user2".to_string(),
                 locked_at: Some(200),
             },
@@ -313,13 +342,12 @@ mod tests {
         let document_keys = vec![key_old.clone(), key_new.clone()];
         let identity = create_test_identity();
 
-        // Block with locked_at=100 should use key_old (50 <= 100 < 150)
         let block_old = DecryptedLiveBlock {
             live_block_id: "lb_old".to_string(),
             doc_id: doc_id.to_string(),
             block_id: 1,
             user_id: identity,
-            content: vec![1],
+            content: create_test_block(1, "old content"),
             username: "old".to_string(),
             locked_at: Some(100),
         };
@@ -329,13 +357,12 @@ mod tests {
             .expect("Decryption failed");
         assert_eq!(decrypted_old.username, "old");
 
-        // Block with locked_at=200 should use key_new (150 <= 200)
         let block_new = DecryptedLiveBlock {
             live_block_id: "lb_new".to_string(),
             doc_id: doc_id.to_string(),
             block_id: 2,
             user_id: identity,
-            content: vec![2],
+            content: create_test_block(2, "new content"),
             username: "new".to_string(),
             locked_at: Some(200),
         };
@@ -356,7 +383,7 @@ mod tests {
             doc_id: "doc1".to_string(),
             block_id: 1,
             user_id: create_test_identity(),
-            content: vec![1, 2, 3],
+            content: create_test_block(1, "test"),
             username: "user".to_string(),
             locked_at: Some(100),
         };

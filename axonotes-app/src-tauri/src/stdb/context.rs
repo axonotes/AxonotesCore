@@ -1,3 +1,4 @@
+use crate::batch_handler::block_types::Block;
 use crate::call_reducer_await;
 use crate::crypto::chacha::encrypt;
 use crate::database::get_active_user_keys;
@@ -328,7 +329,7 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         block_id: u64,
-        content: Vec<u8>,
+        content: &Block,
         username: String,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
@@ -344,9 +345,11 @@ impl ProfileStdbContext {
         let username_blob =
             to_allocvec(&username).map_err(|e| format!("Error serializing batch data: {}", e))?;
 
+        let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
+
         let encrypted_content = encrypt(
             latest_document_key.key_data.encryption_key.as_slice(),
-            content.as_slice(),
+            content_blob.as_slice(),
         )
         .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
 
@@ -371,7 +374,7 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         block_id: u64,
-        content: Vec<u8>,
+        content: &Block,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
@@ -383,9 +386,11 @@ impl ProfileStdbContext {
             cached_document_keys.as_slice(),
         )?;
 
+        let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
+
         let encrypted_content = encrypt(
             latest_document_key.key_data.encryption_key.as_slice(),
-            content.as_slice(),
+            content_blob.as_slice(),
         )
         .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
 

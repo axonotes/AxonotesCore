@@ -1,3 +1,4 @@
+use crate::batch_handler::block_types::Block;
 use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::stdb;
 
@@ -7,11 +8,11 @@ use crate::stdb;
 pub async fn request_lock(
     doc_id: String,
     block_id: u64,
-    content: Vec<u8>,
+    content: Block,
     username: String,
 ) -> Result<(), String> {
     stdb::active_profile()
-        .try_lock_block(doc_id, block_id, content, username)
+        .try_lock_block(doc_id, block_id, &content, username)
         .await
 }
 
@@ -52,9 +53,9 @@ pub async fn get_document_locks(doc_id: String) -> Result<Vec<DecryptedLiveBlock
 pub async fn update_live_block(
     doc_id: String,
     block_id: u64,
-    content: Vec<u8>,
+    content: Block,
 ) -> Result<(), String> {
     stdb::active_profile()
-        .update_live_block(doc_id, block_id, content)
+        .update_live_block(doc_id, block_id, &content)
         .await
 }

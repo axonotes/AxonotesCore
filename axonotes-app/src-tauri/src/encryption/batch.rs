@@ -22,7 +22,7 @@ pub trait EncryptDocumentBatchVec {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Patch {
     pub delta: Vec<u8>,
-    pub time_delta: u64,
+    pub time_delta: u8,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
