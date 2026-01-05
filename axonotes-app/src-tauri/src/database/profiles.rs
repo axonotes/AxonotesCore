@@ -1,6 +1,6 @@
-use rusqlite::{params, Connection, Result};
-
+use crate::database::helpers::SqlU128;
 use crate::workos_auth::Profile;
+use rusqlite::{params, Connection, Result};
 
 /// Get the currently active profile
 pub fn get_active(conn: &Connection) -> Result<Option<Profile>> {
@@ -21,6 +21,25 @@ pub fn get_active(conn: &Connection) -> Result<Option<Profile>> {
             access_token: row.get(3)?,
             refresh_token: row.get(4)?,
         }))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Get last sync time of active user
+pub fn get_last_active_sync_time(conn: &Connection) -> Result<Option<u128>> {
+    let mut stmt = conn.prepare(
+        "SELECT last_batch_sync
+        FROM profiles
+        WHERE is_active = 1
+        LIMIT 1",
+    )?;
+
+    let mut rows = stmt.query([])?;
+
+    if let Some(row) = rows.next()? {
+        let maybe_sync: Option<SqlU128> = row.get(0)?;
+        Ok(Some(maybe_sync.map(|s| s.0).unwrap_or(0)))
     } else {
         Ok(None)
     }
@@ -94,6 +113,16 @@ pub fn set_active(conn: &Connection, profile_id: &str) -> Result<()> {
     if rows_affected == 0 {
         return Err(rusqlite::Error::QueryReturnedNoRows);
     }
+
+    Ok(())
+}
+
+/// Set the last sync time of the active user
+pub fn set_last_active_sync_time(conn: &Connection, last_sync_time: u128) -> Result<()> {
+    conn.execute(
+        "UPDATE profiles SET last_batch_sync = ?1 WHERE is_active = 1",
+        params![SqlU128(last_sync_time)],
+    )?;
 
     Ok(())
 }

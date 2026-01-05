@@ -15,7 +15,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             refresh_token TEXT,
             is_active INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            last_batch_sync BLOB
         )",
         [],
     )?;
@@ -41,6 +42,43 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             public_signing_key BLOB,
             private_signing_key BLOB
         )",
+        [],
+    )?;
+
+    // Create batch table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS batches (
+            batch_id TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            timestamp BLOB NOT NULL,
+            block_id INTEGER NOT NULL,
+            patches BLOB NOT NULL,
+            pending INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+
+    // Create index for doc_id lookup
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doc_id ON batches(doc_id)",
+        [],
+    )?;
+
+    // Create index for block on doc_id lookup
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batches_doc_block ON batches(doc_id, block_id)",
+        [],
+    )?;
+
+    // Create index for block on doc_id lookup after timestamp
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batches_doc_block_ts ON batches(doc_id, block_id, timestamp)",
+        [],
+    )?;
+
+    // Create index for pending blocks on doc_id
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batches_doc_block_pending ON batches(doc_id, block_id, pending)",
         [],
     )?;
 

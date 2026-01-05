@@ -1,6 +1,7 @@
 use tauri::Manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 
+mod app_handle;
 mod batch_handler;
 mod commands;
 mod config;
@@ -50,6 +51,8 @@ pub fn run() {
             commands::document_cmd::update_document_metadata
         ])
         .setup(|app| {
+            app_handle::init(app.handle().clone());
+
             let main_window = app.get_webview_window("main").unwrap();
             main_window.create_overlay_titlebar().unwrap();
 

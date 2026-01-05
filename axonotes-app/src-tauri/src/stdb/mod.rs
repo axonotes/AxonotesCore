@@ -16,6 +16,7 @@ pub(crate) mod context;
 mod reducer_helper;
 
 use crate::batch_handler::sync::setup_batch_sync;
+use crate::database;
 pub use context::ProfileStdbContext;
 // ==========================================
 // Global State - One Connection Per Profile
@@ -119,19 +120,22 @@ pub(crate) async fn ensure_connection_for_profile(
     callbacks::register_callbacks(&conn);
 
     // Subscribe to user view (filtered by identity/JWT)
-    conn.subscription_builder()
-        .on_applied(callbacks::on_subscription_applied)
-        .on_error(callbacks::on_subscription_error)
-        .subscribe(["SELECT * FROM user"]);
-
     // Subscribe to document metadata view
+    // Subscribe to document keys view
     conn.subscription_builder()
         .on_applied(callbacks::on_subscription_applied)
         .on_error(callbacks::on_subscription_error)
-        .subscribe(["SELECT * FROM user_metadata"]);
+        .subscribe([
+            "SELECT * FROM user",
+            "SELECT * FROM user_metadata",
+            "SELECT * FROM user_document_keys",
+        ]);
 
     // Setup batch sync
-    setup_batch_sync(&conn).await?;
+    let start_time = database::get_last_active_profile_sync_time().await?;
+    if let Some(start_time) = start_time {
+        setup_batch_sync(&conn, start_time)?;
+    }
 
     // Run in background thread
     conn.run_threaded();

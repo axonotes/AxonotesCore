@@ -4,7 +4,7 @@ use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::Identity;
 
-pub trait DecryptVec {
+pub trait DecryptDocumentMetaAndKeyVec {
     type Output;
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String>;
 }
@@ -75,7 +75,7 @@ impl DocumentMetadata {
     }
 }
 
-impl DecryptVec for Vec<DocumentMetadata> {
+impl DecryptDocumentMetaAndKeyVec for Vec<DocumentMetadata> {
     type Output = Vec<DecryptedDocumentMetadata>;
 
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String> {
@@ -183,7 +183,7 @@ impl DocumentKey {
     }
 }
 
-impl DecryptVec for Vec<DocumentKey> {
+impl DecryptDocumentMetaAndKeyVec for Vec<DocumentKey> {
     type Output = Vec<DecryptedDocumentKey>;
 
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String> {

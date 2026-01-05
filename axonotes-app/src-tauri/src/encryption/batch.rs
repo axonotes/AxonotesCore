@@ -4,6 +4,20 @@ use crate::stdb_bindings::DocumentBatch;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 
+pub trait DecryptDocumentBatchVec {
+    fn decrypt_all(
+        self,
+        document_keys: &[DecryptedDocumentKey],
+    ) -> Result<Vec<DecryptedBatch>, String>;
+}
+
+pub trait EncryptDocumentBatchVec {
+    fn encrypt_all(
+        self,
+        latest_document_key: &DecryptedDocumentKey,
+    ) -> Result<Vec<DocumentBatch>, String>;
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Patch {
     pub delta: Vec<u8>,
@@ -27,7 +41,7 @@ pub struct DecryptedBatch {
 impl DocumentBatch {
     pub fn decrypt(
         &self,
-        document_keys: &Vec<DecryptedDocumentKey>,
+        document_keys: &[DecryptedDocumentKey],
     ) -> Result<DecryptedBatch, String> {
         let batch_timestamp = self.timestamp;
 
@@ -64,6 +78,17 @@ impl DocumentBatch {
     }
 }
 
+impl DecryptDocumentBatchVec for Vec<DocumentBatch> {
+    fn decrypt_all(
+        self,
+        document_keys: &[DecryptedDocumentKey],
+    ) -> Result<Vec<DecryptedBatch>, String> {
+        self.into_iter()
+            .map(|batch| batch.decrypt(document_keys))
+            .collect()
+    }
+}
+
 impl DecryptedBatch {
     pub fn encrypt(
         &self,
@@ -84,5 +109,16 @@ impl DecryptedBatch {
             batch_id: self.batch_id.clone(),
             encrypted_data,
         })
+    }
+}
+
+impl EncryptDocumentBatchVec for Vec<DecryptedBatch> {
+    fn encrypt_all(
+        self,
+        latest_document_key: &DecryptedDocumentKey,
+    ) -> Result<Vec<DocumentBatch>, String> {
+        self.into_iter()
+            .map(|batch| batch.encrypt(latest_document_key))
+            .collect()
     }
 }

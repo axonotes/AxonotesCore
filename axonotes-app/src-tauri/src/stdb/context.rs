@@ -1,8 +1,8 @@
 use crate::call_reducer_await;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
-use crate::encryption::document::DecryptVec;
 use crate::encryption::document::DecryptedDocumentMetadata;
+use crate::encryption::document::{DecryptDocumentMetaAndKeyVec, DecryptedDocumentKey};
 use crate::encryption::user::UserKeysEncrypted;
 use crate::stdb::{
     disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
@@ -127,6 +127,24 @@ impl ProfileStdbContext {
             let private_encryption_key = user_keys.private_encryption_key.as_array()?;
             conn.db
                 .user_metadata()
+                .iter()
+                .collect::<Vec<_>>()
+                .decrypt_all(private_encryption_key)
+        } else {
+            Err("No active user keys available. Not synced with stdb?".to_string())
+        }
+    }
+
+    /// Get cached document keys from SpacetimeDB
+    pub async fn get_cached_document_keys(&self) -> Result<Vec<DecryptedDocumentKey>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let user_keys: Option<Keys> = get_active_user_keys().await?;
+        if let Some(user_keys) = user_keys {
+            let private_encryption_key = user_keys.private_encryption_key.as_array()?;
+            conn.db
+                .user_document_keys()
                 .iter()
                 .collect::<Vec<_>>()
                 .decrypt_all(private_encryption_key)

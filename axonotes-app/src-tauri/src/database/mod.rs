@@ -1,9 +1,12 @@
+pub(crate) mod batches;
+mod helpers;
 pub(crate) mod keys;
 pub(crate) mod profiles;
 pub(crate) mod schema;
 
 use crate::crypto;
 use crate::database::keys::Keys;
+use crate::encryption::batch::DecryptedBatch;
 use crate::workos_auth::Profile;
 use once_cell::sync::OnceCell;
 use rusqlite::Connection;
@@ -222,6 +225,18 @@ pub async fn get_active_profile() -> Result<Option<Profile>, String> {
     profiles::get_active(db.get_conn()).map_err(|e| e.to_string())
 }
 
+pub async fn get_last_active_profile_sync_time() -> Result<Option<u128>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::get_last_active_sync_time(db.get_conn()).map_err(|e| e.to_string())
+}
+
+pub async fn set_last_active_profile_sync_time(last_sync_time: u128) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    profiles::set_last_active_sync_time(db.get_conn(), last_sync_time).map_err(|e| e.to_string())
+}
+
 pub async fn get_all_profiles() -> Result<Vec<Profile>, String> {
     let db = get_db().await?;
     let db = db.lock().await;
@@ -287,6 +302,86 @@ pub async fn get_active_user_keys() -> Result<Option<Keys>, String> {
     let db = get_db().await?;
     let db = db.lock().await;
     keys::get_active_user_keys(db.get_conn()).map_err(|e| e.to_string())
+}
+
+// ========================================
+// Batch Operations (proxies to batches module)
+// ========================================
+
+pub async fn save_batch(batch: DecryptedBatch) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::save(db.get_conn(), &batch).map_err(|e| e.to_string())
+}
+
+pub async fn save_pending_batch(batch: DecryptedBatch) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::save_pending(db.get_conn(), &batch).map_err(|e| e.to_string())
+}
+
+pub async fn save_batches(batches_list: Vec<DecryptedBatch>) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::save_all(db.get_conn(), &batches_list).map_err(|e| e.to_string())
+}
+
+pub async fn get_batches_by_doc(doc_id: String) -> Result<Vec<DecryptedBatch>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::get_by_doc_id(db.get_conn(), &doc_id).map_err(|e| e.to_string())
+}
+
+pub async fn get_batches_by_doc_and_block(
+    doc_id: String,
+    block_id: u64,
+) -> Result<Vec<DecryptedBatch>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::get_by_doc_and_block(db.get_conn(), &doc_id, block_id).map_err(|e| e.to_string())
+}
+
+pub async fn get_batches_by_doc_and_block_after_timestamp(
+    doc_id: String,
+    block_id: u64,
+    after: u128,
+) -> Result<Vec<DecryptedBatch>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::get_by_doc_and_block_after_timestamp(db.get_conn(), &doc_id, block_id, after)
+        .map_err(|e| e.to_string())
+}
+
+pub async fn get_pending_batches_by_doc_and_block(
+    doc_id: String,
+    block_id: u64,
+) -> Result<Vec<DecryptedBatch>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::get_pending_by_doc_and_block(db.get_conn(), &doc_id, block_id)
+        .map_err(|e| e.to_string())
+}
+
+pub async fn get_all_pending_batches() -> Result<Vec<DecryptedBatch>, String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::get_all_pending(db.get_conn()).map_err(|e| e.to_string())
+}
+
+pub async fn mark_batch_synced(batch_id: String) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::mark_synced(db.get_conn(), &batch_id)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+pub async fn delete_batch(batch_id: String) -> Result<(), String> {
+    let db = get_db().await?;
+    let db = db.lock().await;
+    batches::delete(db.get_conn(), &batch_id)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 // ========================================
