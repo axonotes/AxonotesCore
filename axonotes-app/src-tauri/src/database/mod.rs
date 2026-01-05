@@ -4,7 +4,7 @@ pub(crate) mod keys;
 pub(crate) mod profiles;
 pub(crate) mod schema;
 
-use crate::batch_handler::document_manager::invalidate_block_cache;
+use crate::batch_handler::document_manager::{invalidate_block_cache, invalidate_doc_cache};
 use crate::crypto;
 use crate::database::keys::Keys;
 use crate::encryption::batch::DecryptedBatch;
@@ -481,6 +481,18 @@ pub async fn get_batches_by_doc_and_block(
     .map_err(|e| e.to_string())?
 }
 
+pub async fn get_batches_up_to_timestamp(
+    doc_id: String,
+    up_to: u128,
+) -> Result<Vec<DecryptedBatch>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_up_to_timestamp(&conn, doc_id.as_str(), up_to).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub async fn get_by_doc_and_block_up_to_timestamp(
     doc_id: String,
     block_id: u64,
@@ -495,6 +507,38 @@ pub async fn get_by_doc_and_block_up_to_timestamp(
     .map_err(|e| e.to_string())?
 }
 
+pub async fn get_batches_from_latest_initial_up_to_timestamp(
+    doc_id: String,
+    up_to: u128,
+) -> Result<Vec<DecryptedBatch>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_from_latest_initial_up_to_timestamp(&conn, doc_id.as_str(), up_to)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn get_block_batches_from_latest_initial_up_to_timestamp(
+    doc_id: String,
+    block_id: u64,
+    up_to: u128,
+) -> Result<Vec<DecryptedBatch>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_block_from_latest_initial_up_to_timestamp(
+            &conn,
+            doc_id.as_str(),
+            block_id,
+            up_to,
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub async fn get_pending_batches_by_doc_and_block(
     doc_id: String,
     block_id: u64,
@@ -503,6 +547,15 @@ pub async fn get_pending_batches_by_doc_and_block(
         let conn = get_conn()?;
         batches::get_pending_by_doc_and_block(&conn, doc_id.as_str(), block_id)
             .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn get_pending_batches_by_doc(doc_id: String) -> Result<Vec<DecryptedBatch>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_pending_by_doc(&conn, doc_id.as_str()).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -528,6 +581,22 @@ pub async fn mark_batch_synced(batch_id: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+pub async fn delete_batches_by_doc(doc_id: String) -> Result<(), String> {
+    let doc_id_copy = doc_id.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::delete_by_doc_id(&conn, doc_id_copy.as_str())
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    invalidate_doc_cache(doc_id);
+    Ok(())
+}
+
 pub async fn delete_batch(batch: &DecryptedBatch) -> Result<(), String> {
     let batch_id = batch.batch_id.clone();
     let doc_id = batch.doc_id.clone();
@@ -544,6 +613,24 @@ pub async fn delete_batch(batch: &DecryptedBatch) -> Result<(), String> {
 
     invalidate_block_cache(doc_id, block_id);
     Ok(())
+}
+
+pub async fn count_batches_by_doc(doc_id: String) -> Result<u64, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::count_by_doc(&conn, doc_id.as_str()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn count_pending_batches() -> Result<u64, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        batches::count_pending(&conn).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ========================================

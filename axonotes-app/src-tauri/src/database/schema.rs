@@ -53,7 +53,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             timestamp BLOB NOT NULL,
             block_id INTEGER NOT NULL,
             patches BLOB NOT NULL,
-            pending INTEGER NOT NULL DEFAULT 0
+            pending INTEGER NOT NULL DEFAULT 0,
+            is_initial INTEGER NOT NULL DEFAULT 0
         )",
         [],
     )?;
@@ -79,6 +80,18 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     // Create index for pending blocks on doc_id
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_batches_doc_block_pending ON batches(doc_id, block_id, pending)",
+        [],
+    )?;
+
+    // Create index for finding the latest initial batch of a doc efficiently
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batches_doc_initial_ts ON batches(doc_id, is_initial, timestamp DESC) WHERE is_initial = 1",
+        [],
+    )?;
+
+    // Create index for finding the latest initial batch of a block efficiently
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_batches_doc_block_initial_ts ON batches(doc_id, block_id, timestamp DESC) WHERE is_initial = 1",
         [],
     )?;
 

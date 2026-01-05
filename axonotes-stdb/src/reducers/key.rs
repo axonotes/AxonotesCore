@@ -11,7 +11,6 @@ use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 #[derive(SpacetimeType, Clone)]
 pub struct SnapshotBatch {
     pub batch_id: String,
-    pub timestamp: u128,
     pub encrypted_data: Vec<u8>,
 }
 
@@ -89,7 +88,6 @@ pub fn rotate_document_keys(
     let mut snapshots_bytes = Vec::new();
     for snap in &snapshot_batches {
         snapshots_bytes.extend_from_slice(snap.batch_id.as_bytes());
-        snapshots_bytes.extend_from_slice(&snap.timestamp.to_le_bytes());
         snapshots_bytes.extend_from_slice(&snap.encrypted_data);
     }
 
@@ -143,7 +141,7 @@ pub fn rotate_document_keys(
         ctx.db.private_document_batch().insert(DocumentBatch {
             batch_id: snapshot.batch_id,
             doc_id: doc_id.clone(),
-            timestamp: snapshot.timestamp,
+            timestamp: new_key_timestamp,
             encrypted_data: snapshot.encrypted_data,
         });
     }

@@ -33,6 +33,7 @@ pub struct BatchData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedBatch {
+    pub is_initial: bool,
     pub batch_id: String,
     pub doc_id: String,
     pub timestamp: u128,
@@ -59,10 +60,13 @@ impl DocumentBatch {
         let batch_data: BatchData = from_bytes(decrypted.as_slice())
             .map_err(|e| format!("Error deserializing batch data: {}", e))?;
 
+        let is_initial = batch_timestamp == decryption_key.key_timestamp;
+
         Ok(DecryptedBatch {
             timestamp: self.timestamp,
             doc_id: self.doc_id.clone(),
             batch_id: self.batch_id.clone(),
+            is_initial,
             batch_data,
         })
     }
@@ -139,6 +143,7 @@ mod tests {
         let document_keys = vec![document_key.clone()];
 
         let original = DecryptedBatch {
+            is_initial: false,
             batch_id: "batch1".to_string(),
             doc_id: doc_id.to_string(),
             timestamp: 100,
@@ -173,6 +178,7 @@ mod tests {
         assert_eq!(decrypted.batch_id, original.batch_id);
         assert_eq!(decrypted.doc_id, original.doc_id);
         assert_eq!(decrypted.timestamp, original.timestamp);
+        assert!(!decrypted.is_initial); // timestamp 100 != key_timestamp 0
         assert_eq!(decrypted.batch_data.block_id, 42);
         assert_eq!(decrypted.batch_data.patches.len(), 2);
         assert_eq!(decrypted.batch_data.patches[0].delta, vec![1, 2, 3, 4, 5]);
@@ -188,6 +194,7 @@ mod tests {
         let document_keys = vec![document_key.clone()];
 
         let original = DecryptedBatch {
+            is_initial: false,
             batch_id: "batch_empty".to_string(),
             doc_id: doc_id.to_string(),
             timestamp: 50,
@@ -204,6 +211,7 @@ mod tests {
 
         assert_eq!(decrypted.batch_data.block_id, 0);
         assert!(decrypted.batch_data.patches.is_empty());
+        assert!(!decrypted.is_initial); // timestamp 50 != key_timestamp 0
     }
 
     #[test]
@@ -214,6 +222,7 @@ mod tests {
 
         let batches = vec![
             DecryptedBatch {
+                is_initial: false,
                 batch_id: "batch1".to_string(),
                 doc_id: doc_id.to_string(),
                 timestamp: 100,
@@ -223,6 +232,7 @@ mod tests {
                 },
             },
             DecryptedBatch {
+                is_initial: false,
                 batch_id: "batch2".to_string(),
                 doc_id: doc_id.to_string(),
                 timestamp: 200,
@@ -247,6 +257,8 @@ mod tests {
         assert_eq!(decrypted.len(), 2);
         assert_eq!(decrypted[0].batch_id, "batch1");
         assert_eq!(decrypted[1].batch_id, "batch2");
+        assert!(!decrypted[0].is_initial);
+        assert!(!decrypted[1].is_initial);
         assert!(decrypted[0].batch_data.patches.is_empty());
         assert_eq!(decrypted[1].batch_data.patches.len(), 1);
     }
@@ -284,6 +296,7 @@ mod tests {
 
         // Batch at timestamp 100 should decrypt with key_old (timestamp 50 <= 100)
         let batch_old = DecryptedBatch {
+            is_initial: false,
             batch_id: "batch_old".to_string(),
             doc_id: doc_id.to_string(),
             timestamp: 100,
@@ -297,9 +310,11 @@ mod tests {
             .decrypt(&document_keys)
             .expect("Decryption failed");
         assert_eq!(decrypted_old.batch_id, "batch_old");
+        assert!(!decrypted_old.is_initial); // timestamp 100 != key_timestamp 50
 
         // Batch at timestamp 200 should decrypt with key_new (timestamp 150 <= 200)
         let batch_new = DecryptedBatch {
+            is_initial: false,
             batch_id: "batch_new".to_string(),
             doc_id: doc_id.to_string(),
             timestamp: 200,
@@ -313,6 +328,7 @@ mod tests {
             .decrypt(&document_keys)
             .expect("Decryption failed");
         assert_eq!(decrypted_new.batch_id, "batch_new");
+        assert!(!decrypted_new.is_initial); // timestamp 200 != key_timestamp 150
     }
 
     #[test]
@@ -321,6 +337,7 @@ mod tests {
         let wrong_keys = vec![create_test_document_key("doc2", 0)]; // Different doc_id
 
         let batch = DecryptedBatch {
+            is_initial: false,
             batch_id: "batch1".to_string(),
             doc_id: "doc1".to_string(),
             timestamp: 100,
@@ -331,8 +348,119 @@ mod tests {
         };
 
         let encrypted = batch.encrypt(&document_key).expect("Encryption failed");
-        let result = encrypted.decrypt(&wrong_keys);
+        let result = encrypted.decrypt(wrong_keys.as_slice());
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_initial_true_when_timestamp_equals_key_timestamp() {
+        let doc_id = "doc_initial";
+        let key_timestamp = 100;
+        let document_key = create_test_document_key(doc_id, key_timestamp);
+        let document_keys = vec![document_key.clone()];
+
+        // Initial batch: timestamp matches key_timestamp
+        let initial_batch = DecryptedBatch {
+            is_initial: true,
+            batch_id: "initial".to_string(),
+            doc_id: doc_id.to_string(),
+            timestamp: key_timestamp, // Same as key!
+            batch_data: BatchData {
+                block_id: 0,
+                patches: vec![],
+            },
+        };
+
+        let encrypted = initial_batch
+            .encrypt(&document_key)
+            .expect("Encryption failed");
+        let decrypted = encrypted
+            .decrypt(&document_keys)
+            .expect("Decryption failed");
+
+        assert!(decrypted.is_initial); // timestamp 100 == key_timestamp 100
+        assert_eq!(decrypted.batch_id, "initial");
+    }
+
+    #[test]
+    fn test_is_initial_with_multiple_keys() {
+        let doc_id = "doc_multi_initial";
+
+        let mut key1 = create_test_document_key(doc_id, 100);
+        key1.key_data.encryption_key = vec![1u8; 32];
+
+        let mut key2 = create_test_document_key(doc_id, 200);
+        key2.key_data.encryption_key = vec![2u8; 32];
+
+        let document_keys = vec![key1.clone(), key2.clone()];
+
+        // Initial batch for key1
+        let initial1 = DecryptedBatch {
+            is_initial: true,
+            batch_id: "initial1".to_string(),
+            doc_id: doc_id.to_string(),
+            timestamp: 100,
+            batch_data: BatchData {
+                block_id: 0,
+                patches: vec![],
+            },
+        };
+        let encrypted1 = initial1.encrypt(&key1).expect("Encryption failed");
+        let decrypted1 = encrypted1
+            .decrypt(&document_keys)
+            .expect("Decryption failed");
+        assert!(decrypted1.is_initial);
+
+        // Non-initial batch for key1
+        let regular1 = DecryptedBatch {
+            is_initial: false,
+            batch_id: "regular1".to_string(),
+            doc_id: doc_id.to_string(),
+            timestamp: 150,
+            batch_data: BatchData {
+                block_id: 1,
+                patches: vec![],
+            },
+        };
+        let encrypted_r1 = regular1.encrypt(&key1).expect("Encryption failed");
+        let decrypted_r1 = encrypted_r1
+            .decrypt(&document_keys)
+            .expect("Decryption failed");
+        assert!(!decrypted_r1.is_initial);
+
+        // Initial batch for key2
+        let initial2 = DecryptedBatch {
+            is_initial: true,
+            batch_id: "initial2".to_string(),
+            doc_id: doc_id.to_string(),
+            timestamp: 200,
+            batch_data: BatchData {
+                block_id: 0,
+                patches: vec![],
+            },
+        };
+        let encrypted2 = initial2.encrypt(&key2).expect("Encryption failed");
+        let decrypted2 = encrypted2
+            .decrypt(&document_keys)
+            .expect("Decryption failed");
+        assert!(decrypted2.is_initial);
+
+        // Non-initial batch for key2
+        let regular2 = DecryptedBatch {
+            is_initial: false,
+            batch_id: "regular2".to_string(),
+            doc_id: doc_id.to_string(),
+            timestamp: 250,
+            batch_data: BatchData {
+                block_id: 2,
+                patches: vec![],
+            },
+        };
+        let encrypted_r2 = regular2.encrypt(&key2).expect("Encryption failed");
+        let decrypted_r2 = encrypted_r2
+            .decrypt(&document_keys)
+            .expect("Decryption failed");
+        assert!(!decrypted_r2.is_initial);
     }
 }

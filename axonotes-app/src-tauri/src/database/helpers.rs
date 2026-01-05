@@ -12,12 +12,12 @@ impl FromSql for SqlU128 {
                     expected_size: 16,
                     blob_size: bytes.len(),
                 })?;
-        Ok(SqlU128(u128::from_le_bytes(arr)))
+        Ok(SqlU128(u128::from_be_bytes(arr))) // <-- be instead of le
     }
 }
 
 impl ToSql for SqlU128 {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::from(self.0.to_le_bytes().to_vec()))
+        Ok(ToSqlOutput::from(self.0.to_be_bytes().to_vec())) // <-- be instead of le
     }
 }
