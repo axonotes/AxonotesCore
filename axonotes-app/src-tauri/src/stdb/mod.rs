@@ -129,6 +129,7 @@ pub(crate) async fn ensure_connection_for_profile(
             "SELECT * FROM user",
             "SELECT * FROM user_metadata",
             "SELECT * FROM user_document_keys",
+            "SELECT * FROM accessible_live_blocks",
         ]);
 
     // Setup batch sync

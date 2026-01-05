@@ -1,5 +1,6 @@
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
+use crate::encryption::helpers::find_correct_decryption_key;
 use crate::stdb_bindings::DocumentBatch;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
@@ -45,19 +46,8 @@ impl DocumentBatch {
     ) -> Result<DecryptedBatch, String> {
         let batch_timestamp = self.timestamp;
 
-        // Find correct decryption key
-        // 1. Filter keys for this document and where key_timestamp <= batch_timestamp
-        // 2. Get the one with the highest timestamp
-        let decryption_key: &DecryptedDocumentKey = document_keys
-            .iter()
-            .filter(|key| key.doc_id == self.doc_id && key.key_timestamp <= batch_timestamp)
-            .max_by_key(|key| key.key_timestamp)
-            .ok_or_else(|| {
-                format!(
-                    "No valid encryption key found for doc_id: {} at timestamp: {}",
-                    self.doc_id, batch_timestamp
-                )
-            })?;
+        let decryption_key: &DecryptedDocumentKey =
+            find_correct_decryption_key(self.doc_id.to_string(), batch_timestamp, document_keys)?;
 
         // Decrypt the batch data blob with this key
         let decrypted = decrypt(

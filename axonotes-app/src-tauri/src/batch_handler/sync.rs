@@ -1,12 +1,13 @@
 use crate::encryption::batch::{DecryptDocumentBatchVec, DecryptedBatch};
 use crate::encryption::document::DecryptedDocumentKey;
+use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::stdb_bindings::{AccessibleBatchesTableAccess, DbConnection, DocumentBatch};
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
 use crate::{app_handle, database, stdb};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use spacetimedb_sdk::{DbContext, Table};
+use spacetimedb_sdk::{DbContext, Identity, Table};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -173,6 +174,31 @@ async fn upload_batch(
     batch: &DecryptedBatch,
     document_keys: &[DecryptedDocumentKey],
 ) -> Result<(), String> {
+    let live_blocks: Vec<DecryptedLiveBlock> =
+        stdb::active_profile().get_cached_live_blocks().await?;
+    let user_identity: Option<Identity> = stdb::active_profile().get_identity().await?;
+
+    // Check if batch would write to a block locked by someone else
+    let now = timestamp();
+    const LOCK_TIMEOUT_MS: u128 = 60_000; // 60 seconds
+
+    let is_block_locked_by_other = live_blocks.iter().any(|lb| {
+        lb.doc_id == batch.doc_id
+            && lb.block_id == batch.batch_data.block_id
+            && lb.locked_at.is_some()
+            && Some(lb.user_id) != user_identity
+            && lb
+                .locked_at
+                .map_or(false, |locked_time| now - locked_time < LOCK_TIMEOUT_MS)
+    });
+
+    if is_block_locked_by_other {
+        return Err(format!(
+            "Cannot upload batch: block {} in document {} is locked by another user",
+            batch.batch_data.block_id, batch.doc_id
+        ));
+    }
+
     let document_key = find_document_key(document_keys, batch.doc_id.as_str(), batch.timestamp)?;
     let signing_key = document_key.key_data.signing_private_key.as_array()?;
 

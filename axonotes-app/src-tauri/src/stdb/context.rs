@@ -3,6 +3,8 @@ use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::DecryptedDocumentMetadata;
 use crate::encryption::document::{DecryptDocumentMetaAndKeyVec, DecryptedDocumentKey};
+use crate::encryption::live_block::DecryptLiveBlockVec;
+use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::encryption::user::UserKeysEncrypted;
 use crate::stdb::{
     disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
@@ -151,6 +153,19 @@ impl ProfileStdbContext {
         } else {
             Err("No active user keys available. Not synced with stdb?".to_string())
         }
+    }
+
+    /// Get cached live blocks from SpacetimeDB
+    pub async fn get_cached_live_blocks(&self) -> Result<Vec<DecryptedLiveBlock>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let cached_document_keys = self.get_cached_document_keys().await?;
+        conn.db
+            .accessible_live_blocks()
+            .iter()
+            .collect::<Vec<_>>()
+            .decrypt_all(cached_document_keys.as_slice())
     }
 
     // ==========================================
