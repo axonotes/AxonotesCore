@@ -11,7 +11,7 @@
   "profile_status_active": "Active",
   "login_title": "Welcome Back",
   "login_description": "Sign in to your account to continue",
-  "login_button": "Sign in with WorkOS",
+  "login_button": "Sign in",
   "login_authenticating": "Authenticating...",
   "login_check_browser": "Check your browser to complete authentication"
 }
