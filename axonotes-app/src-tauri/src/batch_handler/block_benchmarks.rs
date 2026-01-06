@@ -13,8 +13,8 @@ mod benchmarks {
         Block::new(
             id,
             1234567890,
+            None,
             BlockContent::ParagraphV1(ParagraphV1 {
-                deleted: None,
                 author: Identity::from_byte_array([0u8; 32]),
                 group_id: "main".to_string(),
                 group_row: "0".to_string(),

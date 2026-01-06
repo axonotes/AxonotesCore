@@ -58,6 +58,7 @@ macro_rules! define_blocks {
         /// Full block with ID and timestamp
         #[derive(Clone, Debug)]
         pub struct Block {
+            pub deleted: Option<bool>,
             pub id: u64,
             pub timestamp: u64,
             pub content: BlockContent,
@@ -65,8 +66,10 @@ macro_rules! define_blocks {
 
         // --- Deserialization ---
 
-        #[derive(Deserialize)]
+        #[derive(Serialize, Deserialize)]
         struct RawBlock {
+            #[serde(skip_serializing_if = "Option::is_none", default)]
+            deleted: Option<bool>,
             id: u64,
             timestamp: u64,
             block_type: String,
@@ -93,6 +96,7 @@ macro_rules! define_blocks {
                 Ok(Block {
                     id: raw.id,
                     timestamp: raw.timestamp,
+                    deleted: raw.deleted,
                     content,
                 })
             }
@@ -131,6 +135,11 @@ macro_rules! define_blocks {
                     _ => return Err(S::Error::custom("block content must serialize to object")),
                 };
 
+                // Only include deleted if it's Some
+                if let Some(deleted) = self.deleted {
+                    map.insert("deleted".into(), serde_json::json!(deleted));
+                }
+
                 map.insert("id".into(), serde_json::json!(self.id));
                 map.insert("timestamp".into(), serde_json::json!(self.timestamp));
                 map.insert("block_type".into(), serde_json::json!(type_name));
@@ -157,8 +166,8 @@ macro_rules! define_blocks {
         }
 
         impl Block {
-            pub fn new(id: u64, timestamp: u64, content: BlockContent) -> Self {
-                Self { id, timestamp, content }
+            pub fn new(id: u64, timestamp: u64, deleted: Option<bool>, content: BlockContent) -> Self {
+                Self { id, timestamp, content, deleted }
             }
 
             pub fn type_name(&self) -> &'static str {
@@ -182,8 +191,8 @@ mod tests {
         Block::new(
             id,
             1234567890,
+            None, // not present initially
             BlockContent::ParagraphV1(ParagraphV1 {
-                deleted: None, // not present initially
                 author: Identity::from_byte_array([0u8; 32]),
                 group_id: "main".to_string(),
                 group_row: "0".to_string(),
@@ -197,8 +206,8 @@ mod tests {
         Block::new(
             id,
             1234567890,
+            Some(true),
             BlockContent::ParagraphV1(ParagraphV1 {
-                deleted: Some(true),
                 author: Identity::from_byte_array([0u8; 32]),
                 group_id: "main".to_string(),
                 group_row: "0".to_string(),
@@ -269,13 +278,13 @@ mod tests {
         let (decoded, time_delta) = decode_patch(&base, &patch).unwrap();
 
         assert_eq!(time_delta, 50);
+        assert_eq!(
+            decoded.deleted,
+            Some(true),
+            "decoded block should be marked deleted"
+        );
 
         if let BlockContent::ParagraphV1(p) = &decoded.content {
-            assert_eq!(
-                p.deleted,
-                Some(true),
-                "decoded block should be marked deleted"
-            );
             assert_eq!(p.text, "Hello", "text should be unchanged");
         } else {
             panic!("wrong block type");
@@ -292,10 +301,10 @@ mod tests {
 
         assert_eq!(time_delta, 100);
         assert_eq!(decoded.id, new.id);
+        assert_eq!(decoded.deleted, None, "edited block should not be deleted");
 
         if let BlockContent::ParagraphV1(p) = &decoded.content {
             assert_eq!(p.text, "Hello world");
-            assert_eq!(p.deleted, None, "edited block should not be deleted");
         } else {
             panic!("wrong block type");
         }

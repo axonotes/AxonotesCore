@@ -53,7 +53,11 @@ pub fn run() {
             commands::collaboration_cmd::release_lock_focused,
             commands::collaboration_cmd::release_lock_blur,
             commands::collaboration_cmd::get_document_locks,
-            commands::collaboration_cmd::update_live_block
+            commands::collaboration_cmd::update_live_block,
+            commands::block_cmd::create_block,
+            commands::block_cmd::get_blocks,
+            commands::block_cmd::update_block,
+            commands::block_cmd::delete_block,
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());
