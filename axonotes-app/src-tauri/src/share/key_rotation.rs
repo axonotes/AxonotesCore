@@ -7,6 +7,7 @@ use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::batch::{BatchData, DecryptedBatch};
 use crate::encryption::document::{DecryptedDocumentKey, DecryptedKeyData};
+use crate::events::emit_document_keys_rotated;
 use crate::stdb;
 use crate::stdb_bindings::{
     DocumentPermission, EncryptedKeyEntry, PublicUserInfo, ReEncryptedTag, Role, SnapshotBatch,
@@ -95,6 +96,8 @@ pub async fn rotate_keys_for_share(doc_id: &str) -> Result<KeyRotationResult, St
             signature.to_vec(),
         )
         .await?;
+
+    emit_document_keys_rotated(doc_id.to_string(), new_key_timestamp);
 
     Ok(KeyRotationResult {
         new_key_timestamp,

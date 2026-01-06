@@ -1,4 +1,5 @@
 use crate::config::StdbConfig;
+use crate::events::{emit_stdb_connected, emit_stdb_connection_error, emit_stdb_disconnected};
 use crate::stdb_bindings::*;
 use once_cell::sync::OnceCell;
 use spacetimedb_sdk::__codegen::log;
@@ -182,6 +183,7 @@ async fn build_connection(
 ) -> Result<DbConnection, String> {
     let profile_id_1 = profile_id.to_string();
     let profile_id_2 = profile_id.to_string();
+    let profile_id_3 = profile_id.to_string();
     DbConnection::builder()
         .on_connect(move |_ctx, identity, _token| {
             log::info!(
@@ -189,12 +191,14 @@ async fn build_connection(
                 profile_id_1,
                 identity.to_hex()
             );
+            emit_stdb_connected(profile_id_1.clone(), identity.to_hex().to_string());
         })
-        .on_connect_error(|_ctx, err| {
+        .on_connect_error(move |_ctx, err| {
             log::error!("SpacetimeDB connection error: {:?}", err);
+            emit_stdb_connection_error(profile_id_3.clone(), format!("{:?}", err));
         })
         .on_disconnect(move |_ctx, err| {
-            if let Some(err) = err {
+            if let Some(ref err) = err {
                 log::warn!(
                     "SpacetimeDB disconnected for profile {}: {}",
                     profile_id_2,
@@ -206,6 +210,7 @@ async fn build_connection(
                     profile_id_2
                 );
             }
+            emit_stdb_disconnected(profile_id_2.clone(), err.map(|e| e.to_string()));
         })
         .with_token(Some(access_token.to_string()))
         .with_module_name(config.default_module_name)

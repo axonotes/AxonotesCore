@@ -3,6 +3,7 @@ use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::DecryptedDocumentKey;
+use crate::events::emit_collaborator_added;
 use crate::stdb;
 use crate::stdb_bindings::{EncryptedKeyEntry, Role};
 use crate::utils::vec_array::ByteArrayConversion;
@@ -93,8 +94,22 @@ pub async fn process_share_joiner(
 
     // Call add_user_to_document
     stdb::active_profile()
-        .add_user_to_document(doc_id, joiner_id, role, encrypted_keys, signature.to_vec())
+        .add_user_to_document(
+            doc_id.clone(),
+            joiner_id,
+            role,
+            encrypted_keys,
+            signature.to_vec(),
+        )
         .await?;
+
+    // Emit collaborator added event
+    let role_str = match role {
+        Role::Owner => "owner",
+        Role::Editor => "editor",
+        Role::Reader => "reader",
+    };
+    emit_collaborator_added(doc_id, joiner_id.to_hex().to_string(), role_str.to_string());
 
     Ok(())
 }

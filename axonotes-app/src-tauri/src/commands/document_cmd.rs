@@ -6,6 +6,7 @@ use crate::crypto::ed25519::{generate_ed25519_keys, sign_message};
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::{DecryptedDocumentMetadata, DecryptedKeyData, DecryptedMetadata};
+use crate::events::{emit_document_created, emit_document_deleted, emit_document_metadata_updated};
 use crate::stdb;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
@@ -95,6 +96,8 @@ pub async fn create_document(title: Option<String>) -> Result<String, String> {
             },
         );
 
+        emit_document_created(doc_id.clone());
+
         Ok(doc_id)
     } else {
         Err("No user keys found".to_string())
@@ -112,8 +115,10 @@ pub async fn delete_document(doc_id: String) -> Result<(), String> {
             .map_err(|e| format!("Error signing 'delete_document' message: {}", e))?;
 
         stdb::active_profile()
-            .delete_document(doc_id, signature.to_vec())
+            .delete_document(doc_id.clone(), signature.to_vec())
             .await?;
+
+        emit_document_deleted(doc_id);
 
         Ok(())
     } else {
@@ -153,8 +158,10 @@ pub async fn update_document_metadata(
         )?;
 
         stdb::active_profile()
-            .update_document_metadata(doc_id, encrypted_blob)
+            .update_document_metadata(doc_id.clone(), encrypted_blob)
             .await?;
+
+        emit_document_metadata_updated(doc_id, metadata.path, metadata.tags);
 
         Ok(())
     } else {

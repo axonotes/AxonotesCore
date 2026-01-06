@@ -1,9 +1,6 @@
 use super::processor::process_share_joiner;
-use super::types::{
-    ActiveShareSession, ShareClosedPayload, ShareCodeReadyPayload, ShareErrorPayload,
-    ShareUserAddedPayload,
-};
-use crate::app_handle;
+use super::types::ActiveShareSession;
+use crate::events::{emit_share_code_ready, emit_share_error, emit_share_user_added};
 use crate::stdb_bindings::{
     DbConnection, MyPendingSharesTableAccess, PendingShare, PendingShareRequestsTableAccess, Role,
     ShareRequest,
@@ -176,36 +173,4 @@ async fn process_share_updates(
     }
 
     Ok(())
-}
-
-// ==========================================
-// Event Emitters
-// ==========================================
-
-fn emit_share_code_ready(doc_id: String, share_code: String) {
-    let payload = ShareCodeReadyPayload { doc_id, share_code };
-    if let Err(e) = app_handle::emit("share-code-ready", &payload) {
-        eprintln!("Failed to emit share-code-ready: {}", e);
-    }
-}
-
-fn emit_share_user_added(doc_id: String, user_id: String) {
-    let payload = ShareUserAddedPayload { doc_id, user_id };
-    if let Err(e) = app_handle::emit("share-user-added", &payload) {
-        eprintln!("Failed to emit share-user-added: {}", e);
-    }
-}
-
-fn emit_share_error(doc_id: String, error: String) {
-    let payload = ShareErrorPayload { doc_id, error };
-    if let Err(e) = app_handle::emit("share-error", &payload) {
-        eprintln!("Failed to emit share-error: {}", e);
-    }
-}
-
-pub fn emit_share_closed(doc_id: String, share_code: String) {
-    let payload = ShareClosedPayload { doc_id, share_code };
-    if let Err(e) = app_handle::emit("share-closed", &payload) {
-        eprintln!("Failed to emit share-closed: {}", e);
-    }
 }

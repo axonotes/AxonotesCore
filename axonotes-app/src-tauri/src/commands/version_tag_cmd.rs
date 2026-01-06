@@ -2,6 +2,7 @@ use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::version_tag::DecryptedVersionTagData;
+use crate::events::{emit_version_tag_created, emit_version_tag_deleted};
 use crate::stdb;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
@@ -59,7 +60,7 @@ pub async fn create_version_tag(
 
     // Create tag data
     let tag_data = DecryptedVersionTagData {
-        tag_name,
+        tag_name: tag_name.clone(),
         timestamp: tag_timestamp,
         created_by: user_identity,
         created_at: timestamp(),
@@ -85,8 +86,17 @@ pub async fn create_version_tag(
 
     // Call the reducer
     stdb::active_profile()
-        .create_version_tag(tag_id, doc_id, encrypted_blob, signature.to_vec())
-        .await
+        .create_version_tag(
+            tag_id.clone(),
+            doc_id.clone(),
+            encrypted_blob,
+            signature.to_vec(),
+        )
+        .await?;
+
+    emit_version_tag_created(tag_id, doc_id, tag_name, tag_timestamp);
+
+    Ok(())
 }
 
 /// Delete a version tag
@@ -95,8 +105,9 @@ pub async fn create_version_tag(
 ///
 /// # Arguments
 /// * `tag_id` - The ID of the tag to delete
+/// * `doc_id` - The document ID (for event emission)
 #[tauri::command]
-pub async fn delete_version_tag(tag_id: String) -> Result<(), String> {
+pub async fn delete_version_tag(tag_id: String, doc_id: String) -> Result<(), String> {
     // Get user keys
     let user_keys: Keys = get_active_user_keys().await?.ok_or("No active user keys")?;
     let private_signing_key = user_keys.private_signing_key.as_array()?;
@@ -109,8 +120,12 @@ pub async fn delete_version_tag(tag_id: String) -> Result<(), String> {
 
     // Call the reducer
     stdb::active_profile()
-        .delete_version_tag(tag_id, signature.to_vec())
-        .await
+        .delete_version_tag(tag_id.clone(), signature.to_vec())
+        .await?;
+
+    emit_version_tag_deleted(tag_id, doc_id);
+
+    Ok(())
 }
 
 /// List all version tags for a document

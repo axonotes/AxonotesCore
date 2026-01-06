@@ -8,6 +8,7 @@ mod config;
 mod crypto;
 mod database;
 mod encryption;
+mod events;
 mod share;
 mod stdb;
 mod stdb_bindings;

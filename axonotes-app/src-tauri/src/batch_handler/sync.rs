@@ -1,6 +1,7 @@
 use crate::encryption::batch::{DecryptDocumentBatchVec, DecryptedBatch};
 use crate::encryption::document::DecryptedDocumentKey;
 use crate::encryption::live_block::DecryptedLiveBlock;
+use crate::events::{emit_sync_completed, emit_sync_error, emit_sync_progress, emit_sync_started};
 use crate::stdb_bindings::{AccessibleBatchesTableAccess, DbConnection, DocumentBatch};
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
@@ -8,6 +9,7 @@ use crate::{app_handle, database, stdb};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::{DbContext, Identity, Table};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -96,18 +98,57 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
         .collect();
 
     if !stdb_batches.is_empty() {
-        let document_keys = stdb::active_profile().get_cached_document_keys().await?;
-        let decrypted_batches = stdb_batches.decrypt_all(&document_keys)?;
+        // Get unique doc_ids for sync events
+        let doc_ids: HashSet<String> = stdb_batches.iter().map(|b| b.doc_id.clone()).collect();
+        let batch_count = stdb_batches.len() as u32;
+
+        // Emit sync started for each document
+        for doc_id in &doc_ids {
+            emit_sync_started(doc_id.clone(), batch_count);
+        }
+
+        let document_keys = match stdb::active_profile().get_cached_document_keys().await {
+            Ok(keys) => keys,
+            Err(e) => {
+                for doc_id in &doc_ids {
+                    emit_sync_error(doc_id.clone(), e.clone());
+                }
+                return Err(e);
+            }
+        };
+
+        let decrypted_batches = match stdb_batches.decrypt_all(&document_keys) {
+            Ok(batches) => batches,
+            Err(e) => {
+                for doc_id in &doc_ids {
+                    emit_sync_error(doc_id.clone(), e.clone());
+                }
+                return Err(e);
+            }
+        };
 
         let mut conflicts = Vec::new();
+        let total_count = decrypted_batches.len() as u32;
+        let mut synced_count: u32 = 0;
+
         for server_batch in decrypted_batches {
+            let batch_doc_id = server_batch.doc_id.clone();
+
             if let Some(conflict) = sync_single_batch(server_batch).await? {
                 conflicts.push(conflict);
             }
+
+            synced_count += 1;
+            emit_sync_progress(batch_doc_id, synced_count, total_count);
         }
 
         if !conflicts.is_empty() {
             emit_conflicts(conflicts);
+        }
+
+        // Emit sync completed for each document
+        for doc_id in doc_ids {
+            emit_sync_completed(doc_id, batch_count);
         }
     }
 

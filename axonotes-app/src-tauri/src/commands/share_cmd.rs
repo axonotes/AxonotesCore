@@ -1,9 +1,13 @@
 use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
+use crate::events::{
+    emit_collaborator_removed, emit_collaborator_role_changed, emit_ownership_transferred,
+    emit_share_closed,
+};
 use crate::share::key_rotation::rotate_keys_for_share;
 use crate::share::sync::{
-    emit_share_closed, get_share_code_for_doc, register_share_session, unregister_share_session,
+    get_share_code_for_doc, register_share_session, unregister_share_session,
 };
 use crate::stdb;
 use crate::stdb_bindings::{EncryptedKeyEntry, Role};
@@ -274,6 +278,13 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
         rotate_keys_for_share(&doc_id).await?;
     }
 
+    emit_collaborator_role_changed(
+        doc_id,
+        user_id,
+        role_to_string(target_perm.role),
+        role_to_string(new_role),
+    );
+
     Ok(())
 }
 
@@ -306,9 +317,23 @@ pub async fn transfer_ownership(doc_id: String, new_owner_id: String) -> Result<
     let signature = sign_message(private_signing_key, &message)
         .map_err(|e| format!("Failed to sign message: {}", e))?;
 
+    // Get current user's identity (they are the old owner)
+    let old_owner_identity = stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("Current user identity not found")?;
+
     stdb::active_profile()
-        .transfer_ownership(doc_id, new_owner_identity, signature.to_vec())
-        .await
+        .transfer_ownership(doc_id.clone(), new_owner_identity, signature.to_vec())
+        .await?;
+
+    emit_ownership_transferred(
+        doc_id,
+        old_owner_identity.to_hex().to_string(),
+        new_owner_id,
+    );
+
+    Ok(())
 }
 
 /// Remove a user from a document
@@ -348,6 +373,8 @@ pub async fn remove_user(doc_id: String, user_id: String) -> Result<(), String> 
 
     // Step 2: Rotate keys so removed user can't decrypt new content
     rotate_keys_for_share(&doc_id).await?;
+
+    emit_collaborator_removed(doc_id, user_id);
 
     Ok(())
 }
