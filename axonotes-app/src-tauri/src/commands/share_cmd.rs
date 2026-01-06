@@ -8,7 +8,25 @@ use crate::share::sync::{
 use crate::stdb;
 use crate::stdb_bindings::{EncryptedKeyEntry, Role};
 use crate::utils::vec_array::ByteArrayConversion;
+use serde::Serialize;
 use spacetimedb_sdk::Identity;
+
+/// Collaborator info returned to frontend
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Collaborator {
+    pub user_id: Identity,
+    pub role: String,
+}
+
+/// Convert Role enum to lowercase string for frontend
+fn role_to_string(role: Role) -> String {
+    match role {
+        Role::Owner => "owner".to_string(),
+        Role::Editor => "editor".to_string(),
+        Role::Reader => "reader".to_string(),
+    }
+}
 
 /// Parse role from string
 fn parse_role(role_str: &str) -> Result<Role, String> {
@@ -332,4 +350,28 @@ pub async fn remove_user(doc_id: String, user_id: String) -> Result<(), String> 
     rotate_keys_for_share(&doc_id).await?;
 
     Ok(())
+}
+
+/// Get all collaborators for a document
+///
+/// Returns a list of users who have access to the document and their roles.
+/// Only returns collaborators for documents you have permission to manage.
+///
+/// # Arguments
+/// * `doc_id` - The document ID
+#[tauri::command]
+pub async fn get_document_collaborators(doc_id: String) -> Result<Vec<Collaborator>, String> {
+    let permissions = stdb::active_profile()
+        .get_document_permissions(&doc_id)
+        .await?;
+
+    let collaborators = permissions
+        .into_iter()
+        .map(|perm| Collaborator {
+            user_id: perm.user_id,
+            role: role_to_string(perm.role),
+        })
+        .collect();
+
+    Ok(collaborators)
 }

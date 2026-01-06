@@ -3,6 +3,7 @@ use crate::encryption::document::DecryptedDocumentKey;
 use crate::stdb_bindings::DocumentVersionTag;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
+use spacetimedb_sdk::Identity;
 
 /// Trait for decrypting a Vec of version tags
 pub trait DecryptVersionTagVec {
@@ -22,7 +23,7 @@ pub trait EncryptVersionTagVec {
 pub struct DecryptedVersionTagData {
     pub tag_name: String,
     pub timestamp: u128,
-    pub created_by: String, // user identity as hex
+    pub created_by: Identity,
     pub created_at: u128,
 }
 
@@ -150,7 +151,7 @@ mod tests {
         let original = DecryptedVersionTagData {
             tag_name: "v1.0".to_string(),
             timestamp: 1234567890,
-            created_by: "user123".to_string(),
+            created_by: Identity::from_byte_array([1u8; 32]),
             created_at: 1234567890,
         };
 
@@ -179,7 +180,7 @@ mod tests {
             data: DecryptedVersionTagData {
                 tag_name: "v1.0".to_string(),
                 timestamp: 100,
-                created_by: "user123".to_string(),
+                created_by: Identity::from_byte_array([1u8; 32]),
                 created_at: 100,
             },
         };
@@ -211,7 +212,7 @@ mod tests {
                 data: DecryptedVersionTagData {
                     tag_name: "v1.0".to_string(),
                     timestamp: 100,
-                    created_by: "user1".to_string(),
+                    created_by: Identity::from_byte_array([1u8; 32]),
                     created_at: 100,
                 },
             },
@@ -221,7 +222,7 @@ mod tests {
                 data: DecryptedVersionTagData {
                     tag_name: "v2.0".to_string(),
                     timestamp: 200,
-                    created_by: "user2".to_string(),
+                    created_by: Identity::from_byte_array([2u8; 32]),
                     created_at: 200,
                 },
             },
@@ -264,7 +265,7 @@ mod tests {
             data: DecryptedVersionTagData {
                 tag_name: "v1.0".to_string(),
                 timestamp: 100,
-                created_by: "user".to_string(),
+                created_by: Identity::from_byte_array([1u8; 32]),
                 created_at: 100,
             },
         };
@@ -283,7 +284,7 @@ mod tests {
             data: DecryptedVersionTagData {
                 tag_name: "v2.0".to_string(),
                 timestamp: 200,
-                created_by: "user".to_string(),
+                created_by: Identity::from_byte_array([1u8; 32]),
                 created_at: 200,
             },
         };
@@ -307,7 +308,7 @@ mod tests {
             data: DecryptedVersionTagData {
                 tag_name: "v1.0".to_string(),
                 timestamp: 100,
-                created_by: "user".to_string(),
+                created_by: Identity::from_byte_array([1u8; 32]),
                 created_at: 100,
             },
         };

@@ -6,3 +6,4 @@ pub(crate) mod encryption_cmd;
 pub(crate) mod live_lock_cmd;
 pub(crate) mod profile_cmd;
 pub(crate) mod share_cmd;
+pub(crate) mod version_tag_cmd;

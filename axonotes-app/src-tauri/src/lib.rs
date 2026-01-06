@@ -66,6 +66,10 @@ pub fn run() {
             commands::share_cmd::update_user_role,
             commands::share_cmd::transfer_ownership,
             commands::share_cmd::remove_user,
+            commands::share_cmd::get_document_collaborators,
+            commands::version_tag_cmd::create_version_tag,
+            commands::version_tag_cmd::delete_version_tag,
+            commands::version_tag_cmd::list_version_tags,
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());
