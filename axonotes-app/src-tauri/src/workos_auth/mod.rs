@@ -144,8 +144,17 @@ where
     Ok(auth_url)
 }
 
-/// Refresh an access token using a refresh token
-pub async fn refresh_access_token(refresh_token: &str) -> Result<String, String> {
+/// Response from token refresh endpoint
+#[derive(Debug, Clone)]
+pub struct RefreshResult {
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+}
+
+/// Refresh an access token using a refresh token.
+/// Returns both the new access token and optionally a new refresh token
+/// (if the provider rotates refresh tokens).
+pub async fn refresh_access_token(refresh_token: &str) -> Result<RefreshResult, String> {
     let config = OAuthConfig::new();
     let client = reqwest::Client::new();
     let params = [
@@ -168,10 +177,14 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<String, String>
     #[derive(Deserialize)]
     struct RefreshResponse {
         access_token: String,
+        refresh_token: Option<String>,
     }
 
     let refresh_response: RefreshResponse = response.json().await.map_err(|e| e.to_string())?;
-    Ok(refresh_response.access_token)
+    Ok(RefreshResult {
+        access_token: refresh_response.access_token,
+        refresh_token: refresh_response.refresh_token,
+    })
 }
 
 async fn run_callback_server<F>(dark_mode: bool, port: u16, callback: F) -> Result<(), String>
@@ -342,4 +355,130 @@ async fn exchange_code_for_token(code: String) -> Result<Profile, String> {
         access_token: token_response.access_token,
         refresh_token: token_response.refresh_token,
     })
+}
+
+// ============================================================================
+// Token Refresh Manager
+// ============================================================================
+
+/// How often to check if token needs refresh (in seconds)
+const REFRESH_CHECK_INTERVAL_SECS: u64 = 60;
+
+/// Refresh token this many seconds before it expires
+const REFRESH_BUFFER_SECS: i64 = 300; // 5 minutes
+
+/// Handle to the background token refresh task
+static TOKEN_REFRESH_HANDLE: Lazy<Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
+
+/// JWT claims structure for decoding expiration time
+#[derive(Debug, Deserialize)]
+struct JwtClaims {
+    exp: i64,
+}
+
+/// Decode a JWT token and extract the expiration timestamp.
+/// Returns None if the token is invalid or doesn't contain an exp claim.
+fn decode_token_expiry(token: &str) -> Option<i64> {
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+
+    // Use insecure decoding - we only need the exp claim, not validation
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.insecure_disable_signature_validation();
+    validation.validate_exp = false;
+    validation.validate_aud = false;
+
+    // Try to decode with a dummy key (signature validation is disabled)
+    let dummy_key = DecodingKey::from_secret(&[]);
+
+    match decode::<JwtClaims>(token, &dummy_key, &validation) {
+        Ok(token_data) => Some(token_data.claims.exp),
+        Err(_) => None,
+    }
+}
+
+/// Check if a token should be refreshed (expires within `REFRESH_BUFFER_SECS`)
+fn should_refresh_token(token: &str) -> bool {
+    let Some(exp) = decode_token_expiry(token) else {
+        return false;
+    };
+
+    let now = chrono::Utc::now().timestamp();
+    let time_until_expiry = exp - now;
+
+    time_until_expiry <= REFRESH_BUFFER_SECS
+}
+
+/// Start the background token refresh task.
+/// This task periodically checks if the active profile's token needs refreshing
+/// and automatically refreshes it before expiration.
+pub async fn start_token_refresh_task() {
+    // Cancel any existing task first
+    stop_token_refresh_task().await;
+
+    let handle = tokio::spawn(async move {
+        eprintln!("[token-refresh] Background task started");
+
+        loop {
+            sleep(Duration::from_secs(REFRESH_CHECK_INTERVAL_SECS)).await;
+
+            if let Err(e) = check_and_refresh_token().await {
+                eprintln!("[token-refresh] Check failed: {e}");
+            }
+        }
+    });
+
+    // Store the handle
+    let mut guard = TOKEN_REFRESH_HANDLE.lock().await;
+    *guard = Some(handle);
+}
+
+/// Stop the background token refresh task if it's running
+pub async fn stop_token_refresh_task() {
+    let mut guard = TOKEN_REFRESH_HANDLE.lock().await;
+    if let Some(handle) = guard.take() {
+        handle.abort();
+        eprintln!("[token-refresh] Background task stopped");
+    }
+}
+
+/// Check if the active profile's token needs refreshing and refresh if needed
+async fn check_and_refresh_token() -> Result<(), String> {
+    // Get the active profile
+    let Some(profile) = crate::database::get_active_profile().await? else {
+        return Ok(()); // No active profile, nothing to do
+    };
+
+    // Check if the token needs refreshing
+    if !should_refresh_token(&profile.access_token) {
+        return Ok(());
+    }
+
+    eprintln!("[token-refresh] Access token expiring soon, refreshing...");
+
+    // Get refresh token
+    let refresh_token = profile
+        .refresh_token
+        .as_ref()
+        .ok_or("No refresh token available")?;
+
+    // Refresh the token
+    let result = refresh_access_token(refresh_token).await?;
+
+    // Update the database with both tokens
+    crate::database::update_profile_tokens(
+        &profile.id,
+        &result.access_token,
+        result.refresh_token.as_deref(),
+    )
+    .await?;
+
+    eprintln!("[token-refresh] Access token refreshed, reconnecting SpacetimeDB...");
+
+    // Reconnect SpacetimeDB with the new token
+    crate::stdb::reconnect_active_profile().await?;
+
+    eprintln!("[token-refresh] SpacetimeDB reconnected with new token");
+
+    Ok(())
 }

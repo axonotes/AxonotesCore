@@ -121,6 +121,29 @@ pub async fn disconnect_all() -> Result<(), String> {
     Ok(())
 }
 
+/// Reconnect the active profile with a fresh token from the database.
+/// This is used after token refresh to apply the new token to the `SpacetimeDB` connection.
+pub async fn reconnect_active_profile() -> Result<(), String> {
+    // Get the active profile with the fresh token
+    let profile = database::get_active_profile()
+        .await?
+        .ok_or("No active profile")?;
+
+    // Check if there's an existing connection to reconnect
+    let was_connected = is_profile_connected(&profile.id).await;
+
+    if was_connected {
+        // Disconnect the old connection
+        disconnect_profile(&profile.id).await?;
+
+        // Create a new connection with the fresh token
+        ensure_connection_for_profile(&profile.id, &profile.access_token).await?;
+    }
+    // If not connected, no need to reconnect
+
+    Ok(())
+}
+
 /// Check if a profile has an active connection
 pub async fn is_profile_connected(profile_id: &str) -> bool {
     let connections = get_connections();

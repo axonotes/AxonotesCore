@@ -69,3 +69,6 @@ moka = { version = "0.12.12", features = ["future"] }
 futures = "0.3.31"
 rayon = "1.11.0"
 dashmap = "6.1.0"
+
+# JWT
+jsonwebtoken = "9"

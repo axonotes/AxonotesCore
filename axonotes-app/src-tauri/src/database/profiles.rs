@@ -162,6 +162,30 @@ pub fn update_access_token(conn: &Connection, profile_id: &str, access_token: &s
     Ok(())
 }
 
+/// Update access token and optionally refresh token for a profile
+pub fn update_tokens(
+    conn: &Connection,
+    profile_id: &str,
+    access_token: &str,
+    refresh_token: Option<&str>,
+) -> Result<()> {
+    let now = chrono::Utc::now().timestamp();
+
+    if let Some(refresh) = refresh_token {
+        conn.execute(
+            "UPDATE profiles SET access_token = ?1, refresh_token = ?2, updated_at = ?3 WHERE id = ?4",
+            params![access_token, refresh, now, profile_id],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE profiles SET access_token = ?1, updated_at = ?2 WHERE id = ?3",
+            params![access_token, now, profile_id],
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Get a profile by ID
 pub fn get_by_id(conn: &Connection, profile_id: &str) -> Result<Option<Profile>> {
     let mut stmt = conn.prepare(

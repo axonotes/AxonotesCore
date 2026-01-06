@@ -403,19 +403,43 @@ pub async fn delete_profile(profile_id: String) -> Result<(), String> {
 pub async fn refresh_active_profile_token() -> Result<String, String> {
     let profile = get_active_profile().await?.ok_or("No active profile")?;
     let refresh_token = profile.refresh_token.ok_or("No refresh token available")?;
-    let new_access_token = crate::workos_auth::refresh_access_token(&refresh_token).await?;
-    let new_access_token_copy = new_access_token.clone();
+    let result = crate::workos_auth::refresh_access_token(&refresh_token).await?;
+    let new_access_token = result.access_token.clone();
 
     let profile_id = profile.id.clone();
+    let new_refresh_token = result.refresh_token.clone();
     tokio::task::spawn_blocking(move || {
         let conn = get_conn()?;
-        profiles::update_access_token(&conn, &profile_id, &new_access_token_copy)
-            .map_err(|e| e.to_string())
+        profiles::update_tokens(
+            &conn,
+            &profile_id,
+            &result.access_token,
+            new_refresh_token.as_deref(),
+        )
+        .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())??;
 
     Ok(new_access_token)
+}
+
+pub async fn update_profile_tokens(
+    profile_id: &str,
+    access_token: &str,
+    refresh_token: Option<&str>,
+) -> Result<(), String> {
+    let profile_id = profile_id.to_string();
+    let access_token = access_token.to_string();
+    let refresh_token = refresh_token.map(String::from);
+
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        profiles::update_tokens(&conn, &profile_id, &access_token, refresh_token.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ========================================
