@@ -1,3 +1,5 @@
+#![allow(clippy::needless_pass_by_value)] // API design: encryption functions take ownership for security
+
 use crate::crypto::bip39::{
     mnemonic_to_key, MNEMONIC_KEY_ENCRYPTION_CONTEXT, MNEMONIC_KEY_SIGNING_CONTEXT,
 };
@@ -82,23 +84,23 @@ pub fn decrypted_to_encrypted(
         pwd_encryption_key.as_slice(),
         user_keys_decrypted.private_encryption_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt encryption key with pwd: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt encryption key with pwd: {e}"))?;
     let pwd_encrypted_private_signing_key = encrypt(
         pwd_signing_key.as_slice(),
         user_keys_decrypted.private_signing_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt signing key with pwd: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt signing key with pwd: {e}"))?;
 
     let mnemonic_encrypted_private_encryption_key = encrypt(
         mnemonic_encryption_key.as_slice(),
         user_keys_decrypted.private_encryption_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt encryption key with mnemonic: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt encryption key with mnemonic: {e}"))?;
     let mnemonic_encrypted_private_signing_key = encrypt(
         mnemonic_signing_key.as_slice(),
         user_keys_decrypted.private_signing_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt signing key with mnemonic: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt signing key with mnemonic: {e}"))?;
 
     Ok(UserKeysEncrypted {
         public_encryption_key: user_keys_decrypted.public_encryption_key,
@@ -129,13 +131,13 @@ pub fn pwd_encrypted_to_decrypted(
         pwd_encryption_key.as_slice(),
         pwd_encrypted_private_encryption_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to decrypt encryption key: {}", e))?;
+    .map_err(|e| format!("Failed to decrypt encryption key: {e}"))?;
 
     let private_signing_key = decrypt(
         pwd_signing_key.as_slice(),
         pwd_encrypted_private_signing_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to decrypt signing key: {}", e))?;
+    .map_err(|e| format!("Failed to decrypt signing key: {e}"))?;
 
     Ok(UserKeysDecrypted {
         public_encryption_key,
@@ -166,13 +168,13 @@ pub fn mnemonic_encrypted_to_decrypted(
         mnemonic_encryption_key.as_slice(),
         mnemonic_encrypted_private_encryption_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to decrypt encryption key: {}", e))?;
+    .map_err(|e| format!("Failed to decrypt encryption key: {e}"))?;
 
     let private_signing_key = decrypt(
         mnemonic_signing_key.as_slice(),
         mnemonic_encrypted_private_signing_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to decrypt signing key: {}", e))?;
+    .map_err(|e| format!("Failed to decrypt signing key: {e}"))?;
 
     Ok(UserKeysDecrypted {
         public_encryption_key,
@@ -194,7 +196,7 @@ pub fn sign_encryption_update(
         .map_err(|_| "Private signing key must be exactly 32 bytes")?;
 
     let signature: [u8; 64] = sign_message(private_signing_key_array, message.as_slice())
-        .map_err(|e| format!("Failed to sign encryption update: {}", e))?;
+        .map_err(|e| format!("Failed to sign encryption update: {e}"))?;
 
     Ok(signature.to_vec())
 }
@@ -212,13 +214,13 @@ pub fn reencrypt_with_new_password(
         pwd_encryption_key.as_slice(),
         user_keys_decrypted.private_encryption_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt encryption key with pwd: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt encryption key with pwd: {e}"))?;
 
     let pwd_encrypted_private_signing_key = encrypt(
         pwd_signing_key.as_slice(),
         user_keys_decrypted.private_signing_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt signing key with pwd: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt signing key with pwd: {e}"))?;
 
     // Return with new password encryption but keep old mnemonic encryption
     Ok(UserKeysEncrypted {
@@ -247,13 +249,13 @@ pub fn reencrypt_with_new_mnemonic(
         mnemonic_encryption_key.as_slice(),
         user_keys_decrypted.private_encryption_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt encryption key with mnemonic: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt encryption key with mnemonic: {e}"))?;
 
     let mnemonic_encrypted_private_signing_key = encrypt(
         mnemonic_signing_key.as_slice(),
         user_keys_decrypted.private_signing_key.as_slice(),
     )
-    .map_err(|e| format!("Failed to encrypt signing key with mnemonic: {}", e))?;
+    .map_err(|e| format!("Failed to encrypt signing key with mnemonic: {e}"))?;
 
     // Return with new mnemonic encryption but keep old password encryption
     Ok(UserKeysEncrypted {

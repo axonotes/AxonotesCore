@@ -151,6 +151,7 @@ macro_rules! define_blocks {
 
         // --- Helper Methods ---
 
+        #[allow(dead_code)]
         impl BlockContent {
             pub fn type_name(&self) -> &'static str {
                 match self {
@@ -165,6 +166,7 @@ macro_rules! define_blocks {
             }
         }
 
+        #[allow(dead_code)]
         impl Block {
             pub fn new(id: u64, timestamp: u128, deleted: Option<bool>, content: BlockContent) -> Self {
                 Self { id, timestamp, content, deleted }

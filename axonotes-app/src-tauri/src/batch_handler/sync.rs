@@ -38,12 +38,12 @@ pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), Str
 
             tokio::spawn(async move {
                 if let Err(e) = sync_batches_with_data(batches).await {
-                    eprintln!("Batch sync error: {}", e);
+                    eprintln!("Batch sync error: {e}");
                 }
             });
         })
         .on_error(|_error_ctx, error| {
-            eprintln!("Batch subscription error: {:?}", error);
+            eprintln!("Batch subscription error: {error:?}");
         })
         .subscribe([format!(
             "SELECT * FROM accessible_batches WHERE timestamp > {start_time}"
@@ -73,7 +73,7 @@ pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
                 database::set_last_active_profile_sync_time(*last_sync).await?;
             }
             Err(e) => {
-                eprintln!("Batch upload failed, saving as pending: {}", e);
+                eprintln!("Batch upload failed, saving as pending: {e}");
                 database::save_pending_batch(batch).await?;
             }
         }
@@ -100,6 +100,7 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
     if !stdb_batches.is_empty() {
         // Get unique doc_ids for sync events
         let doc_ids: HashSet<String> = stdb_batches.iter().map(|b| b.doc_id.clone()).collect();
+        #[allow(clippy::cast_possible_truncation)] // Batch count bounded in practice
         let batch_count = stdb_batches.len() as u32;
 
         // Emit sync started for each document
@@ -128,6 +129,7 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
         };
 
         let mut conflicts = Vec::new();
+        #[allow(clippy::cast_possible_truncation)] // Batch count bounded in practice
         let total_count = decrypted_batches.len() as u32;
         let mut synced_count: u32 = 0;
 
@@ -143,7 +145,7 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
         }
 
         if !conflicts.is_empty() {
-            emit_conflicts(conflicts);
+            emit_conflicts(&conflicts);
         }
 
         // Emit sync completed for each document
@@ -230,7 +232,7 @@ async fn upload_batch(
             && Some(lb.user_id) != user_identity
             && lb
                 .locked_at
-                .map_or(false, |locked_time| now - locked_time < LOCK_TIMEOUT_MS)
+                .is_some_and(|locked_time| now - locked_time < LOCK_TIMEOUT_MS)
     });
 
     if is_block_locked_by_other {
@@ -246,7 +248,7 @@ async fn upload_batch(
     let encrypted = batch.encrypt(document_key)?;
 
     let signature = crate::crypto::ed25519::sign_message(signing_key, &encrypted.encrypted_data)
-        .map_err(|e| format!("Failed to sign batch: {}", e))?;
+        .map_err(|e| format!("Failed to sign batch: {e}"))?;
 
     stdb::active_profile()
         .upload_batch(
@@ -267,11 +269,11 @@ fn find_document_key<'a>(
     keys.iter()
         .filter(|k| k.doc_id == doc_id && k.key_timestamp <= timestamp)
         .max_by_key(|k| k.key_timestamp)
-        .ok_or_else(|| format!("No key found for doc {}", doc_id))
+        .ok_or_else(|| format!("No key found for doc {doc_id}"))
 }
 
-fn emit_conflicts(conflicts: Vec<ConflictInfo>) {
+fn emit_conflicts(conflicts: &[ConflictInfo]) {
     if let Err(e) = app_handle::emit("batch-conflicts", &conflicts) {
-        eprintln!("Failed to emit conflicts: {}", e);
+        eprintln!("Failed to emit conflicts: {e}");
     }
 }

@@ -12,7 +12,7 @@ pub fn encrypt(key: &[u8], content: &[u8]) -> Result<Vec<u8>, Box<dyn std::error
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     let enc_content = cipher
         .encrypt(&nonce, content)
-        .map_err(|e| format!("Encryption failed: {:?}", e))?;
+        .map_err(|e| format!("Encryption failed: {e:?}"))?;
 
     let mut encrypted = nonce.as_slice().to_vec();
     encrypted.extend_from_slice(&enc_content);
@@ -30,7 +30,7 @@ pub fn decrypt(key: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, Box<dyn std::err
 
     let plaintext = cipher
         .decrypt(nonce.into(), enc_content)
-        .map_err(|e| format!("Decryption failed: {:?}", e))?;
+        .map_err(|e| format!("Decryption failed: {e:?}"))?;
 
     Ok(plaintext)
 }

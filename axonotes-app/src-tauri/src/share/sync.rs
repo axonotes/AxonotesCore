@@ -49,6 +49,7 @@ pub async fn unregister_share_session(doc_id: &str) {
 }
 
 /// Check if a share session exists for a document
+#[allow(dead_code)]
 pub async fn has_active_session_for_doc(doc_id: &str) -> bool {
     let sessions = get_active_sessions();
     let sessions = sessions.lock().await;
@@ -78,12 +79,12 @@ pub fn setup_share_sync(conn: &DbConnection) -> Result<(), String> {
 
             tokio::spawn(async move {
                 if let Err(e) = process_share_updates(pending_shares, share_requests).await {
-                    eprintln!("Share sync error: {}", e);
+                    eprintln!("Share sync error: {e}");
                 }
             });
         })
         .on_error(|_ctx, error| {
-            eprintln!("Share subscription error: {:?}", error);
+            eprintln!("Share subscription error: {error:?}");
         })
         .subscribe([
             "SELECT * FROM my_pending_shares",
@@ -164,7 +165,7 @@ async fn process_share_updates(
                         emit_share_user_added(doc_id, joiner_id.to_hex().to_string());
                     }
                     Err(e) => {
-                        eprintln!("Failed to process share joiner: {}", e);
+                        eprintln!("Failed to process share joiner: {e}");
                         emit_share_error(doc_id, e);
                     }
                 }

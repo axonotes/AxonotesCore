@@ -15,6 +15,7 @@ pub trait DecryptLiveBlockVec {
     ) -> Result<Vec<DecryptedLiveBlock>, String>;
 }
 
+#[allow(dead_code)]
 pub trait EncryptLiveBlockVec {
     fn encrypt_all(
         self,
@@ -48,13 +49,13 @@ impl LiveBlock {
         // 1. Filter keys for this document and where key_timestamp <= batch_timestamp
         // 2. Get the one with the highest timestamp
         let decryption_key: &DecryptedDocumentKey =
-            find_correct_decryption_key(self.doc_id.to_string(), timestamp, document_keys)?;
+            find_correct_decryption_key(&self.doc_id, timestamp, document_keys)?;
 
         let decrypted_content = decrypt(
             decryption_key.key_data.encryption_key.as_slice(),
             self.encrypted_content.as_slice(),
         )
-        .map_err(|e| format!("Error while decrypting live block content: {}", e))?;
+        .map_err(|e| format!("Error while decrypting live block content: {e}"))?;
 
         let content: Block =
             serde_json::from_slice(decrypted_content.as_slice()).map_err(|e| e.to_string())?;
@@ -63,10 +64,10 @@ impl LiveBlock {
             decryption_key.key_data.encryption_key.as_slice(),
             self.encrypted_username.as_slice(),
         )
-        .map_err(|e| format!("Error while decrypting live block username: {}", e))?;
+        .map_err(|e| format!("Error while decrypting live block username: {e}"))?;
 
         let username: String = from_bytes(decrypted_username.as_slice())
-            .map_err(|e| format!("Error deserializing username: {}", e))?;
+            .map_err(|e| format!("Error deserializing username: {e}"))?;
 
         Ok(DecryptedLiveBlock {
             doc_id: self.doc_id.to_string(),
@@ -92,9 +93,10 @@ impl DecryptLiveBlockVec for Vec<LiveBlock> {
 }
 
 impl DecryptedLiveBlock {
+    #[allow(dead_code)]
     pub fn encrypt(&self, latest_document_key: &DecryptedDocumentKey) -> Result<LiveBlock, String> {
         let username_blob = to_allocvec(&self.username)
-            .map_err(|e| format!("Error serializing batch data: {}", e))?;
+            .map_err(|e| format!("Error serializing batch data: {e}"))?;
 
         let content_blob = serde_json::to_vec(&self.content).map_err(|e| e.to_string())?;
 
@@ -102,13 +104,13 @@ impl DecryptedLiveBlock {
             latest_document_key.key_data.encryption_key.as_slice(),
             content_blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
+        .map_err(|e| format!("Error when encrypting live block content: {e}"))?;
 
         let encrypted_username = encrypt(
             latest_document_key.key_data.encryption_key.as_slice(),
             username_blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting live block username: {}", e))?;
+        .map_err(|e| format!("Error when encrypting live block username: {e}"))?;
 
         Ok(LiveBlock {
             doc_id: self.doc_id.to_string(),

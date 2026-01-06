@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::database::helpers::SqlU128;
 use crate::encryption::batch::{BatchData, DecryptedBatch, Patch};
 use postcard::{from_bytes, to_allocvec};
@@ -26,8 +28,8 @@ fn save_internal(conn: &Connection, batch: &DecryptedBatch, pending: bool) -> Re
             SqlU128(batch.timestamp),
             batch.batch_data.block_id as i64,
             patches_blob,
-            pending as i32,
-            batch.is_initial as i32,
+            i32::from(pending),
+            i32::from(batch.is_initial),
         ],
     )?;
 

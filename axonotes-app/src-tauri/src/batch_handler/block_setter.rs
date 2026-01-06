@@ -137,7 +137,7 @@ async fn run_throttle_timer(key: CacheKey) {
         // Take pending block (if any)
         if let Some((_, block)) = PENDING_BLOCKS.remove(&key) {
             if let Err(e) = process_pending_block(&key, block).await {
-                eprintln!("Failed to process pending block: {}", e);
+                eprintln!("Failed to process pending block: {e}");
             }
         }
 
@@ -149,12 +149,11 @@ async fn run_throttle_timer(key: CacheKey) {
         // Check if in-progress batch needs finalization due to timeout
         let should_finalize = IN_PROGRESS_BATCHES
             .get(&key)
-            .map(|b| timestamp() - b.last_patch_timestamp > FINALIZE_TIMEOUT_MS)
-            .unwrap_or(false);
+            .is_some_and(|b| timestamp() - b.last_patch_timestamp > FINALIZE_TIMEOUT_MS);
 
         if should_finalize {
             if let Err(e) = finalize_batch(&key).await {
-                eprintln!("Failed to finalize batch: {}", e);
+                eprintln!("Failed to finalize batch: {e}");
             }
         }
 
@@ -181,8 +180,7 @@ async fn process_pending_block(key: &CacheKey, block: Block) -> Result<(), Strin
     // Check if current batch needs finalization (can't accept more patches)
     let should_finalize = IN_PROGRESS_BATCHES
         .get(key)
-        .map(|b| !b.can_accept_patch(now))
-        .unwrap_or(false);
+        .is_some_and(|b| !b.can_accept_patch(now));
 
     if should_finalize {
         finalize_batch(key).await?;
@@ -190,6 +188,8 @@ async fn process_pending_block(key: &CacheKey, block: Block) -> Result<(), Strin
 
     // Try to add to existing batch
     if let Some(mut batch) = IN_PROGRESS_BATCHES.get_mut(key) {
+        #[allow(clippy::cast_possible_truncation)]
+        // Time delta fits in u8 due to MAX_TIME_DELTA_MS constraint
         let time_delta = ((now - batch.last_patch_timestamp) / 5) as u8;
         let patch = encode_patch(0, time_delta, &batch.last_block, &block)?;
 
@@ -261,7 +261,7 @@ async fn run_finalization_task() {
 
         for key in keys_to_finalize {
             if let Err(e) = finalize_batch(&key).await {
-                eprintln!("Failed to finalize stale batch: {}", e);
+                eprintln!("Failed to finalize stale batch: {e}");
             }
         }
     }

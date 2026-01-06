@@ -12,6 +12,7 @@ pub trait DecryptDocumentBatchVec {
     ) -> Result<Vec<DecryptedBatch>, String>;
 }
 
+#[allow(dead_code)]
 pub trait EncryptDocumentBatchVec {
     fn encrypt_all(
         self,
@@ -48,17 +49,17 @@ impl DocumentBatch {
         let batch_timestamp = self.timestamp;
 
         let decryption_key: &DecryptedDocumentKey =
-            find_correct_decryption_key(self.doc_id.to_string(), batch_timestamp, document_keys)?;
+            find_correct_decryption_key(&self.doc_id, batch_timestamp, document_keys)?;
 
         // Decrypt the batch data blob with this key
         let decrypted = decrypt(
             decryption_key.key_data.encryption_key.as_slice(),
             self.encrypted_data.as_slice(),
         )
-        .map_err(|e| format!("Error while decrypting batch data: {}", e))?;
+        .map_err(|e| format!("Error while decrypting batch data: {e}"))?;
 
         let batch_data: BatchData = from_bytes(decrypted.as_slice())
-            .map_err(|e| format!("Error deserializing batch data: {}", e))?;
+            .map_err(|e| format!("Error deserializing batch data: {e}"))?;
 
         let is_initial = batch_timestamp == decryption_key.key_timestamp;
 
@@ -89,13 +90,13 @@ impl DecryptedBatch {
         latest_document_key: &DecryptedDocumentKey,
     ) -> Result<DocumentBatch, String> {
         let blob = to_allocvec(&self.batch_data)
-            .map_err(|e| format!("Error serializing batch data: {}", e))?;
+            .map_err(|e| format!("Error serializing batch data: {e}"))?;
 
         let encrypted_data = encrypt(
             latest_document_key.key_data.encryption_key.as_slice(),
             blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting batch data: {}", e))?;
+        .map_err(|e| format!("Error when encrypting batch data: {e}"))?;
 
         Ok(DocumentBatch {
             timestamp: self.timestamp,

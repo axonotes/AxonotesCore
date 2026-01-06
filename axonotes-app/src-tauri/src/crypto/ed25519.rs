@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand_core::OsRng;
 

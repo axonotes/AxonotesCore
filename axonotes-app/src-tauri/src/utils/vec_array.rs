@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub trait ByteArrayConversion {
     /// Convert Vec<u8> to fixed-size array [u8; N]
     fn to_array<const N: usize>(self) -> Result<[u8; N], String>;

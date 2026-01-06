@@ -69,7 +69,7 @@ pub async fn create_version_tag(
     // Encrypt tag data
     let encrypted_blob = tag_data
         .encrypt(&doc_key.key_data.encryption_key)
-        .map_err(|e| format!("Failed to encrypt tag: {}", e))?;
+        .map_err(|e| format!("Failed to encrypt tag: {e}"))?;
 
     // Sign the create_version_tag message (must match server format)
     let blob_hash = blake3::hash(&encrypted_blob);
@@ -82,7 +82,7 @@ pub async fn create_version_tag(
     .concat();
 
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Call the reducer
     stdb::active_profile()
@@ -116,7 +116,7 @@ pub async fn delete_version_tag(tag_id: String, doc_id: String) -> Result<(), St
     let message = [b"delete_version_tag".as_slice(), tag_id.as_bytes()].concat();
 
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Call the reducer
     stdb::active_profile()

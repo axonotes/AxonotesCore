@@ -52,20 +52,20 @@ pub fn emit_stdb_connected(profile_id: String, identity: String) {
         identity,
     };
     if let Err(e) = app_handle::emit(EVENT_STDB_CONNECTED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_STDB_CONNECTED, e);
+        eprintln!("Failed to emit {EVENT_STDB_CONNECTED}: {e}");
     }
 }
 
 pub fn emit_stdb_disconnected(profile_id: String, error: Option<String>) {
     let payload = StdbDisconnectedPayload { profile_id, error };
     if let Err(e) = app_handle::emit(EVENT_STDB_DISCONNECTED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_STDB_DISCONNECTED, e);
+        eprintln!("Failed to emit {EVENT_STDB_DISCONNECTED}: {e}");
     }
 }
 
 pub fn emit_stdb_connection_error(profile_id: String, error: String) {
     let payload = StdbConnectionErrorPayload { profile_id, error };
     if let Err(e) = app_handle::emit(EVENT_STDB_CONNECTION_ERROR, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_STDB_CONNECTION_ERROR, e);
+        eprintln!("Failed to emit {EVENT_STDB_CONNECTION_ERROR}: {e}");
     }
 }

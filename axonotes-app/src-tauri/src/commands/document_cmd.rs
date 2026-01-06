@@ -32,13 +32,13 @@ pub async fn create_document(title: Option<String>) -> Result<String, String> {
         };
 
         // Generate unique path
-        let base_filename = format!("{}.doc", document_title);
-        let mut path = format!("/{}", base_filename);
+        let base_filename = format!("{document_title}.doc");
+        let mut path = format!("/{base_filename}");
         let mut counter = 1;
 
         // Check if path already exists and increment counter if needed
         while document_metadata.iter().any(|m| m.metadata.path == path) {
-            path = format!("/{} ({}).doc", document_title, counter);
+            path = format!("/{document_title} ({counter}).doc");
             counter += 1;
         }
 
@@ -112,7 +112,7 @@ pub async fn delete_document(doc_id: String) -> Result<(), String> {
 
         let message = [b"delete_document", doc_id.as_bytes()].concat();
         let signature = sign_message(private_signing_key, message.as_slice())
-            .map_err(|e| format!("Error signing 'delete_document' message: {}", e))?;
+            .map_err(|e| format!("Error signing 'delete_document' message: {e}"))?;
 
         stdb::active_profile()
             .delete_document(doc_id.clone(), signature.to_vec())

@@ -14,6 +14,7 @@ pub trait DecryptVersionTagVec {
 }
 
 /// Trait for encrypting a Vec of decrypted version tags
+#[allow(dead_code)]
 pub trait EncryptVersionTagVec {
     fn encrypt_all(self, encryption_key: &[u8]) -> Result<Vec<DocumentVersionTag>, String>;
 }
@@ -38,18 +39,17 @@ pub struct DecryptedVersionTag {
 impl DecryptedVersionTagData {
     /// Encrypt the tag data with a document key
     pub fn encrypt(&self, encryption_key: &[u8]) -> Result<Vec<u8>, String> {
-        let blob =
-            to_allocvec(self).map_err(|e| format!("Error serializing version tag: {}", e))?;
+        let blob = to_allocvec(self).map_err(|e| format!("Error serializing version tag: {e}"))?;
 
-        encrypt(encryption_key, &blob).map_err(|e| format!("Error encrypting version tag: {}", e))
+        encrypt(encryption_key, &blob).map_err(|e| format!("Error encrypting version tag: {e}"))
     }
 
     /// Decrypt tag data from encrypted blob
     pub fn from_encrypted(encrypted_blob: &[u8], encryption_key: &[u8]) -> Result<Self, String> {
         let decrypted = decrypt(encryption_key, encrypted_blob)
-            .map_err(|e| format!("Error decrypting version tag: {}", e))?;
+            .map_err(|e| format!("Error decrypting version tag: {e}"))?;
 
-        from_bytes(&decrypted).map_err(|e| format!("Error deserializing version tag: {}", e))
+        from_bytes(&decrypted).map_err(|e| format!("Error deserializing version tag: {e}"))
     }
 }
 

@@ -61,7 +61,7 @@ pub fn emit_sync_started(doc_id: String, batch_count: u32) {
         batch_count,
     };
     if let Err(e) = app_handle::emit(EVENT_SYNC_STARTED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SYNC_STARTED, e);
+        eprintln!("Failed to emit {EVENT_SYNC_STARTED}: {e}");
     }
 }
 
@@ -72,7 +72,7 @@ pub fn emit_sync_progress(doc_id: String, synced_count: u32, total_count: u32) {
         total_count,
     };
     if let Err(e) = app_handle::emit(EVENT_SYNC_PROGRESS, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SYNC_PROGRESS, e);
+        eprintln!("Failed to emit {EVENT_SYNC_PROGRESS}: {e}");
     }
 }
 
@@ -82,13 +82,13 @@ pub fn emit_sync_completed(doc_id: String, batch_count: u32) {
         batch_count,
     };
     if let Err(e) = app_handle::emit(EVENT_SYNC_COMPLETED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SYNC_COMPLETED, e);
+        eprintln!("Failed to emit {EVENT_SYNC_COMPLETED}: {e}");
     }
 }
 
 pub fn emit_sync_error(doc_id: String, error: String) {
     let payload = SyncErrorPayload { doc_id, error };
     if let Err(e) = app_handle::emit(EVENT_SYNC_ERROR, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SYNC_ERROR, e);
+        eprintln!("Failed to emit {EVENT_SYNC_ERROR}: {e}");
     }
 }

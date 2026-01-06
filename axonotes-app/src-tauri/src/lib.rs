@@ -87,7 +87,7 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir).expect("Failed to create app_data_dir.");
 
             database::init_paths(app_data_dir)
-                .map_err(|e| format!("Failed to initialize database paths: {}", e))?;
+                .map_err(|e| format!("Failed to initialize database paths: {e}"))?;
 
             Ok(())
         })

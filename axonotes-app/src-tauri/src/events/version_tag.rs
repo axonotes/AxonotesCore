@@ -46,13 +46,13 @@ pub fn emit_version_tag_created(tag_id: String, doc_id: String, tag_name: String
         timestamp,
     };
     if let Err(e) = app_handle::emit(EVENT_VERSION_TAG_CREATED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_VERSION_TAG_CREATED, e);
+        eprintln!("Failed to emit {EVENT_VERSION_TAG_CREATED}: {e}");
     }
 }
 
 pub fn emit_version_tag_deleted(tag_id: String, doc_id: String) {
     let payload = VersionTagDeletedPayload { tag_id, doc_id };
     if let Err(e) = app_handle::emit(EVENT_VERSION_TAG_DELETED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_VERSION_TAG_DELETED, e);
+        eprintln!("Failed to emit {EVENT_VERSION_TAG_DELETED}: {e}");
     }
 }

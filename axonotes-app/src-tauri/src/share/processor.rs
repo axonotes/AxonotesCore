@@ -90,7 +90,7 @@ pub async fn process_share_joiner(
     .concat();
 
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Call add_user_to_document
     stdb::active_profile()
@@ -133,7 +133,7 @@ async fn process_full_history_share(
         .collect();
 
     if doc_keys.is_empty() {
-        return Err(format!("No keys found for document {}", doc_id));
+        return Err(format!("No keys found for document {doc_id}"));
     }
 
     // Encrypt ALL keys for the joiner (role determines if signing key is included)

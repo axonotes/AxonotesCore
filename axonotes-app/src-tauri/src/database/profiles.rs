@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::database::helpers::SqlU128;
 use crate::workos_auth::Profile;
 use rusqlite::{params, Connection, Result};
@@ -39,7 +41,7 @@ pub fn get_last_active_sync_time(conn: &Connection) -> Result<Option<u128>> {
 
     if let Some(row) = rows.next()? {
         let maybe_sync: Option<SqlU128> = row.get(0)?;
-        Ok(Some(maybe_sync.map(|s| s.0).unwrap_or(0)))
+        Ok(Some(maybe_sync.map_or(0, |s| s.0)))
     } else {
         Ok(None)
     }

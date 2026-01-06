@@ -23,6 +23,7 @@ use uuid::Uuid;
 pub struct KeyRotationResult {
     pub new_key_timestamp: u128,
     pub new_key_data: DecryptedKeyData,
+    #[allow(dead_code)] // Included for completeness; signing key already sent to server
     pub new_public_signing_key: Vec<u8>,
 }
 
@@ -310,7 +311,7 @@ fn sign_rotation_message(
     .concat();
 
     sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign rotation message: {}", e))
+        .map_err(|e| format!("Failed to sign rotation message: {e}"))
 }
 
 /// Encrypt a key for a specific user based on their role

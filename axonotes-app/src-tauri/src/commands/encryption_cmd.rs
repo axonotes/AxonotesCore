@@ -11,7 +11,7 @@ use crate::{database, stdb};
 /// This function can only be called once per user since it creates a new profile on the stdb server
 #[tauri::command]
 pub async fn create_stdb_user(password: String) -> Result<String, String> {
-    let mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {}", e))?;
+    let mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {e}"))?;
     let decrypted_keys = generate_decrypted_keys();
     let encrypted_keys =
         decrypted_to_encrypted(decrypted_keys.clone(), password, mnemonic.clone())?;
@@ -124,7 +124,7 @@ pub async fn update_pwd_from_mnemonic(
     let decrypted_keys = mnemonic_encrypted_to_decrypted(user.into(), old_mnemonic)?;
 
     // Generate new mnemonic
-    let new_mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {}", e))?;
+    let new_mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {e}"))?;
 
     // Update stdb
     update_encryption(decrypted_keys, new_password, new_mnemonic.clone()).await?;
@@ -140,7 +140,7 @@ pub async fn update_mnemonic_from_pwd(password: String) -> Result<String, String
     let decrypted_keys = pwd_encrypted_to_decrypted(user.into(), password.clone())?;
 
     // Generate new mnemonic
-    let new_mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {}", e))?;
+    let new_mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {e}"))?;
 
     // Update stdb
     update_encryption(decrypted_keys, password, new_mnemonic.clone()).await?;
@@ -182,7 +182,7 @@ pub async fn update_mnemonic_from_mnemonic(old_mnemonic: String) -> Result<Strin
     let decrypted_keys = mnemonic_encrypted_to_decrypted(old_encrypted.clone(), old_mnemonic)?;
 
     // Generate new mnemonic
-    let new_mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {}", e))?;
+    let new_mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {e}"))?;
 
     // Re-encrypt only mnemonic-protected keys
     let encrypted_keys =

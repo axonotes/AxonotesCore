@@ -57,7 +57,7 @@ pub fn emit_block_locked(doc_id: String, block_id: u64, user_id: String, locked_
         locked_at,
     };
     if let Err(e) = app_handle::emit(EVENT_BLOCK_LOCKED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_BLOCK_LOCKED, e);
+        eprintln!("Failed to emit {EVENT_BLOCK_LOCKED}: {e}");
     }
 }
 
@@ -68,7 +68,7 @@ pub fn emit_block_unlocked(doc_id: String, block_id: u64, user_id: String) {
         user_id,
     };
     if let Err(e) = app_handle::emit(EVENT_BLOCK_UNLOCKED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_BLOCK_UNLOCKED, e);
+        eprintln!("Failed to emit {EVENT_BLOCK_UNLOCKED}: {e}");
     }
 }
 
@@ -79,6 +79,6 @@ pub fn emit_block_lock_expired(doc_id: String, block_id: u64, user_id: String) {
         user_id,
     };
     if let Err(e) = app_handle::emit(EVENT_BLOCK_LOCK_EXPIRED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_BLOCK_LOCK_EXPIRED, e);
+        eprintln!("Failed to emit {EVENT_BLOCK_LOCK_EXPIRED}: {e}");
     }
 }

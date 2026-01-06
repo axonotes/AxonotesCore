@@ -39,8 +39,7 @@ fn parse_role(role_str: &str) -> Result<Role, String> {
         "reader" => Ok(Role::Reader),
         "owner" => Err("Cannot share document with Owner role".to_string()),
         _ => Err(format!(
-            "Invalid role: {}. Expected 'Editor' or 'Reader'",
-            role_str
+            "Invalid role: {role_str}. Expected 'Editor' or 'Reader'"
         )),
     }
 }
@@ -69,7 +68,7 @@ pub async fn create_share(doc_id: String, role: String, full_history: bool) -> R
     // Sign the create_pending_share message
     let message = [b"create_pending_share", doc_id.as_bytes()].concat();
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Register local share session (before calling reducer so subscription can pick it up)
     register_share_session(doc_id.clone(), role, full_history).await;
@@ -123,7 +122,7 @@ pub async fn close_share(doc_id: String) -> Result<(), String> {
     // Sign the close_pending_share message
     let message = [b"close_pending_share", share_code.as_bytes()].concat();
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Call the reducer
     stdb::active_profile()
@@ -169,7 +168,7 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
 
     // Parse user_id from hex string to Identity
     let user_identity =
-        Identity::from_hex(&user_id).map_err(|e| format!("Invalid user ID: {}", e))?;
+        Identity::from_hex(&user_id).map_err(|e| format!("Invalid user ID: {e}"))?;
 
     // Get user keys for signing and encryption
     let user_keys: Keys = get_active_user_keys().await?.ok_or("No active user keys")?;
@@ -260,7 +259,7 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
     };
 
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Call the reducer
     stdb::active_profile()
@@ -300,7 +299,7 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
 pub async fn transfer_ownership(doc_id: String, new_owner_id: String) -> Result<(), String> {
     // Parse new_owner_id from hex string to Identity
     let new_owner_identity =
-        Identity::from_hex(&new_owner_id).map_err(|e| format!("Invalid user ID: {}", e))?;
+        Identity::from_hex(&new_owner_id).map_err(|e| format!("Invalid user ID: {e}"))?;
 
     // Get user keys for signing
     let user_keys: Keys = get_active_user_keys().await?.ok_or("No active user keys")?;
@@ -315,7 +314,7 @@ pub async fn transfer_ownership(doc_id: String, new_owner_id: String) -> Result<
     .concat();
 
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Get current user's identity (they are the old owner)
     let old_owner_identity = stdb::active_profile()
@@ -349,7 +348,7 @@ pub async fn transfer_ownership(doc_id: String, new_owner_id: String) -> Result<
 pub async fn remove_user(doc_id: String, user_id: String) -> Result<(), String> {
     // Parse user_id from hex string to Identity
     let user_identity =
-        Identity::from_hex(&user_id).map_err(|e| format!("Invalid user ID: {}", e))?;
+        Identity::from_hex(&user_id).map_err(|e| format!("Invalid user ID: {e}"))?;
 
     // Get user keys for signing
     let user_keys: Keys = get_active_user_keys().await?.ok_or("No active user keys")?;
@@ -364,7 +363,7 @@ pub async fn remove_user(doc_id: String, user_id: String) -> Result<(), String> 
     .concat();
 
     let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {}", e))?;
+        .map_err(|e| format!("Failed to sign message: {e}"))?;
 
     // Step 1: Remove user from document
     stdb::active_profile()

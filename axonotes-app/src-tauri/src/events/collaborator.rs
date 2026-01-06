@@ -65,14 +65,14 @@ pub fn emit_collaborator_added(doc_id: String, user_id: String, role: String) {
         role,
     };
     if let Err(e) = app_handle::emit(EVENT_COLLABORATOR_ADDED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_COLLABORATOR_ADDED, e);
+        eprintln!("Failed to emit {EVENT_COLLABORATOR_ADDED}: {e}");
     }
 }
 
 pub fn emit_collaborator_removed(doc_id: String, user_id: String) {
     let payload = CollaboratorRemovedPayload { doc_id, user_id };
     if let Err(e) = app_handle::emit(EVENT_COLLABORATOR_REMOVED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_COLLABORATOR_REMOVED, e);
+        eprintln!("Failed to emit {EVENT_COLLABORATOR_REMOVED}: {e}");
     }
 }
 
@@ -89,7 +89,7 @@ pub fn emit_collaborator_role_changed(
         new_role,
     };
     if let Err(e) = app_handle::emit(EVENT_COLLABORATOR_ROLE_CHANGED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_COLLABORATOR_ROLE_CHANGED, e);
+        eprintln!("Failed to emit {EVENT_COLLABORATOR_ROLE_CHANGED}: {e}");
     }
 }
 
@@ -100,6 +100,6 @@ pub fn emit_ownership_transferred(doc_id: String, old_owner_id: String, new_owne
         new_owner_id,
     };
     if let Err(e) = app_handle::emit(EVENT_OWNERSHIP_TRANSFERRED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_OWNERSHIP_TRANSFERRED, e);
+        eprintln!("Failed to emit {EVENT_OWNERSHIP_TRANSFERRED}: {e}");
     }
 }

@@ -89,7 +89,7 @@ where
         // Run the blocking server in a dedicated thread
         tokio::runtime::Handle::current().block_on(async move {
             if let Err(e) = run_callback_server(dark_mode, callback_port, callback).await {
-                eprintln!("Callback server error: {}", e);
+                eprintln!("Callback server error: {e}");
             }
         });
     });
@@ -131,7 +131,7 @@ async fn run_callback_server<F>(dark_mode: bool, port: u16, callback: F) -> Resu
 where
     F: FnOnce(Result<Profile, String>) + Send + 'static,
 {
-    let address = format!("127.0.0.1:{}", port);
+    let address = format!("127.0.0.1:{port}");
     let server = Server::http(&address).map_err(|e| e.to_string())?;
 
     // Prepare dark mode class
@@ -197,9 +197,10 @@ where
                     sleep(Duration::from_secs(3)).await;
                     // Make a dummy request to unblock the server
                     let _ =
-                        reqwest::get(format!("http://127.0.0.1:{}/shutdown", shutdown_port)).await;
+                        reqwest::get(format!("http://127.0.0.1:{shutdown_port}/shutdown")).await;
                 });
             } else if let Some(error) = params.get("error") {
+                #[allow(clippy::map_unwrap_or)] // Type coercion: &String -> &str via unwrap_or
                 let error_description = params
                     .get("error_description")
                     .map(|s| s.as_str())
@@ -231,7 +232,7 @@ where
                     sleep(Duration::from_secs(3)).await;
                     // Make a dummy request to unblock the server
                     let _ =
-                        reqwest::get(format!("http://127.0.0.1:{}/shutdown", shutdown_port)).await;
+                        reqwest::get(format!("http://127.0.0.1:{shutdown_port}/shutdown")).await;
                 });
             }
         }
@@ -267,13 +268,13 @@ async fn exchange_code_for_token(code: String) -> Result<Profile, String> {
 
     if !response.status().is_success() {
         let error_text = response.text().await.unwrap_or_default();
-        return Err(format!("Token exchange failed: {}", error_text));
+        return Err(format!("Token exchange failed: {error_text}"));
     }
 
     let token_response: TokenResponse = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse token response: {}", e))?;
+        .map_err(|e| format!("Failed to parse token response: {e}"))?;
 
     let full_name = format!(
         "{} {}",

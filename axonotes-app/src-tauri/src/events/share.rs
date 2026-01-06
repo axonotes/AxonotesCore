@@ -57,27 +57,27 @@ pub struct ShareClosedPayload {
 pub fn emit_share_code_ready(doc_id: String, share_code: String) {
     let payload = ShareCodeReadyPayload { doc_id, share_code };
     if let Err(e) = app_handle::emit(EVENT_SHARE_CODE_READY, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SHARE_CODE_READY, e);
+        eprintln!("Failed to emit {EVENT_SHARE_CODE_READY}: {e}");
     }
 }
 
 pub fn emit_share_user_added(doc_id: String, user_id: String) {
     let payload = ShareUserAddedPayload { doc_id, user_id };
     if let Err(e) = app_handle::emit(EVENT_SHARE_USER_ADDED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SHARE_USER_ADDED, e);
+        eprintln!("Failed to emit {EVENT_SHARE_USER_ADDED}: {e}");
     }
 }
 
 pub fn emit_share_error(doc_id: String, error: String) {
     let payload = ShareErrorPayload { doc_id, error };
     if let Err(e) = app_handle::emit(EVENT_SHARE_ERROR, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SHARE_ERROR, e);
+        eprintln!("Failed to emit {EVENT_SHARE_ERROR}: {e}");
     }
 }
 
 pub fn emit_share_closed(doc_id: String, share_code: String) {
     let payload = ShareClosedPayload { doc_id, share_code };
     if let Err(e) = app_handle::emit(EVENT_SHARE_CLOSED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_SHARE_CLOSED, e);
+        eprintln!("Failed to emit {EVENT_SHARE_CLOSED}: {e}");
     }
 }

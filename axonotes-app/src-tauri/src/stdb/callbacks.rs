@@ -89,7 +89,7 @@ fn start_lock_expiry_checker() {
             tokio::time::sleep(tokio::time::Duration::from_millis(EXPIRY_CHECK_INTERVAL_MS)).await;
 
             if let Err(e) = check_expired_locks().await {
-                eprintln!("Error checking expired locks: {}", e);
+                eprintln!("Error checking expired locks: {e}");
             }
         }
     });
@@ -137,6 +137,7 @@ pub fn on_subscription_applied(_ctx: &SubscriptionEventContext) {
     log::info!("✓ Subscriptions applied");
 }
 
+#[allow(clippy::needless_pass_by_value)] // Signature constrained by SpacetimeDB callback API
 pub fn on_subscription_error(_ctx: &ErrorContext, err: Error) {
-    log::error!("✗ Subscription error: {}", err);
+    log::error!("✗ Subscription error: {err}");
 }

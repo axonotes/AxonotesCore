@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(clippy::needless_pass_by_value)] // API design: database functions often take ownership for simplicity
+
 pub(crate) mod batches;
 mod helpers;
 pub(crate) mod keys;
@@ -90,8 +93,7 @@ pub fn switch_unlock_mode_ui(new_mode: String) -> Result<(), String> {
         || (current_mode == "pass" && new_mode != "pin")
     {
         return Err(format!(
-            "Can only switch between 'pin' and 'pass'. Current mode: {}, requested: {}",
-            current_mode, new_mode
+            "Can only switch between 'pin' and 'pass'. Current mode: {current_mode}, requested: {new_mode}"
         ));
     }
 
@@ -129,7 +131,7 @@ pub async fn unlock_db(password: String) -> Result<(), String> {
         )
         .with_init(move |conn| {
             // Set encryption key
-            conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", key_hex))?;
+            conn.execute_batch(&format!("PRAGMA key = \"x'{key_hex}'\";"))?;
             // Enable WAL mode for better concurrency
             conn.execute_batch("PRAGMA journal_mode = WAL;")?;
             // Normal sync is safe with WAL and faster
@@ -144,20 +146,20 @@ pub async fn unlock_db(password: String) -> Result<(), String> {
         .max_size(16) // Tune based on workload
         .min_idle(Some(2)) // Keep some connections warm
         .build(manager)
-        .map_err(|e| format!("Failed to create connection pool: {}", e))?;
+        .map_err(|e| format!("Failed to create connection pool: {e}"))?;
 
     // Test the connection and initialize schema
     {
         let conn = pool
             .get()
-            .map_err(|e| format!("Failed to get connection: {}", e))?;
+            .map_err(|e| format!("Failed to get connection: {e}"))?;
 
         // Test that we can access the database (validates the key)
         conn.execute_batch("CREATE TABLE IF NOT EXISTS _version (value INTEGER);")
             .map_err(|_| "Failed to unlock database. Incorrect password?".to_string())?;
 
         // Initialize schema
-        schema::init_schema(&conn).map_err(|e| format!("Failed to initialize schema: {}", e))?;
+        schema::init_schema(&conn).map_err(|e| format!("Failed to initialize schema: {e}"))?;
     }
 
     // Store pool in global state
@@ -196,7 +198,7 @@ pub async fn wipe_db() -> Result<(), String> {
 
     // Delete database file and WAL/SHM files
     if db_path.exists() {
-        fs::remove_file(db_path).map_err(|e| format!("Failed to delete database: {}", e))?;
+        fs::remove_file(db_path).map_err(|e| format!("Failed to delete database: {e}"))?;
     }
 
     let wal_path = db_path.with_extension("db-wal");
@@ -221,8 +223,8 @@ async fn reencrypt(new_password: &str) -> Result<(), String> {
     // Rekey on existing connection
     {
         let conn = get_conn()?;
-        conn.execute_batch(&format!("PRAGMA rekey = \"x'{}'\";", new_key_hex))
-            .map_err(|e| format!("Failed to rekey database: {}", e))?;
+        conn.execute_batch(&format!("PRAGMA rekey = \"x'{new_key_hex}'\";"))
+            .map_err(|e| format!("Failed to rekey database: {e}"))?;
     } // connection returns to pool
 
     // Update stored key
@@ -241,7 +243,7 @@ async fn reencrypt(new_password: &str) -> Result<(), String> {
                 | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .with_init(move |conn| {
-            conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", new_key_hex))?;
+            conn.execute_batch(&format!("PRAGMA key = \"x'{new_key_hex}'\";"))?;
             conn.execute_batch("PRAGMA journal_mode = WAL;")?;
             conn.execute_batch("PRAGMA synchronous = NORMAL;")?;
             conn.execute_batch("PRAGMA busy_timeout = 5000;")?;
@@ -252,7 +254,7 @@ async fn reencrypt(new_password: &str) -> Result<(), String> {
         .max_size(16)
         .min_idle(Some(2))
         .build(manager)
-        .map_err(|e| format!("Failed to create connection pool: {}", e))?;
+        .map_err(|e| format!("Failed to create connection pool: {e}"))?;
 
     // Swap in new pool, old one gets dropped
     {
@@ -710,7 +712,7 @@ fn get_conn() -> Result<PooledConnection<SqliteConnectionManager>, String> {
         .ok_or("Database not initialized. Call unlock_db first.")?;
 
     pool.get()
-        .map_err(|e| format!("Failed to get connection from pool: {}", e))
+        .map_err(|e| format!("Failed to get connection from pool: {e}"))
 }
 
 fn read_app_config() -> Result<AppConfig, String> {
@@ -721,7 +723,7 @@ fn read_app_config() -> Result<AppConfig, String> {
     }
 
     let contents = fs::read_to_string(config_path).map_err(|e| e.to_string())?;
-    toml::from_str(&contents).map_err(|e| format!("Failed to parse config: {}", e))
+    toml::from_str(&contents).map_err(|e| format!("Failed to parse config: {e}"))
 }
 
 fn write_app_config(config: &AppConfig) -> Result<(), String> {

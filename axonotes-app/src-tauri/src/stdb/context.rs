@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::batch_handler::block_types::Block;
 use crate::call_reducer_await;
 use crate::crypto::chacha::encrypt;
@@ -60,7 +62,7 @@ impl ProfileStdbContext {
                 .await?
                 .into_iter()
                 .find(|p| &p.id == id)
-                .ok_or_else(|| format!("Profile {} not found", id))
+                .ok_or_else(|| format!("Profile {id} not found"))
         } else {
             // Get active profile
             crate::database::get_active_profile()
@@ -342,6 +344,7 @@ impl ProfileStdbContext {
     /// 3. Inserts new keys for all remaining users
     /// 4. Stores snapshot batches for ALL blocks
     /// 5. Re-encrypts all version tags with new key
+    #[allow(clippy::too_many_arguments)] // Mirrors database reducer signature
     pub async fn rotate_document_keys(
         &self,
         doc_id: String,
@@ -381,14 +384,11 @@ impl ProfileStdbContext {
         let conn = conn.lock().await;
 
         let cached_document_keys = self.get_cached_document_keys().await?;
-        let latest_document_key = find_correct_decryption_key(
-            doc_id.to_string(),
-            timestamp(),
-            cached_document_keys.as_slice(),
-        )?;
+        let latest_document_key =
+            find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
 
         let username_blob =
-            to_allocvec(&username).map_err(|e| format!("Error serializing batch data: {}", e))?;
+            to_allocvec(&username).map_err(|e| format!("Error serializing batch data: {e}"))?;
 
         let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
 
@@ -396,13 +396,13 @@ impl ProfileStdbContext {
             latest_document_key.key_data.encryption_key.as_slice(),
             content_blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
+        .map_err(|e| format!("Error when encrypting live block content: {e}"))?;
 
         let encrypted_username = encrypt(
             latest_document_key.key_data.encryption_key.as_slice(),
             username_blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting live block username: {}", e))?;
+        .map_err(|e| format!("Error when encrypting live block username: {e}"))?;
 
         call_reducer_await!(
             conn,
@@ -425,11 +425,8 @@ impl ProfileStdbContext {
         let conn = conn.lock().await;
 
         let cached_document_keys = self.get_cached_document_keys().await?;
-        let latest_document_key = find_correct_decryption_key(
-            doc_id.to_string(),
-            timestamp(),
-            cached_document_keys.as_slice(),
-        )?;
+        let latest_document_key =
+            find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
 
         let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
 
@@ -437,7 +434,7 @@ impl ProfileStdbContext {
             latest_document_key.key_data.encryption_key.as_slice(),
             content_blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting live block content: {}", e))?;
+        .map_err(|e| format!("Error when encrypting live block content: {e}"))?;
 
         call_reducer_await!(conn, update_live_block, doc_id, block_id, encrypted_content)
     }

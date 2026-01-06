@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2, Params, Version,
@@ -107,7 +109,7 @@ pub fn derive_database_key(password: &str) -> Vec<u8> {
 
 /// Derive file encryption key (convenience wrapper)
 pub fn derive_file_key(password: &str, file_id: &str) -> Vec<u8> {
-    derive_key(password, format!("file_{}", file_id).as_str())
+    derive_key(password, format!("file_{file_id}").as_str())
 }
 
 // ========================================
@@ -125,7 +127,7 @@ fn create_context_salt(context: &str) -> [u8; 16] {
 
     // Get second hash for more entropy
     let mut hasher = DefaultHasher::new();
-    format!("{}:salt", context).hash(&mut hasher);
+    format!("{context}:salt").hash(&mut hasher);
     let hash2 = hasher.finish();
 
     let mut salt = [0u8; 16];

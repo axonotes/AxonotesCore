@@ -2,6 +2,8 @@
 // Template: templates/config.rs.njk
 // Generated at: {{ _meta.generated_at if _meta else 'build time' }}
 
+#![allow(dead_code)]
+
 /// OAuth configuration constants
 pub struct OAuthConfig {
     pub client_id: &'static str,

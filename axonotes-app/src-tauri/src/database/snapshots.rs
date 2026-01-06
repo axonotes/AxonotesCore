@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::database::helpers::SqlU128;
 use crate::encryption::batch::DecryptedBatch;
 use postcard::to_allocvec;

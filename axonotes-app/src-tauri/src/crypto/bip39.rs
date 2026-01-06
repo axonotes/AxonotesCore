@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use rand::rngs::OsRng;
 use rand::TryRngCore;
 use sha2::{Digest, Sha256};
@@ -40,7 +42,7 @@ pub fn get_mnemonic() -> Result<String, Box<dyn std::error::Error>> {
     for chunk in bits.chunks(11) {
         let mut index = 0u16;
         for bit in chunk {
-            index = (index << 1) | (*bit as u16);
+            index = (index << 1) | u16::from(*bit);
         }
         mnemonic.push(words[index as usize]);
     }
@@ -135,6 +137,7 @@ fn validate_checksum(word_indices: &[usize]) -> bool {
     let mut bits = Vec::new();
     for &index in word_indices {
         for i in (0..11).rev() {
+            #[allow(clippy::cast_possible_truncation)] // Result is 0 or 1, always fits in u8
             bits.push(((index >> i) & 1) as u8);
         }
     }
@@ -169,6 +172,7 @@ fn validate_checksum(word_indices: &[usize]) -> bool {
     true
 }
 
+#[allow(clippy::needless_range_loop)] // Index used both for iteration and value assignment
 fn levenshtein_distance(a: &str, b: &str) -> usize {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();

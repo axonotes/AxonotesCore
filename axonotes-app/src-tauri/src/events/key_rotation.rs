@@ -33,6 +33,6 @@ pub fn emit_document_keys_rotated(doc_id: String, new_key_timestamp: u128) {
         new_key_timestamp,
     };
     if let Err(e) = app_handle::emit(EVENT_DOCUMENT_KEYS_ROTATED, &payload) {
-        eprintln!("Failed to emit {}: {}", EVENT_DOCUMENT_KEYS_ROTATED, e);
+        eprintln!("Failed to emit {EVENT_DOCUMENT_KEYS_ROTATED}: {e}");
     }
 }

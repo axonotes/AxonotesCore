@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::StdbConfig;
 use crate::events::{emit_stdb_connected, emit_stdb_connection_error, emit_stdb_disconnected};
 use crate::stdb_bindings::*;
@@ -58,7 +60,7 @@ pub async fn disconnect_profile(profile_id: &str) -> Result<(), String> {
     if let Some(conn) = map.remove(profile_id) {
         let conn = conn.lock().await;
         conn.disconnect().map_err(|e| e.to_string())?;
-        log::info!("Disconnected SpacetimeDB for profile {}", profile_id);
+        log::info!("Disconnected SpacetimeDB for profile {profile_id}");
     }
 
     Ok(())
@@ -72,7 +74,7 @@ pub async fn disconnect_all() -> Result<(), String> {
     for (profile_id, conn) in map.drain() {
         let conn = conn.lock().await;
         if let Err(e) = conn.disconnect() {
-            log::error!("Failed to disconnect profile {}: {}", profile_id, e);
+            log::error!("Failed to disconnect profile {profile_id}: {e}");
         }
     }
 
@@ -112,7 +114,7 @@ pub(crate) async fn ensure_connection_for_profile(
         return Ok(());
     }
 
-    log::info!("Creating SpacetimeDB connection for profile {}", profile_id);
+    log::info!("Creating SpacetimeDB connection for profile {profile_id}");
 
     // Build new connection
     let config = StdbConfig::new();
@@ -153,10 +155,7 @@ pub(crate) async fn ensure_connection_for_profile(
     // Store connection
     map.insert(profile_id.to_string(), Arc::new(Mutex::new(conn)));
 
-    log::info!(
-        "✓ SpacetimeDB connection established for profile {}",
-        profile_id
-    );
+    log::info!("✓ SpacetimeDB connection established for profile {profile_id}");
     Ok(())
 }
 
@@ -168,10 +167,7 @@ pub(crate) async fn get_connection_for_profile(
     let map = connections.lock().await;
 
     map.get(profile_id).cloned().ok_or_else(|| {
-        format!(
-            "No SpacetimeDB connection for profile {}. Call connect() first.",
-            profile_id
-        )
+        format!("No SpacetimeDB connection for profile {profile_id}. Call connect() first.")
     })
 }
 
@@ -194,21 +190,14 @@ async fn build_connection(
             emit_stdb_connected(profile_id_1.clone(), identity.to_hex().to_string());
         })
         .on_connect_error(move |_ctx, err| {
-            log::error!("SpacetimeDB connection error: {:?}", err);
-            emit_stdb_connection_error(profile_id_3.clone(), format!("{:?}", err));
+            log::error!("SpacetimeDB connection error: {err:?}");
+            emit_stdb_connection_error(profile_id_3.clone(), format!("{err:?}"));
         })
         .on_disconnect(move |_ctx, err| {
             if let Some(ref err) = err {
-                log::warn!(
-                    "SpacetimeDB disconnected for profile {}: {}",
-                    profile_id_2,
-                    err
-                );
+                log::warn!("SpacetimeDB disconnected for profile {profile_id_2}: {err}");
             } else {
-                log::info!(
-                    "SpacetimeDB disconnected cleanly for profile {}",
-                    profile_id_2
-                );
+                log::info!("SpacetimeDB disconnected cleanly for profile {profile_id_2}");
             }
             emit_stdb_disconnected(profile_id_2.clone(), err.map(|e| e.to_string()));
         })
@@ -216,5 +205,5 @@ async fn build_connection(
         .with_module_name(config.default_module_name)
         .with_uri(config.default_host_uri)
         .build()
-        .map_err(|e| format!("Failed to connect to SpacetimeDB: {}", e))
+        .map_err(|e| format!("Failed to connect to SpacetimeDB: {e}"))
 }

@@ -9,6 +9,7 @@ pub trait DecryptDocumentMetaAndKeyVec {
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String>;
 }
 
+#[allow(dead_code)]
 pub trait EncryptDocumentMetadataVec {
     type Output;
     fn encrypt_all(
@@ -40,7 +41,7 @@ impl DecryptedMetadata {
         my_public_key: &[u8; 32],
         their_public_key: &[u8; 32],
     ) -> Result<Vec<u8>, String> {
-        let blob = to_allocvec(self).map_err(|e| format!("Error serializing metadata: {}", e))?;
+        let blob = to_allocvec(self).map_err(|e| format!("Error serializing metadata: {e}"))?;
 
         encrypt_for_recipient(
             my_private_key,
@@ -48,16 +49,16 @@ impl DecryptedMetadata {
             their_public_key,
             blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting metadata: {}", e))
+        .map_err(|e| format!("Error when encrypting metadata: {e}"))
     }
 
     pub fn from_encrypted(encrypted_blob: &[u8], private_key: &[u8; 32]) -> Result<Self, String> {
         let (decrypted_blob, _): (Vec<u8>, [u8; 32]) =
             decrypt_from_anyone(private_key, encrypted_blob)
-                .map_err(|e| format!("Error when decrypting metadata: {}", e))?;
+                .map_err(|e| format!("Error when decrypting metadata: {e}"))?;
 
         from_bytes(decrypted_blob.as_slice())
-            .map_err(|e| format!("Error deserializing metadata: {}", e))
+            .map_err(|e| format!("Error deserializing metadata: {e}"))
     }
 }
 
@@ -86,6 +87,7 @@ impl DecryptDocumentMetaAndKeyVec for Vec<DocumentMetadata> {
 }
 
 impl DecryptedDocumentMetadata {
+    #[allow(dead_code)]
     pub fn encrypt(
         self,
         private_key: &[u8; 32],
@@ -116,6 +118,7 @@ impl EncryptDocumentMetadataVec for Vec<DecryptedDocumentMetadata> {
     }
 }
 
+#[allow(dead_code)]
 pub trait EncryptDocumentKeyVec {
     fn encrypt_all(
         self,
@@ -147,7 +150,7 @@ impl DecryptedKeyData {
         my_public_key: &[u8; 32],
         their_public_key: &[u8; 32],
     ) -> Result<Vec<u8>, String> {
-        let blob = to_allocvec(self).map_err(|e| format!("Error serializing key data: {}", e))?;
+        let blob = to_allocvec(self).map_err(|e| format!("Error serializing key data: {e}"))?;
 
         encrypt_for_recipient(
             my_private_key,
@@ -155,7 +158,7 @@ impl DecryptedKeyData {
             their_public_key,
             blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting key data: {}", e))
+        .map_err(|e| format!("Error when encrypting key data: {e}"))
     }
 
     /// Encrypt key data for a specific role
@@ -182,10 +185,10 @@ impl DecryptedKeyData {
     pub fn from_encrypted(encrypted_blob: &[u8], private_key: &[u8; 32]) -> Result<Self, String> {
         let (decrypted_blob, _): (Vec<u8>, [u8; 32]) =
             decrypt_from_anyone(private_key, encrypted_blob)
-                .map_err(|e| format!("Error when decrypting key data: {}", e))?;
+                .map_err(|e| format!("Error when decrypting key data: {e}"))?;
 
         from_bytes(decrypted_blob.as_slice())
-            .map_err(|e| format!("Error deserializing key data: {}", e))
+            .map_err(|e| format!("Error deserializing key data: {e}"))
     }
 }
 
@@ -215,6 +218,7 @@ impl DecryptDocumentMetaAndKeyVec for Vec<DocumentKey> {
 }
 
 impl DecryptedDocumentKey {
+    #[allow(dead_code)]
     pub fn encrypt(
         self,
         my_private_key: &[u8; 32],

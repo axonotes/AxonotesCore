@@ -10,7 +10,7 @@ pub async fn start_login(app: AppHandle, dark_mode: bool) -> Result<String, Stri
                 let app_clone = app.clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = database::save_profile(profile.clone(), true).await {
-                        eprintln!("Failed to save profile: {}", e);
+                        eprintln!("Failed to save profile: {e}");
                         return;
                     }
 
@@ -19,7 +19,7 @@ pub async fn start_login(app: AppHandle, dark_mode: bool) -> Result<String, Stri
                 });
             }
             Err(error) => {
-                eprintln!("Login failed: {}", error);
+                eprintln!("Login failed: {error}");
                 let _ = app.emit("login-error", &error);
             }
         }

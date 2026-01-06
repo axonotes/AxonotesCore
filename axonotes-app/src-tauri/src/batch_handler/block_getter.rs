@@ -194,7 +194,7 @@ async fn get_single_block(
                     decode_initial_patch(patch)?
                 };
 
-                current_time += (time_delta * 5) as u128;
+                current_time += u128::from(time_delta * 5);
 
                 if current_time > target_ts {
                     break;
@@ -256,7 +256,7 @@ async fn get_single_block(
         tokio::spawn(async move {
             for snapshot in snapshots_to_save {
                 if let Err(e) = database::save_snapshot(snapshot).await {
-                    eprintln!("Failed to save snapshot: {}", e);
+                    eprintln!("Failed to save snapshot: {e}");
                 }
             }
         });
@@ -293,10 +293,12 @@ pub async fn invalidate_block_cache(doc_id: String, block_id: u64) {
     KNOWN_LATEST.remove(&key);
 }
 
+#[allow(dead_code)]
+#[allow(clippy::needless_pass_by_value)] // Consistent with other cache invalidation APIs
 pub fn invalidate_doc_cache(doc_id: String) {
     let doc_id_clone = doc_id.clone();
     if let Err(e) = BATCH_CACHE.invalidate_entries_if(move |key, _| key.0 == doc_id_clone) {
-        eprintln!("Failed to invalidate cache entries: {}", e);
+        eprintln!("Failed to invalidate cache entries: {e}");
     }
     KNOWN_LATEST.retain(|key, _| key.0 != doc_id);
 }
