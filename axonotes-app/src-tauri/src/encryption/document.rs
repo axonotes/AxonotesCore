@@ -280,7 +280,7 @@ mod tests {
             .encrypt(&private_key, &public_key, &public_key)
             .expect("Encryption failed");
 
-        let decrypted = DecryptedMetadata::from_encrypted(&encrypted.as_slice(), &private_key)
+        let decrypted = DecryptedMetadata::from_encrypted(encrypted.as_slice(), &private_key)
             .expect("Decryption failed");
 
         assert_eq!(decrypted.version, original.version);
@@ -374,7 +374,7 @@ mod tests {
             .encrypt(&private_key, &public_key, &public_key)
             .expect("Encryption failed");
 
-        let decrypted = DecryptedKeyData::from_encrypted(&encrypted.as_slice(), &private_key)
+        let decrypted = DecryptedKeyData::from_encrypted(encrypted.as_slice(), &private_key)
             .expect("Decryption failed");
 
         assert_eq!(decrypted.encryption_key, original.encryption_key);

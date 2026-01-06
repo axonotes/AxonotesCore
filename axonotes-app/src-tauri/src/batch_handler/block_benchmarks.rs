@@ -68,7 +68,7 @@ mod benchmarks {
             let mut patches = Vec::with_capacity(patches_this_batch);
 
             let is_initial = match initial_every_n_batches {
-                Some(n) => batch_num as usize % n == 0,
+                Some(n) => (batch_num as usize).is_multiple_of(n),
                 None => batch_num == 0,
             };
 

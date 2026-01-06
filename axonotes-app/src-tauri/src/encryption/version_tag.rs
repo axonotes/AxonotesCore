@@ -1,7 +1,6 @@
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
 use crate::stdb_bindings::DocumentVersionTag;
-use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::Identity;
 
@@ -39,7 +38,8 @@ pub struct DecryptedVersionTag {
 impl DecryptedVersionTagData {
     /// Encrypt the tag data with a document key
     pub fn encrypt(&self, encryption_key: &[u8]) -> Result<Vec<u8>, String> {
-        let blob = to_allocvec(self).map_err(|e| format!("Error serializing version tag: {e}"))?;
+        let blob =
+            serde_json::to_vec(self).map_err(|e| format!("Error serializing version tag: {e}"))?;
 
         encrypt(encryption_key, &blob).map_err(|e| format!("Error encrypting version tag: {e}"))
     }
@@ -49,7 +49,8 @@ impl DecryptedVersionTagData {
         let decrypted = decrypt(encryption_key, encrypted_blob)
             .map_err(|e| format!("Error decrypting version tag: {e}"))?;
 
-        from_bytes(&decrypted).map_err(|e| format!("Error deserializing version tag: {e}"))
+        serde_json::from_slice(&decrypted)
+            .map_err(|e| format!("Error deserializing version tag: {e}"))
     }
 }
 

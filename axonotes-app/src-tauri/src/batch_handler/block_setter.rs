@@ -272,6 +272,7 @@ async fn run_finalization_task() {
 // ==========================================
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub async fn flush_all_batches() {
     let keys: Vec<CacheKey> = IN_PROGRESS_BATCHES
         .iter()
@@ -284,11 +285,13 @@ pub async fn flush_all_batches() {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub fn get_pending_count() -> usize {
     PENDING_BLOCKS.len()
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub fn get_in_progress_count() -> usize {
     IN_PROGRESS_BATCHES.len()
 }

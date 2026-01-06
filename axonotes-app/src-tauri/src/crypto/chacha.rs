@@ -61,9 +61,9 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Hello, World!";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
         let decrypted =
-            decrypt(&key.as_slice(), &encrypted.as_slice()).expect("Decryption should succeed");
+            decrypt(key.as_slice(), encrypted.as_slice()).expect("Decryption should succeed");
 
         assert_eq!(decrypted, plaintext, "Decrypted text should match original");
     }
@@ -73,8 +73,8 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Same message";
 
-        let encrypted1 = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
-        let encrypted2 = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted1 = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted2 = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         assert_ne!(
             encrypted1, encrypted2,
@@ -88,8 +88,8 @@ mod tests {
         let key2 = generate_key();
         let plaintext = b"Secret message";
 
-        let encrypted = encrypt(&key1.as_slice(), plaintext).expect("Encryption should succeed");
-        let result = decrypt(&key2.as_slice(), &encrypted.as_slice());
+        let encrypted = encrypt(key1.as_slice(), plaintext).expect("Encryption should succeed");
+        let result = decrypt(key2.as_slice(), encrypted.as_slice());
 
         assert!(result.is_err(), "Decryption with wrong key should fail");
     }
@@ -99,14 +99,14 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Important data";
 
-        let mut encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let mut encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         // Corrupt the ciphertext (skip nonce, corrupt the actual encrypted data)
         if encrypted.len() > 13 {
             encrypted[13] ^= 0xFF;
         }
 
-        let result = decrypt(&key.as_slice(), &encrypted.as_slice());
+        let result = decrypt(key.as_slice(), encrypted.as_slice());
         assert!(
             result.is_err(),
             "Decryption of corrupted ciphertext should fail"
@@ -118,9 +118,9 @@ mod tests {
         let key = generate_key();
         let plaintext = b"";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Should encrypt empty data");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Should encrypt empty data");
         let decrypted =
-            decrypt(&key.as_slice(), &encrypted.as_slice()).expect("Should decrypt empty data");
+            decrypt(key.as_slice(), encrypted.as_slice()).expect("Should decrypt empty data");
 
         assert_eq!(
             decrypted, plaintext,
@@ -134,9 +134,9 @@ mod tests {
         let plaintext = vec![0u8; 10000]; // 10KB of zeros
 
         let encrypted =
-            encrypt(&key.as_slice(), &plaintext.as_slice()).expect("Should encrypt large data");
+            encrypt(key.as_slice(), plaintext.as_slice()).expect("Should encrypt large data");
         let decrypted =
-            decrypt(&key.as_slice(), &encrypted.as_slice()).expect("Should decrypt large data");
+            decrypt(key.as_slice(), encrypted.as_slice()).expect("Should decrypt large data");
 
         assert_eq!(
             decrypted, plaintext,
@@ -149,7 +149,7 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Test";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         // Encrypted data should be: nonce (12 bytes) + ciphertext + tag (16 bytes)
         // So minimum length should be 12 + plaintext.len() + 16
@@ -164,11 +164,11 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Test message";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         // Try to decrypt with truncated data (less than nonce size)
         let truncated = &encrypted[..5];
-        let result = decrypt(&key.as_slice(), truncated);
+        let result = decrypt(key.as_slice(), truncated);
 
         assert!(result.is_err(), "Decryption of truncated data should fail");
     }
