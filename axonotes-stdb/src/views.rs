@@ -2,8 +2,9 @@ use crate::tables::{private_user__view, User};
 use crate::{
     private_document__view, private_document_batch__view, private_document_key__view,
     private_document_metadata__view, private_document_permission__view,
-    private_document_version_tag__view, private_live_block__view, Document, DocumentBatch,
-    DocumentKey, DocumentMetadata, DocumentPermission, DocumentVersionTag, LiveBlock, Role,
+    private_document_version_tag__view, private_live_block__view, private_pending_share__view,
+    private_share_request__view, Document, DocumentBatch, DocumentKey, DocumentMetadata,
+    DocumentPermission, DocumentVersionTag, LiveBlock, PendingShare, Role, ShareRequest,
 };
 use spacetimedb::rt::IntoVec;
 use spacetimedb::{Identity, ViewContext};
@@ -206,5 +207,54 @@ pub fn accessible_live_blocks_view(ctx: &ViewContext) -> Vec<LiveBlock> {
                 .filter(&doc_id)
                 .collect::<Vec<_>>()
         })
+        .collect()
+}
+
+// ==================== SHARE VIEWS ====================
+
+/// Get all pending shares created by the current user
+#[spacetimedb::view(name = my_pending_shares, public)]
+pub fn my_pending_shares_view(ctx: &ViewContext) -> Vec<PendingShare> {
+    ctx.db
+        .private_pending_share()
+        .by_creator()
+        .filter(&ctx.sender)
+        .collect()
+}
+
+/// Get all share requests for shares created by the current user
+/// (to see who joined the share and their public keys)
+#[spacetimedb::view(name = pending_share_requests, public)]
+pub fn pending_share_requests_view(ctx: &ViewContext) -> Vec<ShareRequest> {
+    // Get all share codes created by this user
+    let my_share_codes: Vec<String> = ctx
+        .db
+        .private_pending_share()
+        .by_creator()
+        .filter(&ctx.sender)
+        .map(|share| share.share_code.clone())
+        .collect();
+
+    // Get all share requests for those codes
+    my_share_codes
+        .into_iter()
+        .flat_map(|share_code| {
+            ctx.db
+                .private_share_request()
+                .by_share_code()
+                .filter(&share_code)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Get all share requests for the current user
+/// (to see shares they've joined and are waiting on)
+#[spacetimedb::view(name = my_share_requests, public)]
+pub fn my_share_requests_view(ctx: &ViewContext) -> Vec<ShareRequest> {
+    ctx.db
+        .private_share_request()
+        .by_user()
+        .filter(&ctx.sender)
         .collect()
 }

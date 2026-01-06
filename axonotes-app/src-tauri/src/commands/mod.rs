@@ -5,3 +5,4 @@ pub(crate) mod document_cmd;
 pub(crate) mod encryption_cmd;
 pub(crate) mod live_lock_cmd;
 pub(crate) mod profile_cmd;
+pub(crate) mod share_cmd;

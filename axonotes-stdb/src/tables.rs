@@ -137,3 +137,30 @@ pub struct LiveBlock {
     pub encrypted_username: Vec<u8>, // Username encrypted (ChaCha20-Poly1305)
     pub locked_at: Option<u128>,    // Some(timestamp) = Locked, None = Focused
 }
+
+// ==================== PENDING SHARE ====================
+#[spacetimedb::table(
+    name = private_pending_share,
+    index(name = by_creator, btree(columns = [creator_id])),
+)]
+pub struct PendingShare {
+    #[primary_key]
+    pub share_code: String, // 8 chars, 0-9A-Z
+    pub doc_id: String,
+    pub creator_id: Identity,
+    pub created_at: u128, // Timestamp in milliseconds for expiration check
+}
+
+// ==================== SHARE REQUEST ====================
+#[spacetimedb::table(
+    name = private_share_request,
+    index(name = by_share_code, btree(columns = [share_code])),
+    index(name = by_user, btree(columns = [user_id])),
+)]
+pub struct ShareRequest {
+    #[primary_key]
+    pub request_id: String, // Random UUID
+    pub share_code: String,
+    pub user_id: Identity,
+    pub public_encryption_key: Vec<u8>, // X25519 public key (32 bytes)
+}

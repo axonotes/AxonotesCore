@@ -9,6 +9,7 @@ use crate::encryption::helpers::find_correct_decryption_key;
 use crate::encryption::live_block::DecryptLiveBlockVec;
 use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::encryption::user::UserKeysEncrypted;
+use crate::encryption::version_tag::{DecryptVersionTagVec, DecryptedVersionTag};
 use crate::stdb::{
     disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
     is_profile_connected,
@@ -171,6 +172,50 @@ impl ProfileStdbContext {
             .iter()
             .collect::<Vec<_>>()
             .decrypt_all(cached_document_keys.as_slice())
+    }
+
+    /// Get document permissions for a specific document (unencrypted)
+    /// Returns permissions from the manageable_permissions view
+    pub async fn get_document_permissions(
+        &self,
+        doc_id: &str,
+    ) -> Result<Vec<DocumentPermission>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        Ok(conn
+            .db
+            .manageable_permissions()
+            .iter()
+            .filter(|p| p.doc_id == doc_id)
+            .collect())
+    }
+
+    /// Get public keys of collaborators (unencrypted)
+    /// Returns public keys for all users who have access to documents you can access
+    pub async fn get_public_user_keys(&self) -> Result<Vec<PublicUserInfo>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        Ok(conn.db.public_user_keys().iter().collect())
+    }
+
+    /// Get cached version tags for a specific document (decrypted)
+    pub async fn get_cached_version_tags(
+        &self,
+        doc_id: &str,
+    ) -> Result<Vec<DecryptedVersionTag>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let document_keys = self.get_cached_document_keys().await?;
+
+        conn.db
+            .accessible_version_tags()
+            .iter()
+            .filter(|t| t.doc_id == doc_id)
+            .collect::<Vec<_>>()
+            .decrypt_all(&document_keys)
     }
 
     // ==========================================
@@ -558,6 +603,51 @@ impl ProfileStdbContext {
         let conn = conn.lock().await;
 
         call_reducer_await!(conn, delete_version_tag, tag_id, signature)
+    }
+
+    // ==========================================
+    // Share Operations
+    // ==========================================
+
+    /// Create a pending share for a document
+    /// Returns after reducer completes - client reads share_code from subscription
+    pub async fn create_pending_share(
+        &self,
+        doc_id: String,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, create_pending_share, doc_id, signature)
+    }
+
+    /// Join a pending share using a share code
+    pub async fn join_pending_share(&self, share_code: String) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, join_pending_share, share_code)
+    }
+
+    /// Close a pending share (cleanup after done or abandon)
+    pub async fn close_pending_share(
+        &self,
+        share_code: String,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, close_pending_share, share_code, signature)
+    }
+
+    /// Leave a pending share (joiner withdraws)
+    pub async fn leave_pending_share(&self, share_code: String) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, leave_pending_share, share_code)
     }
 }
 

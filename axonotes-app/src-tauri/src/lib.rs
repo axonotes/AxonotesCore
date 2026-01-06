@@ -8,6 +8,7 @@ mod config;
 mod crypto;
 mod database;
 mod encryption;
+mod share;
 mod stdb;
 mod stdb_bindings;
 mod utils;
@@ -58,6 +59,10 @@ pub fn run() {
             commands::block_cmd::get_blocks,
             commands::block_cmd::update_block,
             commands::block_cmd::delete_block,
+            commands::share_cmd::create_share,
+            commands::share_cmd::join_share,
+            commands::share_cmd::close_share,
+            commands::share_cmd::leave_share,
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());

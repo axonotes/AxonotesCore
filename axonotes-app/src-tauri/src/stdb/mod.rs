@@ -17,6 +17,7 @@ mod reducer_helper;
 
 use crate::batch_handler::sync::setup_batch_sync;
 use crate::database;
+use crate::share::sync::setup_share_sync;
 pub use context::ProfileStdbContext;
 // ==========================================
 // Global State - One Connection Per Profile
@@ -122,6 +123,7 @@ pub(crate) async fn ensure_connection_for_profile(
     // Subscribe to user view (filtered by identity/JWT)
     // Subscribe to document metadata view
     // Subscribe to document keys view
+    // Subscribe to share-related views
     conn.subscription_builder()
         .on_applied(callbacks::on_subscription_applied)
         .on_error(callbacks::on_subscription_error)
@@ -130,6 +132,9 @@ pub(crate) async fn ensure_connection_for_profile(
             "SELECT * FROM user_metadata",
             "SELECT * FROM user_document_keys",
             "SELECT * FROM accessible_live_blocks",
+            "SELECT * FROM manageable_permissions",
+            "SELECT * FROM public_user_keys",
+            "SELECT * FROM accessible_version_tags",
         ]);
 
     // Setup batch sync
@@ -137,6 +142,9 @@ pub(crate) async fn ensure_connection_for_profile(
     if let Some(start_time) = start_time {
         setup_batch_sync(&conn, start_time)?;
     }
+
+    // Setup share sync (for auto-accepting joiners)
+    setup_share_sync(&conn)?;
 
     // Run in background thread
     conn.run_threaded();
