@@ -85,7 +85,7 @@ pub fn get_by_doc_and_block(
 pub fn get_up_to_timestamp(
     conn: &Connection,
     doc_id: &str,
-    after: u128,
+    up_to: u128,
 ) -> Result<Vec<DecryptedBatch>> {
     let mut stmt = conn.prepare(
         "SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
@@ -95,7 +95,7 @@ pub fn get_up_to_timestamp(
     )?;
 
     let batches = stmt
-        .query_map(params![doc_id, SqlU128(after)], row_to_batch)?
+        .query_map(params![doc_id, SqlU128(up_to)], row_to_batch)?
         .collect::<Result<Vec<_>>>()?;
 
     Ok(batches)
@@ -106,7 +106,7 @@ pub fn get_by_doc_and_block_up_to_timestamp(
     conn: &Connection,
     doc_id: &str,
     block_id: u64,
-    after: u128,
+    up_to: u128,
 ) -> Result<Vec<DecryptedBatch>> {
     let mut stmt = conn.prepare(
         "SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
@@ -117,7 +117,7 @@ pub fn get_by_doc_and_block_up_to_timestamp(
 
     let batches = stmt
         .query_map(
-            params![doc_id, block_id as i64, SqlU128(after)],
+            params![doc_id, block_id as i64, SqlU128(up_to)],
             row_to_batch,
         )?
         .collect::<Result<Vec<_>>>()?;
@@ -125,11 +125,33 @@ pub fn get_by_doc_and_block_up_to_timestamp(
     Ok(batches)
 }
 
-/// Get batches from the most recent initial batch up to (and including) a given timestamp.
+/// Get the timestamp of the latest initial batch or snapshot for a block up to a given timestamp.
+/// Returns None if no initial exists.
+pub fn get_latest_initial_timestamp(
+    conn: &Connection,
+    doc_id: &str,
+    block_id: u64,
+    up_to: u128,
+) -> Result<Option<u128>> {
+    // MAX() returns NULL if no rows match, so we need to handle Option<SqlU128>
+    let result: Option<SqlU128> = conn.query_row(
+        "SELECT MAX(ts) FROM (
+            SELECT timestamp as ts FROM batches
+            WHERE doc_id = ?1 AND block_id = ?2 AND is_initial = 1 AND timestamp <= ?3
+            UNION ALL
+            SELECT timestamp as ts FROM snapshots
+            WHERE doc_id = ?1 AND block_id = ?2 AND timestamp <= ?3
+        )",
+        params![doc_id, block_id as i64, SqlU128(up_to)],
+        |row| row.get(0),
+    )?;
+
+    Ok(result.map(|s| s.0))
+}
+
+/// Get batches from the most recent initial batch OR snapshot up to a given timestamp.
 /// Returns batches across ALL blocks in the document.
-///
-/// Example: For batches [t0(initial), t100, t200(initial), t250, t300] with target t270:
-/// Returns [t200(initial), t250]
+/// If a snapshot exists at the starting timestamp, uses the snapshot instead of the batch.
 pub fn get_from_latest_initial_up_to_timestamp(
     conn: &Connection,
     doc_id: &str,
@@ -137,17 +159,47 @@ pub fn get_from_latest_initial_up_to_timestamp(
 ) -> Result<Vec<DecryptedBatch>> {
     let mut stmt = conn.prepare(
         "WITH latest_initial AS (
-            SELECT timestamp
-            FROM batches
-            WHERE doc_id = ?1 AND is_initial = 1 AND timestamp <= ?2
-            ORDER BY timestamp DESC
-            LIMIT 1
+            SELECT MAX(ts) as ts FROM (
+                SELECT timestamp as ts FROM batches
+                WHERE doc_id = ?1 AND is_initial = 1 AND timestamp <= ?2
+                UNION ALL
+                SELECT timestamp as ts FROM snapshots
+                WHERE doc_id = ?1 AND timestamp <= ?2
+            )
+        ),
+        start_ts AS (
+            SELECT COALESCE((SELECT ts FROM latest_initial), 0) as ts
         )
         SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
-        FROM batches
-        WHERE doc_id = ?1
-          AND timestamp >= COALESCE((SELECT timestamp FROM latest_initial), 0)
-          AND timestamp <= ?2
+        FROM (
+            -- Snapshots at start_ts (preferred)
+            SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+            FROM snapshots
+            WHERE doc_id = ?1 AND timestamp = (SELECT ts FROM start_ts)
+
+            UNION ALL
+
+            -- Batches at start_ts that DON'T have a snapshot at same position
+            SELECT b.batch_id, b.doc_id, b.timestamp, b.block_id, b.patches, b.pending, b.is_initial
+            FROM batches b
+            WHERE b.doc_id = ?1
+              AND b.timestamp = (SELECT ts FROM start_ts)
+              AND NOT EXISTS (
+                  SELECT 1 FROM snapshots s 
+                  WHERE s.doc_id = b.doc_id 
+                    AND s.block_id = b.block_id 
+                    AND s.timestamp = b.timestamp
+              )
+
+            UNION ALL
+
+            -- All batches after starting point
+            SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+            FROM batches
+            WHERE doc_id = ?1
+              AND timestamp > (SELECT ts FROM start_ts)
+              AND timestamp <= ?2
+        )
         ORDER BY timestamp ASC",
     )?;
 
@@ -158,11 +210,8 @@ pub fn get_from_latest_initial_up_to_timestamp(
     Ok(batches)
 }
 
-/// Get batches for a specific block from its most recent initial batch up to a given timestamp.
-/// Only considers initial batches for the specified block.
-///
-/// Example: For block 5 with batches [t0(initial), t100, t200(initial), t250, t300] and target t270:
-/// Returns [t200(initial), t250]
+/// Get batches for a specific block from its most recent initial batch OR snapshot up to a given timestamp.
+/// If a snapshot exists at the starting timestamp, uses the snapshot instead of the batch.
 pub fn get_block_from_latest_initial_up_to_timestamp(
     conn: &Connection,
     doc_id: &str,
@@ -171,24 +220,114 @@ pub fn get_block_from_latest_initial_up_to_timestamp(
 ) -> Result<Vec<DecryptedBatch>> {
     let mut stmt = conn.prepare(
         "WITH latest_initial AS (
-            SELECT timestamp
-            FROM batches
-            WHERE doc_id = ?1 AND block_id = ?2 AND is_initial = 1 AND timestamp <= ?3
-            ORDER BY timestamp DESC
-            LIMIT 1
+            SELECT MAX(ts) as ts FROM (
+                SELECT timestamp as ts FROM batches
+                WHERE doc_id = ?1 AND block_id = ?2 AND is_initial = 1 AND timestamp <= ?3
+                UNION ALL
+                SELECT timestamp as ts FROM snapshots
+                WHERE doc_id = ?1 AND block_id = ?2 AND timestamp <= ?3
+            )
+        ),
+        start_ts AS (
+            SELECT COALESCE((SELECT ts FROM latest_initial), 0) as ts
         )
         SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
-        FROM batches
-        WHERE doc_id = ?1
-          AND block_id = ?2
-          AND timestamp >= COALESCE((SELECT timestamp FROM latest_initial), 0)
-          AND timestamp <= ?3
+        FROM (
+            -- Snapshot at start_ts (preferred)
+            SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+            FROM snapshots
+            WHERE doc_id = ?1 AND block_id = ?2 AND timestamp = (SELECT ts FROM start_ts)
+
+            UNION ALL
+
+            -- Batch at start_ts if no snapshot exists at same position
+            SELECT b.batch_id, b.doc_id, b.timestamp, b.block_id, b.patches, b.pending, b.is_initial
+            FROM batches b
+            WHERE b.doc_id = ?1 AND b.block_id = ?2
+              AND b.timestamp = (SELECT ts FROM start_ts)
+              AND NOT EXISTS (
+                  SELECT 1 FROM snapshots s 
+                  WHERE s.doc_id = b.doc_id 
+                    AND s.block_id = b.block_id 
+                    AND s.timestamp = b.timestamp
+              )
+
+            UNION ALL
+
+            -- All batches after starting point
+            SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+            FROM batches
+            WHERE doc_id = ?1 AND block_id = ?2
+              AND timestamp > (SELECT ts FROM start_ts)
+              AND timestamp <= ?3
+        )
         ORDER BY timestamp ASC",
     )?;
 
     let batches = stmt
         .query_map(
             params![doc_id, block_id as i64, SqlU128(up_to)],
+            row_to_batch,
+        )?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(batches)
+}
+
+/// Get batches AND snapshots for a block from a starting timestamp up to target timestamp.
+/// Used for incremental reconstruction from a cached state.
+///
+/// This query:
+/// 1. Finds the batch containing `from_ts`
+/// 2. Returns all batches/snapshots from there to `to_ts`
+/// 3. Prefers snapshots over batches at the same (doc, block, timestamp)
+pub fn get_block_batches_in_range(
+    conn: &Connection,
+    doc_id: &str,
+    block_id: u64,
+    from_ts: u128,
+    to_ts: u128,
+) -> Result<Vec<DecryptedBatch>> {
+    let mut stmt = conn.prepare(
+        "WITH containing_batch AS (
+            -- Find the batch that contains our cached timestamp
+            SELECT MAX(timestamp) as ts
+            FROM batches
+            WHERE doc_id = ?1 AND block_id = ?2 AND timestamp <= ?3
+        ),
+        start_ts AS (
+            SELECT COALESCE((SELECT ts FROM containing_batch), 0) as ts
+        )
+        SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+        FROM (
+            -- Snapshots in range (preferred over batches)
+            SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+            FROM snapshots
+            WHERE doc_id = ?1 AND block_id = ?2
+              AND timestamp >= (SELECT ts FROM start_ts)
+              AND timestamp <= ?4
+
+            UNION ALL
+
+            -- Batches in range that don't have a snapshot at same position
+            SELECT b.batch_id, b.doc_id, b.timestamp, b.block_id, b.patches, b.pending, b.is_initial
+            FROM batches b
+            WHERE b.doc_id = ?1 AND b.block_id = ?2
+              AND b.timestamp >= (SELECT ts FROM start_ts)
+              AND b.timestamp <= ?4
+              AND NOT EXISTS (
+                  SELECT 1 FROM snapshots s 
+                  WHERE s.doc_id = b.doc_id 
+                    AND s.block_id = b.block_id 
+                    AND s.timestamp = b.timestamp
+              )
+        )
+        ORDER BY timestamp ASC",
+    )?;
+
+    let batches = stmt
+        .query_map(
+            params![doc_id, block_id as i64, SqlU128(from_ts), SqlU128(to_ts)],
             row_to_batch,
         )?
         .collect::<Result<Vec<_>>>()?;

@@ -95,5 +95,31 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Create snapshots table (same structure as batches, all entries are is_initial=1)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS snapshots (
+        batch_id TEXT PRIMARY KEY,
+        doc_id TEXT NOT NULL,
+        timestamp BLOB NOT NULL,
+        block_id INTEGER NOT NULL,
+        patches BLOB NOT NULL,
+        pending INTEGER NOT NULL DEFAULT 0,
+        is_initial INTEGER NOT NULL DEFAULT 1
+    )",
+        [],
+    )?;
+
+    // Index for block-specific snapshot lookups
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_doc_block_ts ON snapshots(doc_id, block_id, timestamp DESC)",
+        [],
+    )?;
+
+    // Index for doc-wide snapshot lookups
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_doc_ts ON snapshots(doc_id, timestamp DESC)",
+        [],
+    )?;
+
     Ok(())
 }

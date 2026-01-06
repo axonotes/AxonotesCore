@@ -3,8 +3,9 @@ mod helpers;
 pub(crate) mod keys;
 pub(crate) mod profiles;
 pub(crate) mod schema;
+pub(crate) mod snapshots;
 
-use crate::batch_handler::document_manager::{invalidate_block_cache, invalidate_doc_cache};
+use crate::batch_handler::block_getter::{invalidate_block_cache, invalidate_doc_cache};
 use crate::crypto;
 use crate::database::keys::Keys;
 use crate::encryption::batch::DecryptedBatch;
@@ -539,6 +540,35 @@ pub async fn get_block_batches_from_latest_initial_up_to_timestamp(
     .map_err(|e| e.to_string())?
 }
 
+pub async fn get_block_batches_in_range(
+    doc_id: String,
+    block_id: u64,
+    from_ts: u128,
+    to_ts: u128,
+) -> Result<Vec<DecryptedBatch>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_block_batches_in_range(&conn, doc_id.as_str(), block_id, from_ts, to_ts)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn get_latest_initial_timestamp(
+    doc_id: String,
+    block_id: u64,
+    up_to: u128,
+) -> Result<Option<u128>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_latest_initial_timestamp(&conn, doc_id.as_str(), block_id, up_to)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub async fn get_pending_batches_by_doc_and_block(
     doc_id: String,
     block_id: u64,
@@ -588,6 +618,9 @@ pub async fn delete_batches_by_doc(doc_id: String) -> Result<(), String> {
         let conn = get_conn()?;
         batches::delete_by_doc_id(&conn, doc_id_copy.as_str())
             .map(|_| ())
+            .map_err(|e| e.to_string())?;
+        snapshots::delete_by_doc_id(&conn, doc_id_copy.as_str())
+            .map(|_| ())
             .map_err(|e| e.to_string())
     })
     .await
@@ -628,6 +661,39 @@ pub async fn count_pending_batches() -> Result<u64, String> {
     tokio::task::spawn_blocking(|| {
         let conn = get_conn()?;
         batches::count_pending(&conn).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ========================================
+// Snapshot Operations
+// ========================================
+
+pub async fn save_snapshot(batch: DecryptedBatch) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        snapshots::save(&conn, &batch).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn delete_snapshots_by_doc(doc_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        snapshots::delete_by_doc_id(&conn, doc_id.as_str())
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn count_snapshots_by_doc(doc_id: String) -> Result<u64, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        snapshots::count_by_doc(&conn, doc_id.as_str()).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
