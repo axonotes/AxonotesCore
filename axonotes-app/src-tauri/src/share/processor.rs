@@ -40,11 +40,12 @@ pub async fn process_share_joiner(
         .try_into()
         .map_err(|_| "Joiner public key must be 32 bytes")?;
 
-    // Prepare encrypted keys for joiner
+    // Prepare encrypted keys for joiner (role determines if signing key is included)
     let encrypted_keys: Vec<EncryptedKeyEntry> = if full_history {
         // Full history: Encrypt ALL existing keys for the joiner
         process_full_history_share(
             &doc_id,
+            role,
             private_encryption_key,
             public_encryption_key,
             joiner_public_key_array,
@@ -54,6 +55,7 @@ pub async fn process_share_joiner(
         // No history: Rotate keys first, then give only the new key
         process_no_history_share(
             &doc_id,
+            role,
             private_encryption_key,
             public_encryption_key,
             joiner_public_key_array,
@@ -101,6 +103,7 @@ pub async fn process_share_joiner(
 /// Encrypts all existing document keys for the joiner
 async fn process_full_history_share(
     doc_id: &str,
+    role: Role,
     my_private_key: &[u8; 32],
     my_public_key: &[u8; 32],
     joiner_public_key: &[u8; 32],
@@ -118,14 +121,21 @@ async fn process_full_history_share(
         return Err(format!("No keys found for document {}", doc_id));
     }
 
-    // Encrypt ALL keys for the joiner
-    encrypt_keys_for_user(&doc_keys, my_private_key, my_public_key, joiner_public_key)
+    // Encrypt ALL keys for the joiner (role determines if signing key is included)
+    encrypt_keys_for_user(
+        &doc_keys,
+        role,
+        my_private_key,
+        my_public_key,
+        joiner_public_key,
+    )
 }
 
 /// Process a share without history access
 /// Rotates keys first (creating snapshots), then gives only the new key
 async fn process_no_history_share(
     doc_id: &str,
+    role: Role,
     my_private_key: &[u8; 32],
     my_public_key: &[u8; 32],
     joiner_public_key: &[u8; 32],
@@ -133,10 +143,11 @@ async fn process_no_history_share(
     // Rotate document keys (this creates snapshots and re-encrypts for existing users)
     let rotation_result = rotate_keys_for_share(doc_id).await?;
 
-    // Encrypt only the NEW key for the joiner
+    // Encrypt only the NEW key for the joiner (role determines if signing key is included)
     let encrypted_key = encrypt_key_for_user(
         &rotation_result.new_key_data,
         rotation_result.new_key_timestamp,
+        role,
         my_private_key,
         my_public_key,
         joiner_public_key,
@@ -145,21 +156,27 @@ async fn process_no_history_share(
     Ok(vec![encrypted_key])
 }
 
-/// Encrypt document keys for a specific user
+/// Encrypt document keys for a specific user based on their role
 ///
 /// Takes a slice of document keys and encrypts them using X25519
 /// key exchange so only the target user can decrypt them.
+/// - Readers get empty signing_private_key (can only decrypt, not sign)
+/// - Editors/Owners get full signing_private_key
 fn encrypt_keys_for_user(
     keys: &[&DecryptedDocumentKey],
+    role: Role,
     my_private_key: &[u8; 32],
     my_public_key: &[u8; 32],
     their_public_key: &[u8; 32],
 ) -> Result<Vec<EncryptedKeyEntry>, String> {
     keys.iter()
         .map(|key| {
-            let encrypted_data =
-                key.key_data
-                    .encrypt(my_private_key, my_public_key, their_public_key)?;
+            let encrypted_data = key.key_data.encrypt_for_role(
+                role,
+                my_private_key,
+                my_public_key,
+                their_public_key,
+            )?;
 
             Ok(EncryptedKeyEntry {
                 key_timestamp: key.key_timestamp,

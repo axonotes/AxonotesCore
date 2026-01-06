@@ -6,7 +6,7 @@ use crate::share::sync::{
     emit_share_closed, get_share_code_for_doc, register_share_session, unregister_share_session,
 };
 use crate::stdb;
-use crate::stdb_bindings::Role;
+use crate::stdb_bindings::{EncryptedKeyEntry, Role};
 use crate::utils::vec_array::ByteArrayConversion;
 use spacetimedb_sdk::Identity;
 
@@ -130,6 +130,12 @@ pub async fn leave_share(share_code: String) -> Result<(), String> {
 /// Can change between Editor and Reader roles.
 /// Cannot change Owner role (use transfer_ownership instead).
 ///
+/// For Reader → Editor:
+/// - Encrypts the current document key with signing key for the target user
+///
+/// For Editor → Reader:
+/// - Rotates keys after the role change so they get new key without signing key
+///
 /// # Arguments
 /// * `doc_id` - The document ID
 /// * `user_id` - The user's identity as hex string
@@ -143,9 +149,61 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
     let user_identity =
         Identity::from_hex(&user_id).map_err(|e| format!("Invalid user ID: {}", e))?;
 
-    // Get user keys for signing
+    // Get user keys for signing and encryption
     let user_keys: Keys = get_active_user_keys().await?.ok_or("No active user keys")?;
     let private_signing_key = user_keys.private_signing_key.as_array()?;
+    let private_encryption_key = user_keys.private_encryption_key.as_array()?;
+    let public_encryption_key = user_keys.public_encryption_key.as_array()?;
+
+    // Get target user's current role to determine transition type
+    let permissions = stdb::active_profile()
+        .get_document_permissions(&doc_id)
+        .await?;
+    let target_perm = permissions
+        .iter()
+        .find(|p| p.user_id == user_identity)
+        .ok_or("User not found in document")?;
+
+    // Determine if we need to provide an updated_key (Reader → Editor transition)
+    let updated_key: Option<EncryptedKeyEntry> =
+        if matches!(target_perm.role, Role::Reader) && matches!(new_role, Role::Editor) {
+            // Reader → Editor: Need to give them the current key with signing key
+
+            // Get target user's public encryption key
+            let public_keys = stdb::active_profile().get_public_user_keys().await?;
+            let target_public_key = public_keys
+                .iter()
+                .find(|pk| pk.identity == user_identity)
+                .map(|pk| &pk.public_encryption_key)
+                .ok_or("Target user public key not found")?;
+
+            let target_key_array: &[u8; 32] = target_public_key
+                .as_slice()
+                .try_into()
+                .map_err(|_| "Target public key must be 32 bytes")?;
+
+            // Get current document key (most recent one)
+            let document_keys = stdb::active_profile().get_cached_document_keys().await?;
+            let current_key = document_keys
+                .iter()
+                .filter(|k| k.doc_id == doc_id)
+                .max_by_key(|k| k.key_timestamp)
+                .ok_or("No document key found")?;
+
+            // Encrypt the full key (with signing key) for the target user
+            let encrypted_data = current_key.key_data.encrypt(
+                private_encryption_key,
+                public_encryption_key,
+                target_key_array,
+            )?;
+
+            Some(EncryptedKeyEntry {
+                key_timestamp: current_key.key_timestamp,
+                encrypted_data,
+            })
+        } else {
+            None
+        };
 
     // Convert role to byte for signature (must match server)
     let role_byte: u8 = match new_role {
@@ -154,21 +212,51 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
         Role::Reader => 2,
     };
 
-    // Sign the change_role message (must match server format)
-    let message = [
-        b"change_role".as_slice(),
-        doc_id.as_bytes(),
-        user_identity.to_byte_array().as_slice(),
-        &[role_byte],
-    ]
-    .concat();
+    // Build signature message (include key hash if updated_key is provided)
+    let message = if let Some(ref key) = updated_key {
+        let mut key_bytes = Vec::new();
+        key_bytes.extend_from_slice(&key.key_timestamp.to_le_bytes());
+        key_bytes.extend_from_slice(&key.encrypted_data);
+        let key_hash = blake3::hash(&key_bytes);
+
+        [
+            b"change_role".as_slice(),
+            doc_id.as_bytes(),
+            user_identity.to_byte_array().as_slice(),
+            &[role_byte],
+            key_hash.as_bytes(),
+        ]
+        .concat()
+    } else {
+        [
+            b"change_role".as_slice(),
+            doc_id.as_bytes(),
+            user_identity.to_byte_array().as_slice(),
+            &[role_byte],
+        ]
+        .concat()
+    };
 
     let signature = sign_message(private_signing_key, &message)
         .map_err(|e| format!("Failed to sign message: {}", e))?;
 
+    // Call the reducer
     stdb::active_profile()
-        .change_user_role(doc_id, user_identity, new_role, signature.to_vec())
-        .await
+        .change_user_role(
+            doc_id.clone(),
+            user_identity,
+            new_role,
+            updated_key,
+            signature.to_vec(),
+        )
+        .await?;
+
+    // For Editor → Reader: Rotate keys so they get new key without signing key
+    if matches!(target_perm.role, Role::Editor) && matches!(new_role, Role::Reader) {
+        rotate_keys_for_share(&doc_id).await?;
+    }
+
+    Ok(())
 }
 
 /// Transfer document ownership to another user

@@ -535,12 +535,15 @@ impl ProfileStdbContext {
     }
 
     /// Change a user's role (Editor ↔ Reader)
-    /// NO key rotation needed
+    ///
+    /// For Reader → Editor: Provide `updated_key` with the current key encrypted with signing key
+    /// For Editor → Reader: Client should call key rotation AFTER this
     pub async fn change_user_role(
         &self,
         doc_id: String,
         target_user_id: Identity,
         new_role: Role,
+        updated_key: Option<EncryptedKeyEntry>,
         signature: Vec<u8>,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
@@ -552,6 +555,7 @@ impl ProfileStdbContext {
             doc_id,
             target_user_id,
             new_role,
+            updated_key,
             signature
         )
     }

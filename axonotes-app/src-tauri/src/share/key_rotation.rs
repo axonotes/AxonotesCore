@@ -9,7 +9,7 @@ use crate::encryption::batch::{BatchData, DecryptedBatch};
 use crate::encryption::document::{DecryptedDocumentKey, DecryptedKeyData};
 use crate::stdb;
 use crate::stdb_bindings::{
-    DocumentPermission, EncryptedKeyEntry, PublicUserInfo, ReEncryptedTag, SnapshotBatch,
+    DocumentPermission, EncryptedKeyEntry, PublicUserInfo, ReEncryptedTag, Role, SnapshotBatch,
     UserKeyEntry,
 };
 use crate::utils::timestamp::timestamp;
@@ -116,6 +116,7 @@ async fn get_collaborator_public_keys() -> Result<Vec<PublicUserInfo>, String> {
 }
 
 /// Create UserKeyEntry for each existing user by encrypting the new key with their public key
+/// Role-based: Readers get only encryption key, Editors/Owners get full key with signing
 fn create_user_key_entries(
     permissions: &[DocumentPermission],
     public_keys: &[PublicUserInfo],
@@ -138,9 +139,14 @@ fn create_user_key_entries(
             .try_into()
             .map_err(|_| "User public key must be 32 bytes")?;
 
-        // Encrypt new key for this user
-        let encrypted_data =
-            new_key_data.encrypt(my_private_key, my_public_key, their_key_array)?;
+        // Encrypt new key for this user based on their role
+        // Readers get only encryption key, Editors/Owners get full key with signing
+        let encrypted_data = new_key_data.encrypt_for_role(
+            perm.role,
+            my_private_key,
+            my_public_key,
+            their_key_array,
+        )?;
 
         entries.push(UserKeyEntry {
             user_id: perm.user_id,
@@ -304,15 +310,19 @@ fn sign_rotation_message(
         .map_err(|e| format!("Failed to sign rotation message: {}", e))
 }
 
-/// Encrypt a key for a specific user
+/// Encrypt a key for a specific user based on their role
+/// - Readers get empty signing_private_key (can only decrypt, not sign)
+/// - Editors/Owners get full signing_private_key
 pub fn encrypt_key_for_user(
     key_data: &DecryptedKeyData,
     key_timestamp: u128,
+    role: Role,
     my_private_key: &[u8; 32],
     my_public_key: &[u8; 32],
     their_public_key: &[u8; 32],
 ) -> Result<EncryptedKeyEntry, String> {
-    let encrypted_data = key_data.encrypt(my_private_key, my_public_key, their_public_key)?;
+    let encrypted_data =
+        key_data.encrypt_for_role(role, my_private_key, my_public_key, their_public_key)?;
 
     Ok(EncryptedKeyEntry {
         key_timestamp,

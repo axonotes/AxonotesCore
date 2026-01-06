@@ -227,13 +227,16 @@ pub fn remove_user_from_document(
 }
 
 /// Change a user's role (Editor ↔ Reader)
-/// NO key rotation needed
+///
+/// For Reader → Editor: Requires `updated_key` with the current key encrypted with signing key
+/// For Editor → Reader: Client should call key rotation AFTER this reducer
 #[spacetimedb::reducer]
 pub fn change_user_role(
     ctx: &ReducerContext,
     doc_id: String,
     target_user_id: Identity,
     new_role: Role,
+    updated_key: Option<EncryptedKeyEntry>,
     signature: Vec<u8>,
 ) -> Result<(), String> {
     // Get caller's permission
@@ -266,6 +269,15 @@ pub fn change_user_role(
         return Err("Cannot promote to owner, use transfer_ownership".to_string());
     }
 
+    // Reader → Editor requires updated_key
+    if matches!(target_perm.role, Role::Reader) && matches!(new_role, Role::Editor) {
+        if updated_key.is_none() {
+            return Err(
+                "Promoting Reader to Editor requires updated_key with signing key".to_string(),
+            );
+        }
+    }
+
     // Check permissions
     match caller_perm.role {
         Role::Owner => {
@@ -286,13 +298,33 @@ pub fn change_user_role(
         Role::Reader => 2u8,
     };
 
-    let message = [
-        b"change_role",
-        doc_id.as_bytes(),
-        target_user_id.to_byte_array().as_slice(),
-        &[role_byte],
-    ]
-    .concat();
+    // Include updated_key in signature if provided
+    let key_hash = updated_key.as_ref().map(|k| {
+        let mut key_bytes = Vec::new();
+        key_bytes.extend_from_slice(&k.key_timestamp.to_le_bytes());
+        key_bytes.extend_from_slice(&k.encrypted_data);
+        blake3::hash(&key_bytes)
+    });
+
+    let message = if let Some(hash) = &key_hash {
+        [
+            b"change_role".as_slice(),
+            doc_id.as_bytes(),
+            target_user_id.to_byte_array().as_slice(),
+            &[role_byte],
+            hash.as_bytes(),
+        ]
+        .concat()
+    } else {
+        [
+            b"change_role".as_slice(),
+            doc_id.as_bytes(),
+            target_user_id.to_byte_array().as_slice(),
+            &[role_byte],
+        ]
+        .concat()
+    };
+
     let sig_array: &[u8; 64] = signature
         .as_slice()
         .try_into()
@@ -312,6 +344,23 @@ pub fn change_user_role(
             role: new_role,
             ..target_perm
         });
+
+    // If updated_key provided, update the user's document key
+    if let Some(key_entry) = updated_key {
+        let existing_key = ctx
+            .db
+            .private_document_key()
+            .by_doc_and_user()
+            .filter(&doc_id)
+            .filter(|k| k.user_id == target_user_id && k.key_timestamp == key_entry.key_timestamp)
+            .next()
+            .ok_or("Key not found for user at specified timestamp")?;
+
+        ctx.db.private_document_key().key_id().update(DocumentKey {
+            encrypted_data: key_entry.encrypted_data,
+            ..existing_key
+        });
+    }
 
     Ok(())
 }

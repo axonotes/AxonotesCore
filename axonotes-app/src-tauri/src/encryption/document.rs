@@ -1,5 +1,5 @@
 use crate::crypto::x25519::{decrypt_from_anyone, encrypt_for_recipient};
-use crate::stdb_bindings::{DocumentKey, DocumentMetadata};
+use crate::stdb_bindings::{DocumentKey, DocumentMetadata, Role};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::Identity;
@@ -156,6 +156,27 @@ impl DecryptedKeyData {
             blob.as_slice(),
         )
         .map_err(|e| format!("Error when encrypting key data: {}", e))
+    }
+
+    /// Encrypt key data for a specific role
+    /// - Readers get empty signing_private_key (can only decrypt, not sign)
+    /// - Editors/Owners get full signing_private_key
+    pub fn encrypt_for_role(
+        &self,
+        role: Role,
+        my_private_key: &[u8; 32],
+        my_public_key: &[u8; 32],
+        their_public_key: &[u8; 32],
+    ) -> Result<Vec<u8>, String> {
+        let key_data = match role {
+            Role::Reader => DecryptedKeyData {
+                encryption_key: self.encryption_key.clone(),
+                signing_private_key: vec![], // Readers don't get signing key
+            },
+            Role::Editor | Role::Owner => self.clone(),
+        };
+
+        key_data.encrypt(my_private_key, my_public_key, their_public_key)
     }
 
     pub fn from_encrypted(encrypted_blob: &[u8], private_key: &[u8; 32]) -> Result<Self, String> {
@@ -444,5 +465,69 @@ mod tests {
             .encrypt_all(&private_key, &public_key, &public_key)
             .expect("Empty vec encryption failed");
         assert_eq!(encrypted.len(), 0);
+    }
+
+    #[test]
+    fn test_encrypt_for_role_reader_gets_empty_signing_key() {
+        let (private_key, public_key) = create_test_keys();
+
+        let original = DecryptedKeyData {
+            encryption_key: vec![1, 2, 3, 4, 5],
+            signing_private_key: vec![6, 7, 8, 9, 10],
+        };
+
+        let encrypted = original
+            .encrypt_for_role(Role::Reader, &private_key, &public_key, &public_key)
+            .expect("Encryption failed");
+
+        let decrypted =
+            DecryptedKeyData::from_encrypted(&encrypted, &private_key).expect("Decryption failed");
+
+        // Reader should get the encryption key
+        assert_eq!(decrypted.encryption_key, original.encryption_key);
+        // Reader should NOT get the signing key (empty)
+        assert!(decrypted.signing_private_key.is_empty());
+    }
+
+    #[test]
+    fn test_encrypt_for_role_editor_gets_full_key() {
+        let (private_key, public_key) = create_test_keys();
+
+        let original = DecryptedKeyData {
+            encryption_key: vec![1, 2, 3, 4, 5],
+            signing_private_key: vec![6, 7, 8, 9, 10],
+        };
+
+        let encrypted = original
+            .encrypt_for_role(Role::Editor, &private_key, &public_key, &public_key)
+            .expect("Encryption failed");
+
+        let decrypted =
+            DecryptedKeyData::from_encrypted(&encrypted, &private_key).expect("Decryption failed");
+
+        // Editor should get both keys
+        assert_eq!(decrypted.encryption_key, original.encryption_key);
+        assert_eq!(decrypted.signing_private_key, original.signing_private_key);
+    }
+
+    #[test]
+    fn test_encrypt_for_role_owner_gets_full_key() {
+        let (private_key, public_key) = create_test_keys();
+
+        let original = DecryptedKeyData {
+            encryption_key: vec![1, 2, 3, 4, 5],
+            signing_private_key: vec![6, 7, 8, 9, 10],
+        };
+
+        let encrypted = original
+            .encrypt_for_role(Role::Owner, &private_key, &public_key, &public_key)
+            .expect("Encryption failed");
+
+        let decrypted =
+            DecryptedKeyData::from_encrypted(&encrypted, &private_key).expect("Decryption failed");
+
+        // Owner should get both keys
+        assert_eq!(decrypted.encryption_key, original.encryption_key);
+        assert_eq!(decrypted.signing_private_key, original.signing_private_key);
     }
 }
