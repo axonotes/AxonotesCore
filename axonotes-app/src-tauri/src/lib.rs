@@ -63,6 +63,9 @@ pub fn run() {
             commands::share_cmd::join_share,
             commands::share_cmd::close_share,
             commands::share_cmd::leave_share,
+            commands::share_cmd::update_user_role,
+            commands::share_cmd::transfer_ownership,
+            commands::share_cmd::remove_user,
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());
