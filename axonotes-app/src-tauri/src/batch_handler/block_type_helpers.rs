@@ -60,7 +60,7 @@ macro_rules! define_blocks {
         pub struct Block {
             pub deleted: Option<bool>,
             pub id: u64,
-            pub timestamp: u64,
+            pub timestamp: u128,
             pub content: BlockContent,
         }
 
@@ -71,7 +71,7 @@ macro_rules! define_blocks {
             #[serde(skip_serializing_if = "Option::is_none", default)]
             deleted: Option<bool>,
             id: u64,
-            timestamp: u64,
+            timestamp: u128,
             block_type: String,
             block_type_version: u32,
             #[serde(flatten)]
@@ -166,7 +166,7 @@ macro_rules! define_blocks {
         }
 
         impl Block {
-            pub fn new(id: u64, timestamp: u64, deleted: Option<bool>, content: BlockContent) -> Self {
+            pub fn new(id: u64, timestamp: u128, deleted: Option<bool>, content: BlockContent) -> Self {
                 Self { id, timestamp, content, deleted }
             }
 

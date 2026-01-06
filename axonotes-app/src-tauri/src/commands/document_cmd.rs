@@ -1,3 +1,6 @@
+use crate::batch_handler::block_setter::update_block;
+use crate::batch_handler::block_types::BlockContent;
+use crate::batch_handler::block_types::{Block, MetadataV1};
 use crate::crypto::chacha::generate_key;
 use crate::crypto::ed25519::{generate_ed25519_keys, sign_message};
 use crate::database::get_active_user_keys;
@@ -6,6 +9,7 @@ use crate::encryption::document::{DecryptedDocumentMetadata, DecryptedKeyData, D
 use crate::stdb;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
+use spacetimedb_sdk::Identity;
 use uuid::Uuid;
 
 /// Create a new document with optional title (default: "Untitled") returns document id
@@ -72,7 +76,24 @@ pub async fn create_document(title: Option<String>) -> Result<String, String> {
             )
             .await?;
 
-        // TODO: Create metadata batch with document title
+        let user_identity: Option<Identity> = stdb::active_profile().get_identity().await?;
+        let user_identity: Identity = user_identity.expect("User identity should be set by now");
+        update_block(
+            doc_id.clone(),
+            None,
+            Block {
+                id: 0,
+                timestamp: 0,
+                deleted: None,
+                content: BlockContent::MetadataV1(MetadataV1 {
+                    author: user_identity,
+                    group_id: "main".to_string(),
+                    group_row: "main".to_string(),
+                    field: "title".to_string(),
+                    value: document_title.into(),
+                }),
+            },
+        );
 
         Ok(doc_id)
     } else {

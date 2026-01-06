@@ -96,8 +96,14 @@ fn generate_block_id() -> u64 {
 /// Update a block. Changes are throttled to 500ms and batched automatically.
 /// If block_id is None, a cryptographically random ID is generated.
 /// Returns the block_id used (useful when auto-generated).
+/// the id and timestamp in the block will always be overwritten with the correct values
 pub fn update_block(doc_id: String, block_id: Option<u64>, block: Block) -> u64 {
     let block_id = block_id.unwrap_or_else(generate_block_id);
+    let block = Block {
+        id: block_id,
+        timestamp: timestamp(),
+        ..block
+    };
     let key = (doc_id, block_id);
 
     // Store latest pending block (overwrites previous)
