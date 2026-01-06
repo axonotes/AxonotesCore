@@ -1,6 +1,30 @@
-//! Connection status events
+//! # Connection Status Events
 //!
 //! Events for SpacetimeDB connection lifecycle.
+//!
+//! ## Connection Flow
+//!
+//! ```text
+//! Login → Connecting → stdb-connected
+//!                   → stdb-connection-error (on failure)
+//!
+//! Connected → stdb-disconnected (unexpected)
+//!          → stdb-disconnected (user logout)
+//! ```
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `stdb-connected` | Connection established | profile_id, identity |
+//! | `stdb-disconnected` | Connection lost/closed | profile_id, error? |
+//! | `stdb-connection-error` | Connection failed | profile_id, error |
+//!
+//! ## Frontend Handling
+//!
+//! - Show connection status indicator
+//! - Enable/disable sync features
+//! - Display reconnection UI on disconnect
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

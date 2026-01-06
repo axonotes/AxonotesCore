@@ -1,3 +1,27 @@
+//! # Batch Synchronization
+//!
+//! Handles bidirectional sync of document batches between local storage and SpacetimeDB.
+//!
+//! ## Sync Flow
+//!
+//! 1. **Inbound**: SpacetimeDB subscription delivers new batches
+//! 2. **Decrypt**: Batches are decrypted using document keys
+//! 3. **Conflict Detection**: Check for local pending batches on same block
+//! 4. **Storage**: Save to local SQLite database
+//! 5. **Outbound**: Upload any pending local batches
+//!
+//! ## Conflict Handling
+//!
+//! When a server batch conflicts with local pending batches:
+//! - Local pending batches are deleted
+//! - Server batch wins (last-write-wins)
+//! - Conflict is emitted to frontend for user notification
+//!
+//! ## Lock Checking
+//!
+//! Before uploading, checks if the target block is locked by another user.
+//! Locked blocks cannot be modified until the lock expires (60 seconds).
+
 use crate::encryption::batch::{DecryptDocumentBatchVec, DecryptedBatch};
 use crate::encryption::document::DecryptedDocumentKey;
 use crate::encryption::live_block::DecryptedLiveBlock;
@@ -13,17 +37,27 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Global timestamp of the last successful sync operation.
+/// Used to filter out already-processed batches on reconnect.
 static LAST_SYNC: OnceCell<Arc<Mutex<u128>>> = OnceCell::new();
 
+/// Returns a thread-safe reference to the last sync timestamp.
 fn get_last_sync() -> Arc<Mutex<u128>> {
     LAST_SYNC.get_or_init(|| Arc::new(Mutex::new(0))).clone()
 }
 
+/// Information about a sync conflict between local and server batches.
+///
+/// Emitted to the frontend when a server batch overwrites local pending changes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictInfo {
+    /// Document where conflict occurred
     pub doc_id: String,
+    /// Block that had conflicting edits
     pub block_id: u64,
+    /// The winning server batch
     pub server_batch: DecryptedBatch,
+    /// Local batches that were discarded
     pub local_pending_batches: Vec<DecryptedBatch>,
 }
 
@@ -31,6 +65,15 @@ pub struct ConflictInfo {
 // Setup
 // ==========================================
 
+/// Sets up the SpacetimeDB subscription for batch synchronization.
+///
+/// Subscribes to all batches newer than `start_time` and triggers sync
+/// when new batches arrive.
+///
+/// # Arguments
+///
+/// * `conn` - Active SpacetimeDB connection
+/// * `start_time` - Only sync batches created after this timestamp
 pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), String> {
     conn.subscription_builder()
         .on_applied(|ctx| {
@@ -56,7 +99,18 @@ pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), Str
 // Public API
 // ==========================================
 
-/// Create and save a batch, uploading to server if connected
+/// Creates and saves a batch, uploading to server if connected.
+///
+/// If online, encrypts and uploads the batch immediately. If offline or
+/// upload fails, saves as a pending batch for later upload.
+///
+/// # Arguments
+///
+/// * `batch` - The decrypted batch to save and potentially upload
+///
+/// # Errors
+///
+/// Returns an error if local database operations fail.
 pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
     let last_sync_lock = get_last_sync();
     let mut last_sync = last_sync_lock.lock().await;
@@ -88,6 +142,10 @@ pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
 // Sync Logic
 // ==========================================
 
+/// Processes incoming batches from SpacetimeDB subscription.
+///
+/// Filters batches newer than last sync, decrypts them, detects conflicts,
+/// saves to local database, and uploads any pending local batches.
 async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> Result<(), String> {
     let last_sync_lock = get_last_sync();
     let mut last_sync = last_sync_lock.lock().await;
@@ -162,6 +220,9 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
     Ok(())
 }
 
+/// Syncs a single batch, detecting and handling conflicts.
+///
+/// Returns `Some(ConflictInfo)` if local pending batches were overwritten.
 async fn sync_single_batch(server_batch: DecryptedBatch) -> Result<Option<ConflictInfo>, String> {
     let doc_id = &server_batch.doc_id;
     let block_id = server_batch.batch_data.block_id;
@@ -191,6 +252,9 @@ async fn sync_single_batch(server_batch: DecryptedBatch) -> Result<Option<Confli
     Ok(conflict_info)
 }
 
+/// Uploads all pending local batches to the server.
+///
+/// Called after processing incoming batches to sync local changes.
 async fn upload_pending_batches() -> Result<(), String> {
     let document_keys = stdb::active_profile().get_cached_document_keys().await?;
     let pending = database::get_all_pending_batches().await?;
@@ -213,6 +277,10 @@ async fn upload_pending_batches() -> Result<(), String> {
 // Helpers
 // ==========================================
 
+/// Encrypts, signs, and uploads a batch to SpacetimeDB.
+///
+/// Checks block locks before uploading to prevent overwriting
+/// blocks being edited by other users.
 async fn upload_batch(
     batch: &DecryptedBatch,
     document_keys: &[DecryptedDocumentKey],
@@ -261,6 +329,9 @@ async fn upload_batch(
         .await
 }
 
+/// Finds the correct document key for a given timestamp.
+///
+/// Returns the key with the highest timestamp that is still <= the batch timestamp.
 fn find_document_key<'a>(
     keys: &'a [DecryptedDocumentKey],
     doc_id: &str,
@@ -272,6 +343,7 @@ fn find_document_key<'a>(
         .ok_or_else(|| format!("No key found for doc {doc_id}"))
 }
 
+/// Emits conflict information to the frontend via Tauri events.
 fn emit_conflicts(conflicts: &[ConflictInfo]) {
     if let Err(e) = app_handle::emit("batch-conflicts", &conflicts) {
         eprintln!("Failed to emit conflicts: {e}");

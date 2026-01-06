@@ -1,3 +1,19 @@
+//! # Block Handler Unit Tests
+//!
+//! Comprehensive tests for block reconstruction from batches.
+//!
+//! ## Test Categories
+//!
+//! - **Basic Operations**: Single block create/update/delete
+//! - **Multiple Blocks**: Document with many blocks
+//! - **Edge Cases**: Empty docs, deleted blocks, time boundaries
+//! - **Time-Travel**: Reconstructing blocks at specific timestamps
+//!
+//! ## Test Data Setup
+//!
+//! Tests create in-memory SQLite databases with synthetic batches
+//! to verify the block getter logic independent of encryption.
+
 #[cfg(test)]
 mod tests {
     use crate::batch_handler::block_getter::*;

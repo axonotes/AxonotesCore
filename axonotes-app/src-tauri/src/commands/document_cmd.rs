@@ -1,3 +1,19 @@
+//! # Document Commands
+//!
+//! Tauri commands for document lifecycle management.
+//!
+//! ## Operations
+//!
+//! - **Create**: Generates new document with encryption keys and metadata
+//! - **Delete**: Removes document (owner only, requires signature)
+//! - **List**: Returns all accessible documents with decrypted metadata
+//! - **Update Metadata**: Changes document path/tags
+//!
+//! ## Security
+//!
+//! - Document deletion requires Ed25519 signature verification
+//! - All metadata is encrypted per-user
+
 use crate::batch_handler::block_setter::update_block;
 use crate::batch_handler::block_types::BlockContent;
 use crate::batch_handler::block_types::{Block, MetadataV1};
@@ -13,7 +29,23 @@ use crate::utils::vec_array::ByteArrayConversion;
 use spacetimedb_sdk::Identity;
 use uuid::Uuid;
 
-/// Create a new document with optional title (default: "Untitled") returns document id
+/// Creates a new document with encryption keys and metadata.
+///
+/// # Arguments
+///
+/// * `title` - Optional document title (defaults to "Default")
+///
+/// # Returns
+///
+/// The new document's UUID.
+///
+/// # Process
+///
+/// 1. Generates unique path (deduplicating if needed)
+/// 2. Creates Ed25519 signing keypair for the document
+/// 3. Creates ChaCha20 encryption key
+/// 4. Encrypts keys for the creating user
+/// 5. Creates initial metadata block with title
 #[tauri::command]
 pub async fn create_document(title: Option<String>) -> Result<String, String> {
     let user_keys: Option<Keys> = get_active_user_keys().await?;
@@ -104,6 +136,12 @@ pub async fn create_document(title: Option<String>) -> Result<String, String> {
     }
 }
 
+/// Deletes a document (owner only).
+///
+/// # Security
+///
+/// Requires a valid Ed25519 signature over `"delete_document" + doc_id`.
+/// The server verifies the signature against the user's registered public key.
 #[tauri::command]
 pub async fn delete_document(doc_id: String) -> Result<(), String> {
     let user_keys: Option<Keys> = get_active_user_keys().await?;
@@ -126,6 +164,7 @@ pub async fn delete_document(doc_id: String) -> Result<(), String> {
     }
 }
 
+/// Gets metadata for a specific document.
 #[tauri::command]
 pub async fn get_document_meta(
     doc_id: String,
@@ -136,11 +175,16 @@ pub async fn get_document_meta(
     Ok(document_metadata.into_iter().find(|p| p.doc_id == doc_id))
 }
 
+/// Lists all documents accessible to the current user.
 #[tauri::command]
 pub async fn list_documents() -> Result<Vec<DecryptedDocumentMetadata>, String> {
     stdb::active_profile().get_cached_metadata().await
 }
 
+/// Updates document metadata (path and tags).
+///
+/// Metadata is encrypted to the user's own public key, allowing each
+/// user to have their own organizational structure for shared documents.
 #[tauri::command]
 pub async fn update_document_metadata(
     doc_id: String,

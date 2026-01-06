@@ -1,6 +1,35 @@
-//! Share session events
+//! # Share Session Events
 //!
 //! Events for document sharing workflow.
+//!
+//! ## Share Flow
+//!
+//! ```text
+//! create_share() called
+//!       ↓
+//! Server generates code → share-code-ready
+//!       ↓
+//! Joiner uses code → share-user-added
+//!       ↓
+//! Owner closes share → share-closed
+//!
+//! At any point: error → share-error
+//! ```
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `share-code-ready` | Server generated share code | doc_id, share_code |
+//! | `share-user-added` | User successfully joined | doc_id, user_id |
+//! | `share-error` | Processing failed | doc_id, error |
+//! | `share-closed` | Share session ended | doc_id, share_code |
+//!
+//! ## Frontend Handling
+//!
+//! - Display share code for copy/share
+//! - Update collaborator list on user added
+//! - Show error toast on failure
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

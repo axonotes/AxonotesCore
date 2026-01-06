@@ -1,3 +1,46 @@
+//! # Local Database Module
+//!
+//! Provides encrypted local storage using SQLCipher (SQLite with AES-256 encryption).
+//!
+//! ## Features
+//!
+//! - **At-rest encryption**: All data encrypted with user's password via SQLCipher
+//! - **Connection pooling**: R2D2 pool for concurrent database access
+//! - **WAL mode**: Write-Ahead Logging for better concurrency
+//! - **Offline support**: Full functionality without network connection
+//!
+//! ## Submodules
+//!
+//! - **`batches`**: Document batch storage (patches, snapshots)
+//! - **`keys`**: User encryption key storage
+//! - **`profiles`**: User profile and authentication data
+//! - **`schema`**: Database schema initialization and migrations
+//! - **`snapshots`**: Document state snapshots for version history
+//!
+//! ## Security Model
+//!
+//! The database key is derived from the user's password using Argon2id.
+//! Three unlock modes are supported:
+//! - `"none"`: No password (empty key, not recommended for production)
+//! - `"pin"`: Short numeric PIN
+//! - `"pass"`: Full password
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! // Initialize paths (call once at startup)
+//! init_paths(app_data_dir)?;
+//!
+//! // Unlock the database
+//! unlock_db("user_password".to_string()).await?;
+//!
+//! // Use database operations...
+//! let profile = get_active_profile().await?;
+//!
+//! // Lock when done
+//! lock_db().await?;
+//! ```
+
 #![allow(dead_code)]
 #![allow(clippy::needless_pass_by_value)] // API design: database functions often take ownership for simplicity
 
@@ -31,9 +74,14 @@ static APP_CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
 // Store the key for connection initialization
 static DB_KEY: RwLock<Option<String>> = RwLock::new(None);
 
+/// Application configuration stored in a TOML file.
+///
+/// This is separate from the encrypted database to allow reading
+/// the unlock mode before the database is decrypted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    pub unlock_mode: String, // "none", "pin", "pass"
+    /// The authentication mode: `"none"`, `"pin"`, or `"pass"`
+    pub unlock_mode: String,
 }
 
 impl Default for AppConfig {

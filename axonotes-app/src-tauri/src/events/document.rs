@@ -1,6 +1,22 @@
-//! Document operation events
+//! # Document Operation Events
 //!
-//! Events for document CRUD operations.
+//! Events for document CRUD operations and access changes.
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `document-created` | New document created | doc_id |
+//! | `document-deleted` | Document deleted | doc_id |
+//! | `document-metadata-updated` | Path or tags changed | doc_id, path, tags |
+//! | `document-access-granted` | Gained access via share | doc_id |
+//! | `document-access-revoked` | Lost access to document | doc_id |
+//!
+//! ## Frontend Handling
+//!
+//! - Update document list/tree
+//! - Refresh open document if affected
+//! - Navigate away if access revoked
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

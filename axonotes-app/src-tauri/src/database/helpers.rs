@@ -1,5 +1,30 @@
+//! # Database Helpers
+//!
+//! Type adapters for storing Rust types in SQLite.
+//!
+//! ## SqlU128
+//!
+//! SQLite natively supports up to 64-bit integers. Timestamps in Axonotes
+//! use `u128` (128-bit) for nanosecond precision. This type stores u128
+//! as a 16-byte big-endian blob for correct lexicographic ordering.
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! use crate::database::helpers::SqlU128;
+//!
+//! conn.execute(
+//!     "INSERT INTO table (timestamp) VALUES (?1)",
+//!     params![SqlU128(timestamp)],
+//! )?;
+//! ```
+
 use rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 
+/// Wrapper for storing u128 values in SQLite as 16-byte big-endian blobs.
+///
+/// Big-endian encoding ensures correct lexicographic ordering when
+/// timestamps are compared as blobs in SQL queries.
 pub struct SqlU128(pub u128);
 
 impl FromSql for SqlU128 {

@@ -1,3 +1,39 @@
+//! # WorkOS Authentication Module
+//!
+//! Implements OAuth 2.0 + PKCE authentication flow using WorkOS as the identity provider.
+//!
+//! ## Flow Overview
+//!
+//! 1. **Generate PKCE pair**: Code verifier (random) + code challenge (SHA-256 hash)
+//! 2. **Open browser**: Redirect to WorkOS authorization URL with challenge
+//! 3. **Local callback**: Tiny HTTP server listens for OAuth redirect
+//! 4. **Token exchange**: Exchange authorization code + verifier for tokens
+//! 5. **Profile creation**: Extract user info and store profile locally
+//!
+//! ## Security Features
+//!
+//! - **PKCE**: Proof Key for Code Exchange prevents authorization code interception
+//! - **Localhost callback**: No secrets transmitted over network
+//! - **Short-lived tokens**: Access tokens expire; refresh tokens for renewal
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! // Start auth flow (returns URL to open in browser)
+//! let auth_url = start_auth_flow(dark_mode, |result| {
+//!     match result {
+//!         Ok(profile) => save_profile(profile),
+//!         Err(e) => show_error(e),
+//!     }
+//! }).await?;
+//!
+//! // Open auth_url in user's browser
+//! open::that(auth_url)?;
+//!
+//! // Refresh expired tokens
+//! let new_token = refresh_access_token(&refresh_token).await?;
+//! ```
+
 use crate::config::OAuthConfig;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use once_cell::sync::Lazy;
@@ -13,15 +49,24 @@ const SUCCESS_HTML: &str = include_str!("html/success.html");
 const ERROR_HTML: &str = include_str!("html/error.html");
 const STYLES_CSS: &str = include_str!("html/styles.css");
 
+/// User profile information returned from WorkOS authentication.
+///
+/// Contains identity information and tokens for API access.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
+    /// Unique user identifier from WorkOS
     pub id: String,
+    /// User's email address
     pub email: String,
+    /// User's display name (first + last name)
     pub name: String,
+    /// JWT access token for SpacetimeDB authentication
     pub access_token: String,
+    /// Optional refresh token for obtaining new access tokens
     pub refresh_token: Option<String>,
 }
 
+/// Response from WorkOS token exchange endpoint.
 #[derive(Deserialize)]
 struct TokenResponse {
     access_token: String,
@@ -29,6 +74,7 @@ struct TokenResponse {
     user: UserInfo,
 }
 
+/// User information included in token response.
 #[derive(Deserialize)]
 struct UserInfo {
     id: String,
@@ -37,6 +83,7 @@ struct UserInfo {
     last_name: Option<String>,
 }
 
+/// Global state for tracking PKCE code verifier during auth flow.
 struct AuthState {
     code_verifier: Option<String>,
 }

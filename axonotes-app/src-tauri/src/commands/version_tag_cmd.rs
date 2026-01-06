@@ -1,3 +1,28 @@
+//! # Version Tag Commands
+//!
+//! Tauri commands for managing document version tags.
+//!
+//! ## Version Tags
+//!
+//! Version tags are named bookmarks at specific points in a document's history.
+//! They allow users to:
+//! - Mark significant milestones (e.g., "v1.0 Release")
+//! - Create restore points before major changes
+//! - Navigate document history semantically
+//!
+//! ## Tag Data
+//!
+//! Each tag stores:
+//! - `tag_name`: User-provided name
+//! - `timestamp`: Point in document history being tagged
+//! - `created_by`: User who created the tag
+//! - `created_at`: When the tag was created
+//!
+//! ## Encryption
+//!
+//! Tag data is encrypted with the document's encryption key to protect
+//! tag names from unauthorized access.
+
 use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
@@ -10,7 +35,7 @@ use serde::Serialize;
 use spacetimedb_sdk::Identity;
 use uuid::Uuid;
 
-/// Version tag info returned to frontend
+/// Version tag information returned to the frontend.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionTagInfo {

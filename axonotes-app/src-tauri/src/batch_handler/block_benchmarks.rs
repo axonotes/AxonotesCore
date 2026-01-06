@@ -1,3 +1,24 @@
+//! # Block Reconstruction Benchmarks
+//!
+//! Performance benchmarks for block reconstruction at scale.
+//!
+//! ## Benchmark Scenarios
+//!
+//! - **Many Batches**: 1000 batches with 20 patches each
+//! - **Many Blocks**: 100 different blocks, each with history
+//!
+//! ## Running Benchmarks
+//!
+//! These run as regular tests with timing output:
+//! ```bash
+//! cargo test --release block_benchmarks -- --nocapture
+//! ```
+//!
+//! ## Expected Performance
+//!
+//! Block reconstruction should complete in single-digit milliseconds
+//! even for documents with thousands of historical changes.
+
 #[cfg(test)]
 mod benchmarks {
     use crate::batch_handler::block_getter::*;

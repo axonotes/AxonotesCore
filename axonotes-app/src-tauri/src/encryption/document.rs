@@ -1,17 +1,40 @@
+//! # Document Encryption
+//!
+//! Handles encryption and decryption of document metadata and keys.
+//!
+//! ## Document Keys
+//!
+//! Each document has a unique encryption key (ChaCha20) and signing key (Ed25519).
+//! Keys are encrypted per-user using X25519 hybrid encryption.
+//!
+//! ## Role-Based Key Access
+//!
+//! - **Owner/Editor**: Receive both encryption and signing keys
+//! - **Reader**: Receive only encryption key (can read, not modify)
+//!
+//! ## Metadata
+//!
+//! Document metadata (path, tags) is encrypted per-user and stored separately
+//! from document content, allowing users to have different organizational views.
+
 use crate::crypto::x25519::{decrypt_from_anyone, encrypt_for_recipient};
 use crate::stdb_bindings::{DocumentKey, DocumentMetadata, Role};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::Identity;
 
+/// Trait for decrypting document metadata or keys.
 pub trait DecryptDocumentMetaAndKeyVec {
     type Output;
+    /// Decrypts all items using the user's private encryption key.
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String>;
 }
 
+/// Trait for encrypting document metadata.
 #[allow(dead_code)]
 pub trait EncryptDocumentMetadataVec {
     type Output;
+    /// Encrypts all items using the user's keypair (self-encryption).
     fn encrypt_all(
         self,
         my_private_key: &[u8; 32],
@@ -19,18 +42,27 @@ pub trait EncryptDocumentMetadataVec {
     ) -> Result<Self::Output, String>;
 }
 
+/// Decrypted document metadata payload.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedMetadata {
+    /// Schema version for forward compatibility
     pub version: u16,
+    /// User's path for this document (e.g., "/Work/Project/notes.doc")
     pub path: String,
+    /// User-defined tags for organization
     pub tags: Vec<String>,
 }
 
+/// Complete decrypted document metadata with identifiers.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedDocumentMetadata {
+    /// Unique metadata entry identifier
     pub meta_id: String,
+    /// User this metadata belongs to
     pub user_id: Identity,
+    /// Document this metadata describes
     pub doc_id: String,
+    /// The decrypted metadata payload
     pub metadata: DecryptedMetadata,
 }
 
@@ -118,8 +150,10 @@ impl EncryptDocumentMetadataVec for Vec<DecryptedDocumentMetadata> {
     }
 }
 
+/// Trait for encrypting document keys for a recipient.
 #[allow(dead_code)]
 pub trait EncryptDocumentKeyVec {
+    /// Encrypts all keys for a specific recipient's public key.
     fn encrypt_all(
         self,
         my_private_key: &[u8; 32],
@@ -128,18 +162,29 @@ pub trait EncryptDocumentKeyVec {
     ) -> Result<Vec<DocumentKey>, String>;
 }
 
+/// Decrypted document key data.
+///
+/// Contains the symmetric encryption key and Ed25519 signing key for a document.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedKeyData {
+    /// 32-byte ChaCha20-Poly1305 encryption key
     pub encryption_key: Vec<u8>,
+    /// 32-byte Ed25519 private signing key (empty for Readers)
     pub signing_private_key: Vec<u8>,
 }
 
+/// A decrypted document key with full context.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedDocumentKey {
+    /// Unique key identifier
     pub key_id: String,
+    /// Document this key is for
     pub doc_id: String,
+    /// User this key is encrypted for
     pub user_id: Identity,
+    /// Timestamp when this key was created (for key rotation ordering)
     pub key_timestamp: u128,
+    /// The decrypted key material
     pub key_data: DecryptedKeyData,
 }
 

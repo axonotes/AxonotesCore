@@ -1,3 +1,22 @@
+//! # Live Block Encryption
+//!
+//! Handles encryption and decryption of live blocks for real-time collaboration.
+//!
+//! ## Live Blocks
+//!
+//! Live blocks represent the current state of a block being edited by a user.
+//! They enable real-time collaboration by showing who is editing which block.
+//!
+//! ## Encrypted Fields
+//!
+//! - **content**: The actual block data (serialized with serde_json)
+//! - **username**: The editing user's display name (serialized with postcard)
+//!
+//! ## Key Selection
+//!
+//! Uses `locked_at` timestamp to select the correct document key for decryption,
+//! supporting key rotation during collaborative sessions.
+
 use crate::batch_handler::block_types::Block;
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
@@ -8,29 +27,43 @@ use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::Identity;
 
+/// Trait for batch decryption of live blocks.
 pub trait DecryptLiveBlockVec {
+    /// Decrypts all live blocks using the appropriate document keys.
     fn decrypt_all(
         self,
         document_keys: &[DecryptedDocumentKey],
     ) -> Result<Vec<DecryptedLiveBlock>, String>;
 }
 
+/// Trait for batch encryption of live blocks.
 #[allow(dead_code)]
 pub trait EncryptLiveBlockVec {
+    /// Encrypts all live blocks using the latest document key.
     fn encrypt_all(
         self,
         latest_document_key: &DecryptedDocumentKey,
     ) -> Result<Vec<LiveBlock>, String>;
 }
 
+/// A decrypted live block with all metadata.
+///
+/// Represents the current editing state of a block during real-time collaboration.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedLiveBlock {
+    /// Unique identifier for this live block instance
     pub live_block_id: String,
+    /// Document containing this block
     pub doc_id: String,
+    /// Block number within the document
     pub block_id: u64,
+    /// User currently editing this block
     pub user_id: Identity,
+    /// The decrypted block content
     pub content: Block,
+    /// Display name of the editing user
     pub username: String,
+    /// When the block was locked for editing (None if unlocked)
     pub locked_at: Option<u128>,
 }
 

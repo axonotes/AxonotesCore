@@ -1,3 +1,30 @@
+//! # Block Setter - Throttled Batch Creation
+//!
+//! Handles block updates with intelligent batching and throttling for efficient
+//! network synchronization.
+//!
+//! ## Design Goals
+//!
+//! - **Throttling**: Coalesce rapid edits into fewer network requests (500ms window)
+//! - **Batching**: Group multiple patches into a single batch (up to 20 patches)
+//! - **Delta Compression**: Store only changes between block states
+//! - **Automatic Finalization**: Background task finalizes stale batches
+//!
+//! ## Flow
+//!
+//! 1. `update_block()` queues the block in `PENDING_BLOCKS`
+//! 2. After throttle delay, block is processed into patches
+//! 3. Patches accumulate in `IN_PROGRESS_BATCHES`
+//! 4. Batches finalize when full, timed out, or time gap exceeds threshold
+//! 5. Finalized batches are sent to `sync::create_batch()` for upload
+//!
+//! ## Constants
+//!
+//! - `THROTTLE_MS`: 500ms delay before processing pending blocks
+//! - `MAX_PATCHES_PER_BATCH`: 20 patches maximum per batch
+//! - `MAX_TIME_DELTA_MS`: 1275ms max gap between patches (255 * 5ms units)
+//! - `FINALIZE_TIMEOUT_MS`: 1300ms before forcing batch finalization
+
 use crate::batch_handler::block_getter::get_blocks;
 use crate::batch_handler::block_type_helpers::{encode_initial_patch, encode_patch};
 use crate::batch_handler::block_types::Block;
@@ -10,27 +37,41 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 use tokio::time::Duration;
 
+/// Throttle delay before processing pending blocks (milliseconds).
 const THROTTLE_MS: u64 = 500;
+
+/// Maximum number of patches allowed in a single batch.
 const MAX_PATCHES_PER_BATCH: usize = 20;
+
+/// Maximum time gap between patches in a batch (milliseconds).
+/// Patches with larger gaps trigger batch finalization.
 const MAX_TIME_DELTA_MS: u128 = 255 * 5; // 1275ms max between patches
+
+/// Timeout after which an in-progress batch is automatically finalized.
 const FINALIZE_TIMEOUT_MS: u128 = 1300;
 
-type CacheKey = (String, u64); // (doc_id, block_id)
+/// Cache key type: (document_id, block_id).
+type CacheKey = (String, u64);
 
-/// Pending blocks waiting to be processed (latest update wins)
+/// Pending blocks waiting to be processed (latest update wins).
+/// Blocks are held here during the throttle window.
 static PENDING_BLOCKS: LazyLock<DashMap<CacheKey, Block>> = LazyLock::new(DashMap::new);
 
-/// In-progress batches being built
+/// In-progress batches being built up before finalization.
+/// Each key maps to a batch accumulating patches.
 static IN_PROGRESS_BATCHES: LazyLock<DashMap<CacheKey, InProgressBatch>> =
     LazyLock::new(DashMap::new);
 
-/// Track which keys have an active throttle timer
+/// Tracks which keys have an active throttle timer to prevent duplicate timers.
 static ACTIVE_TIMERS: LazyLock<DashMap<CacheKey, ()>> = LazyLock::new(DashMap::new);
 
-/// Ensure background finalization task starts only once
+/// Ensures the background finalization task starts only once per process.
 static BACKGROUND_TASK_STARTED: AtomicBool = AtomicBool::new(false);
 
-/// A batch being built up before finalization
+/// A batch being built up before finalization.
+///
+/// Accumulates patches as the user edits, then converts to `DecryptedBatch`
+/// when finalized for upload.
 struct InProgressBatch {
     doc_id: String,
     block_id: u64,

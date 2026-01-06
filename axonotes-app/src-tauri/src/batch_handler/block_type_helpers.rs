@@ -1,6 +1,40 @@
+//! # Block Type Helpers
+//!
+//! Utilities for encoding and decoding block patches using delta compression.
+//!
+//! ## Delta Compression
+//!
+//! Uses the `xpatch` library for binary delta encoding. Instead of storing
+//! full block snapshots, only the differences between versions are stored.
+//!
+//! ## Patch Format
+//!
+//! Each patch contains:
+//! - `delta`: Binary diff between base and new block (xpatch encoded)
+//! - `time_delta`: Time offset in 5ms units (0-255, max 1275ms)
+//!
+//! ## Block Definition Macro
+//!
+//! The `define_blocks!` macro generates type-safe block serialization with:
+//! - Version-tagged JSON format for forward compatibility
+//! - Automatic type name and version extraction
+//! - Clean deserialization with unknown type handling
+
 use crate::batch_handler::block_types::Block;
 use crate::encryption::batch::Patch;
 
+/// Encodes a delta patch between two block states.
+///
+/// # Arguments
+///
+/// * `tag` - Patch sequence number within the batch
+/// * `time_delta` - Time since previous patch in 5ms units (max 255)
+/// * `base` - The previous block state
+/// * `new` - The new block state
+///
+/// # Returns
+///
+/// A patch containing the binary delta and time offset.
 pub fn encode_patch(
     tag: usize,
     time_delta: u8,
@@ -15,6 +49,16 @@ pub fn encode_patch(
     Ok(Patch { delta, time_delta })
 }
 
+/// Encodes an initial patch for a new block (no base state).
+///
+/// Used for the first version of a block when there's no previous state
+/// to diff against.
+///
+/// # Arguments
+///
+/// * `tag` - Patch sequence number within the batch
+/// * `time_delta` - Time since batch start in 5ms units
+/// * `new` - The new block to encode
 pub fn encode_initial_patch(tag: usize, time_delta: u8, new: &Block) -> Result<Patch, String> {
     let new_bytes: Vec<u8> = serde_json::to_vec(new).map_err(|e| e.to_string())?;
 
@@ -23,7 +67,16 @@ pub fn encode_initial_patch(tag: usize, time_delta: u8, new: &Block) -> Result<P
     Ok(Patch { delta, time_delta })
 }
 
-/// returns new block and time_delta
+/// Decodes a patch to reconstruct the new block state.
+///
+/// # Arguments
+///
+/// * `base` - The base block state to apply the patch to
+/// * `patch` - The patch containing the delta
+///
+/// # Returns
+///
+/// A tuple of (reconstructed block, time_delta).
 pub fn decode_patch(base: &Block, patch: &Patch) -> Result<(Block, u8), String> {
     let base_bytes: Vec<u8> = serde_json::to_vec(base).map_err(|e| e.to_string())?;
 
@@ -34,7 +87,15 @@ pub fn decode_patch(base: &Block, patch: &Patch) -> Result<(Block, u8), String> 
     Ok((block, patch.time_delta))
 }
 
-/// returns new block and time_delta
+/// Decodes an initial patch to reconstruct the first block state.
+///
+/// # Arguments
+///
+/// * `patch` - The initial patch (created with `encode_initial_patch`)
+///
+/// # Returns
+///
+/// A tuple of (reconstructed block, time_delta).
 pub fn decode_initial_patch(patch: &Patch) -> Result<(Block, u8), String> {
     let new_bytes = xpatch::decode(&[], patch.delta.as_slice())?;
 
@@ -44,6 +105,23 @@ pub fn decode_initial_patch(patch: &Patch) -> Result<(Block, u8), String> {
 }
 
 // ============ Block Definition Macro ============
+
+/// Macro for defining block content types with automatic serialization.
+///
+/// Generates:
+/// - `BlockContent` enum with all block variants
+/// - `Block` struct wrapping content with id/timestamp
+/// - Serde implementations with type/version tagging
+/// - Helper methods for type introspection
+///
+/// # Usage
+///
+/// ```ignore
+/// define_blocks! {
+///     ParagraphV1 => ParagraphV1, "paragraph", 1;
+///     HeadingV1 => HeadingV1, "heading", 1;
+/// }
+/// ```
 #[macro_export]
 macro_rules! define_blocks {
     ($(

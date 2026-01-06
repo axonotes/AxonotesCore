@@ -1,3 +1,29 @@
+//! # Key Rotation Module
+//!
+//! Handles document key rotation for secure user management.
+//!
+//! ## Why Rotate Keys?
+//!
+//! When sharing a document with new users or removing users, keys are rotated to:
+//! 1. **Adding users**: Ensure the new user gets access from the rotation point forward
+//! 2. **Removing users**: Ensure removed users cannot decrypt content created after removal
+//!
+//! ## Rotation Process
+//!
+//! 1. Generate new ChaCha20 encryption key and Ed25519 signing keypair
+//! 2. Create snapshots of all blocks at the new key's timestamp
+//! 3. Re-encrypt the new key for each remaining user (role-based)
+//! 4. Re-encrypt all version tags with the new key
+//! 5. Sign the entire rotation payload for verification
+//! 6. Submit to server in a single atomic operation
+//!
+//! ## Security Properties
+//!
+//! - New key is encrypted per-user with their X25519 public key
+//! - Readers only receive encryption key (can read, not sign)
+//! - Editors/Owners receive full key including signing capability
+//! - Snapshots ensure old content is preserved with old keys
+
 use crate::batch_handler::block_getter::{get_blocks, BlockData};
 use crate::batch_handler::block_type_helpers::encode_initial_patch;
 use crate::crypto::chacha::generate_key;

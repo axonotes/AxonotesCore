@@ -1,6 +1,30 @@
+//! # Global App Handle
+//!
+//! Provides global access to the Tauri `AppHandle` for emitting events
+//! from anywhere in the application.
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! // During Tauri setup
+//! app_handle::init(app.handle().clone());
+//!
+//! // Later, to emit events
+//! app_handle::emit("my-event", payload)?;
+//! ```
+//!
+//! ## Why Global?
+//!
+//! SpacetimeDB callbacks and background tasks don't have access to
+//! Tauri's managed state. The global handle enables event emission
+//! from anywhere.
+
 use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter};
 
+/// Global storage for the Tauri app handle.
+///
+/// Initialized once during `setup()` and accessed throughout the app lifetime.
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 /// Initialize the global app handle (call once during setup)

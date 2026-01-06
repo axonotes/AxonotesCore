@@ -1,6 +1,30 @@
-//! Live lock events
+//! # Live Lock Events
 //!
 //! Events for real-time block locking during collaborative editing.
+//!
+//! ## Lock Lifecycle
+//!
+//! ```text
+//! User starts editing → block-locked
+//!                    ↓
+//! User stops editing → block-unlocked
+//!                    or
+//! 60 seconds timeout → block-lock-expired
+//! ```
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `block-locked` | User acquired lock | doc_id, block_id, user_id, locked_at |
+//! | `block-unlocked` | User released lock | doc_id, block_id, user_id |
+//! | `block-lock-expired` | Lock timed out | doc_id, block_id, user_id |
+//!
+//! ## Frontend Handling
+//!
+//! - Show lock indicator on block (solid line = locked, dotted = focused)
+//! - Display editor's name/avatar
+//! - Disable editing for locked blocks (other users)
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

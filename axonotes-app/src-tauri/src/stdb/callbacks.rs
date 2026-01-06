@@ -1,3 +1,27 @@
+//! # SpacetimeDB Callbacks
+//!
+//! Handles real-time database change events from SpacetimeDB subscriptions.
+//!
+//! ## Callback Types
+//!
+//! | Table | Event | Action |
+//! |-------|-------|--------|
+//! | `accessible_live_blocks` | insert | Emit `block-locked` event |
+//! | `accessible_live_blocks` | delete | Emit `block-unlocked` event |
+//! | `user_metadata` | insert | Emit `document-access-granted` |
+//! | `user_metadata` | delete | Emit `document-access-revoked` |
+//!
+//! ## Lock Expiry
+//!
+//! A background task runs every 10 seconds to check for expired locks.
+//! Locks expire after 60 seconds of inactivity. The `EXPIRED_LOCKS` set
+//! prevents duplicate expiry events for the same lock.
+//!
+//! ## Architecture
+//!
+//! Callbacks are registered once during connection setup and fire
+//! automatically when SpacetimeDB pushes row changes via WebSocket.
+
 use super::*;
 use crate::events::{
     emit_block_lock_expired, emit_block_locked, emit_block_unlocked, emit_document_access_granted,
@@ -16,7 +40,11 @@ const LOCK_TIMEOUT_MS: u128 = 60_000;
 /// How often to check for expired locks (10 seconds)
 const EXPIRY_CHECK_INTERVAL_MS: u64 = 10_000;
 
-/// Track which locks we've already emitted expiry events for
+/// Track which locks we've already emitted expiry events for.
+///
+/// This prevents emitting multiple `block-lock-expired` events for the same
+/// lock before the server cleans it up. Entries are removed when the lock
+/// is released or re-acquired.
 static EXPIRED_LOCKS: OnceCell<Arc<Mutex<HashSet<String>>>> = OnceCell::new();
 
 fn get_expired_locks() -> Arc<Mutex<HashSet<String>>> {
@@ -25,6 +53,10 @@ fn get_expired_locks() -> Arc<Mutex<HashSet<String>>> {
         .clone()
 }
 
+/// Registers all SpacetimeDB table change callbacks.
+///
+/// Called once during connection setup. Callbacks are triggered
+/// automatically by the SpacetimeDB SDK when subscribed data changes.
 pub fn register_callbacks(conn: &DbConnection) {
     // Register live block insert callback (block locked)
     conn.db

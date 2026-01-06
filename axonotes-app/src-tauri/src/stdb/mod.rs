@@ -1,3 +1,42 @@
+//! # SpacetimeDB Integration Module
+//!
+//! Manages connections to SpacetimeDB for real-time synchronization.
+//!
+//! ## Architecture
+//!
+//! Each user profile has its own SpacetimeDB connection, allowing multiple
+//! accounts to be logged in simultaneously. Connections are created lazily
+//! when first accessed and maintained until explicitly disconnected.
+//!
+//! ## Submodules
+//!
+//! - **`callbacks`**: SpacetimeDB subscription and reducer callbacks
+//! - **`context`**: Profile-scoped context for database operations
+//! - **`reducer_helper`**: Helper macros for calling reducers with await
+//!
+//! ## Subscriptions
+//!
+//! The client subscribes to filtered views:
+//! - `user`: Current user's account data
+//! - `user_metadata`: Document metadata visible to user
+//! - `user_document_keys`: Encrypted document keys for user
+//! - `accessible_live_blocks`: Real-time collaborative edits
+//! - `manageable_permissions`: Permissions for owned/editable documents
+//! - `public_user_keys`: Public keys of collaborators
+//! - `accessible_version_tags`: Version tags for accessible documents
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! // Get context for active profile
+//! let ctx = stdb::active_profile();
+//! ctx.create_document(...).await?;
+//!
+//! // Get context for specific profile
+//! let ctx = stdb::profile("profile_123");
+//! ctx.disconnect().await?;
+//! ```
+
 #![allow(dead_code)]
 
 use crate::config::StdbConfig;

@@ -1,8 +1,42 @@
+//! # Ed25519 Digital Signatures
+//!
+//! Provides Ed25519 key generation, signing, and verification for authentication
+//! and data integrity.
+//!
+//! ## Features
+//!
+//! - **32-byte keys**: Compact key sizes (32 bytes private, 32 bytes public)
+//! - **64-byte signatures**: Deterministic signatures for the same message
+//! - **Fast verification**: Batch verification support (via ed25519-dalek)
+//!
+//! ## Use Cases
+//!
+//! - Signing batch uploads to prove authorship
+//! - Verifying document key rotation requests
+//! - Authenticating user key updates
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! let (private_key, public_key) = generate_ed25519_keys();
+//! let signature = sign_message(&private_key, b"message")?;
+//! let valid = verify_signature(&public_key, b"message", &signature)?;
+//! ```
+
 #![allow(dead_code)]
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand_core::OsRng;
 
+/// Generates a new Ed25519 keypair for digital signatures.
+///
+/// Uses the operating system's secure random number generator.
+///
+/// # Returns
+///
+/// A tuple of `(private_key, public_key)`, both 32 bytes.
+/// - The private key should be kept secret and encrypted at rest
+/// - The public key can be shared freely for signature verification
 pub fn generate_ed25519_keys() -> ([u8; 32], [u8; 32]) {
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
@@ -13,6 +47,23 @@ pub fn generate_ed25519_keys() -> ([u8; 32], [u8; 32]) {
     (private_bytes, public_bytes)
 }
 
+/// Signs a message using an Ed25519 private key.
+///
+/// Ed25519 signatures are deterministic: signing the same message with the
+/// same key always produces the same signature.
+///
+/// # Arguments
+///
+/// * `private_key` - The 32-byte Ed25519 private key
+/// * `message` - The message bytes to sign (any length)
+///
+/// # Returns
+///
+/// A 64-byte signature.
+///
+/// # Errors
+///
+/// Returns an error if the private key is malformed.
 pub fn sign_message(
     private_key: &[u8; 32],
     message: &[u8],
@@ -22,6 +73,21 @@ pub fn sign_message(
     Ok(signature.to_bytes())
 }
 
+/// Verifies an Ed25519 signature against a message and public key.
+///
+/// # Arguments
+///
+/// * `public_key` - The 32-byte Ed25519 public key of the signer
+/// * `message` - The original message that was signed
+/// * `signature` - The 64-byte signature to verify
+///
+/// # Returns
+///
+/// `true` if the signature is valid, `false` otherwise.
+///
+/// # Errors
+///
+/// Returns an error if the public key is malformed (not a valid curve point).
 pub fn verify_signature(
     public_key: &[u8; 32],
     message: &[u8],

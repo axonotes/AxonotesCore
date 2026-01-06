@@ -1,3 +1,29 @@
+//! # User Key Encryption
+//!
+//! Handles encryption and decryption of user's cryptographic keypairs.
+//!
+//! ## Key Storage Model
+//!
+//! User private keys are encrypted twice:
+//! 1. **Password encryption**: For normal login
+//! 2. **Mnemonic encryption**: For recovery if password is forgotten
+//!
+//! Both encryption methods use Argon2id key derivation with different context
+//! strings to produce different encryption keys from the same input.
+//!
+//! ## Key Types
+//!
+//! - **Encryption keys (X25519)**: For encrypting/decrypting document keys
+//! - **Signing keys (Ed25519)**: For signing operations (delete, key rotation, etc.)
+//!
+//! ## Context Separation
+//!
+//! The same password/mnemonic derives DIFFERENT keys for encryption vs signing:
+//! - `MASTER_PASSWORD_ENCRYPTION_CONTEXT` → key for encrypting the X25519 private key
+//! - `MASTER_PASSWORD_SIGNING_CONTEXT` → key for encrypting the Ed25519 private key
+//!
+//! This ensures that compromise of one context doesn't reveal the other.
+
 #![allow(clippy::needless_pass_by_value)] // API design: encryption functions take ownership for security
 
 use crate::crypto::bip39::{
@@ -13,11 +39,16 @@ use crate::database::keys::Keys;
 use crate::stdb::context::get_message_to_sign;
 use crate::stdb_bindings::User;
 
+/// Decrypted user keypair bundle (in-memory only, never stored).
 #[derive(Clone)]
 pub struct UserKeysDecrypted {
+    /// 32-byte X25519 public key (can be shared publicly)
     pub public_encryption_key: Vec<u8>,
+    /// 32-byte X25519 private key (must remain secret)
     pub private_encryption_key: Vec<u8>,
+    /// 32-byte Ed25519 public key (can be shared publicly)
     pub public_signing_key: Vec<u8>,
+    /// 32-byte Ed25519 private key (must remain secret)
     pub private_signing_key: Vec<u8>,
 }
 
@@ -32,13 +63,23 @@ impl From<Keys> for UserKeysDecrypted {
     }
 }
 
+/// Encrypted user keypair bundle (safe for storage/transmission).
+///
+/// Public keys are stored in plaintext. Private keys are encrypted
+/// with both password and mnemonic for redundant recovery.
 #[derive(Clone)]
 pub struct UserKeysEncrypted {
+    /// 32-byte X25519 public key (plaintext)
     pub public_encryption_key: Vec<u8>,
+    /// X25519 private key encrypted with password-derived key
     pub pwd_encrypted_private_encryption_key: Vec<u8>,
+    /// X25519 private key encrypted with mnemonic-derived key
     pub mnemonic_encrypted_private_encryption_key: Vec<u8>,
+    /// 32-byte Ed25519 public key (plaintext)
     pub public_signing_key: Vec<u8>,
+    /// Ed25519 private key encrypted with password-derived key
     pub pwd_encrypted_private_signing_key: Vec<u8>,
+    /// Ed25519 private key encrypted with mnemonic-derived key
     pub mnemonic_encrypted_private_signing_key: Vec<u8>,
 }
 

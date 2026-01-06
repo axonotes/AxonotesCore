@@ -30,12 +30,12 @@ use tokio::sync::Mutex;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// // Use active profile
-/// stdb::active_profile().create_user(...).await?;
+/// stdb::active_profile().create_user(keys).await?;
 ///
 /// // Use specific profile
-/// stdb::profile("profile_123").update_keys(...).await?;
+/// stdb::profile("profile_123").update_encryption_keys(keys, signature).await?;
 /// ```
 pub struct ProfileStdbContext {
     profile_id: Option<String>,

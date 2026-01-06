@@ -1,3 +1,19 @@
+//! # Batch Storage
+//!
+//! Manages local storage of document batches (groups of patches).
+//!
+//! ## Batch Lifecycle
+//!
+//! 1. **Created locally**: Saved as "pending" (`pending = 1`)
+//! 2. **Synced to server**: Marked as synced (`pending = 0`)
+//! 3. **Received from server**: Saved directly as synced
+//!
+//! ## Key Concepts
+//!
+//! - **Initial batches**: Mark the start of a new key rotation period (`is_initial = 1`)
+//! - **Snapshots**: Consolidated block state for faster reconstruction (separate table)
+//! - **Timestamp ordering**: All queries order by timestamp for deterministic replay
+
 #![allow(dead_code)]
 
 use crate::database::helpers::SqlU128;

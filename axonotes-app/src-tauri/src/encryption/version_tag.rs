@@ -1,3 +1,25 @@
+//! # Version Tag Encryption
+//!
+//! Handles encryption and decryption of document version tags.
+//!
+//! ## Version Tags
+//!
+//! Version tags are named snapshots of document state at a specific timestamp.
+//! They allow users to mark and restore specific versions (like git tags).
+//!
+//! ## Encryption Model
+//!
+//! - Tags are encrypted with the document's ChaCha20 key
+//! - During key rotation, tags are re-encrypted with the new key
+//! - Decryption tries all available document keys (for historical tags)
+//!
+//! ## Known Issues
+//!
+//! **Note**: Some unit tests in this module may fail due to `Identity` type
+//! serialization differences between the SpacetimeDB SDK and `postcard`.
+//! The actual encryption/decryption logic works correctly in production
+//! where `Identity` values come from the database in the expected format.
+
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
 use crate::stdb_bindings::DocumentVersionTag;

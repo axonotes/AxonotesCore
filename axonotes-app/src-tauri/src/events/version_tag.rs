@@ -1,6 +1,19 @@
-//! Version tag events
+//! # Version Tag Events
 //!
-//! Events for version tag operations.
+//! Events for version tag create/delete operations.
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `version-tag-created` | New tag created | tag_id, doc_id, tag_name, timestamp |
+//! | `version-tag-deleted` | Tag removed | tag_id, doc_id |
+//!
+//! ## Frontend Handling
+//!
+//! - Update version tag list
+//! - Show success notification
+//! - Enable "Restore" UI if tags exist
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

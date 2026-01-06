@@ -1,3 +1,27 @@
+//! # Document Sharing Commands
+//!
+//! Tauri commands for sharing documents with other users.
+//!
+//! ## Sharing Flow
+//!
+//! 1. Owner calls `create_share` to generate a share code
+//! 2. Code is shared out-of-band (chat, email, etc.)
+//! 3. Joiner calls `join_share` with the code
+//! 4. Owner's subscription auto-accepts and encrypts keys for joiner
+//! 5. Joiner receives document access via normal subscription
+//!
+//! ## Role Management
+//!
+//! - **Owner**: Full control, can transfer ownership, manage collaborators
+//! - **Editor**: Can edit content and create version tags
+//! - **Reader**: Read-only access
+//!
+//! ## Security
+//!
+//! - Key rotation occurs when editors are downgraded or removed
+//! - All operations require Ed25519 signatures for authorization
+//! - Keys are encrypted per-user using X25519
+
 use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
@@ -15,7 +39,7 @@ use crate::utils::vec_array::ByteArrayConversion;
 use serde::Serialize;
 use spacetimedb_sdk::Identity;
 
-/// Collaborator info returned to frontend
+/// Collaborator information returned to the frontend.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Collaborator {

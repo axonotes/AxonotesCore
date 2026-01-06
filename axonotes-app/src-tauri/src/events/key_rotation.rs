@@ -1,6 +1,25 @@
-//! Key rotation events
+//! # Key Rotation Events
 //!
 //! Events for document key rotation operations.
+//!
+//! ## When Keys Rotate
+//!
+//! Key rotation occurs when:
+//! - User is removed from a shared document
+//! - Share with `full_history=false` completes
+//! - Owner explicitly rotates keys for security
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `document-keys-rotated` | New encryption key active | doc_id, new_key_timestamp |
+//!
+//! ## Security Note
+//!
+//! After key rotation, old keys remain valid for existing content.
+//! New content is encrypted with the rotated key. Users without
+//! access to the new key cannot decrypt new content.
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

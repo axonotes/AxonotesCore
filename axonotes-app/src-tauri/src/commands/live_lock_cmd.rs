@@ -1,9 +1,41 @@
+//! # Live Block Locking Commands
+//!
+//! Tauri commands for real-time collaborative block editing.
+//!
+//! ## Lock States
+//!
+//! Blocks can be in three visual states for collaborators:
+//! - **Locked (solid line)**: User is actively editing, others see current content
+//! - **Focused (dotted line)**: User's cursor is in block but not editing
+//! - **Unlocked (no line)**: Block is free for anyone to edit
+//!
+//! ## Lock Lifecycle
+//!
+//! 1. `request_lock`: User starts editing → solid line for others
+//! 2. `update_live_block`: User types → others see content in real-time
+//! 3. `release_lock_focused`: User stops typing but stays in block → dotted line
+//! 4. `release_lock_blur`: User leaves block → no line
+//!
+//! ## Timeout
+//!
+//! Locks automatically expire after 60 seconds to prevent orphaned locks
+//! from disconnected users.
+
 use crate::batch_handler::block_types::Block;
 use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::stdb;
 
-/// Call this function to try to lock a block. If successful the block is now locked for this user
-/// and the frontend can show the complete line
+/// Requests a lock on a block for editing.
+///
+/// If successful, the block is locked for this user and collaborators
+/// will see a solid line indicator with the live content.
+///
+/// # Arguments
+///
+/// * `doc_id` - Document containing the block
+/// * `block_id` - Block to lock
+/// * `content` - Current block content to show collaborators
+/// * `username` - Display name for the lock indicator
 #[tauri::command]
 pub async fn request_lock(
     doc_id: String,
@@ -16,9 +48,10 @@ pub async fn request_lock(
         .await
 }
 
-/// CHANGE TO DOTTED LINE
-/// Call this when the user just removes the lock but still is focused on the block
-/// so others see the dotted line.
+/// Releases lock but keeps focus indicator (dotted line).
+///
+/// Call when user stops typing but cursor remains in the block.
+/// Collaborators will see a dotted line instead of solid.
 #[tauri::command]
 pub async fn release_lock_focused(doc_id: String, block_id: u64) -> Result<(), String> {
     stdb::active_profile()
@@ -26,9 +59,10 @@ pub async fn release_lock_focused(doc_id: String, block_id: u64) -> Result<(), S
         .await
 }
 
-/// REMOVE LINE
-/// Call this when the user removes the lock AND unfocuses/blurs/goes out of the block
-/// so others DON'T see any line anymore
+/// Fully releases lock and removes all indicators.
+///
+/// Call when user leaves the block entirely (blur/unfocus).
+/// Collaborators will no longer see any indicator.
 #[tauri::command]
 pub async fn release_lock_blur(doc_id: String, block_id: u64) -> Result<(), String> {
     stdb::active_profile()
@@ -36,7 +70,9 @@ pub async fn release_lock_blur(doc_id: String, block_id: u64) -> Result<(), Stri
         .await
 }
 
-/// Get all locks on a document
+/// Gets all active locks on a document.
+///
+/// Returns live blocks showing who is editing which blocks.
 #[tauri::command]
 pub async fn get_document_locks(doc_id: String) -> Result<Vec<DecryptedLiveBlock>, String> {
     let all_live_blocks: Vec<DecryptedLiveBlock> =
@@ -47,8 +83,11 @@ pub async fn get_document_locks(doc_id: String) -> Result<Vec<DecryptedLiveBlock
         .collect())
 }
 
-/// Update the content for a live block. This does not create a batch or store the content permanently
-/// this is just for visuals so others can see the content in realtime.
+/// Updates live block content for real-time collaboration.
+///
+/// This does NOT persist the content - it's purely for showing
+/// collaborators what is being typed in real-time. Call this
+/// on each keystroke while holding a lock.
 #[tauri::command]
 pub async fn update_live_block(
     doc_id: String,

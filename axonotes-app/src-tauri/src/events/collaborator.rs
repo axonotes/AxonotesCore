@@ -1,6 +1,22 @@
-//! Collaborator events
+//! # Collaborator Events
 //!
 //! Events for user permissions and collaboration changes.
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `collaborator-added` | User added to document via share | doc_id, user_id, role |
+//! | `collaborator-removed` | User removed from document | doc_id, user_id |
+//! | `collaborator-role-changed` | User's role updated | doc_id, user_id, old_role, new_role |
+//! | `ownership-transferred` | Document owner changed | doc_id, old_owner, new_owner |
+//!
+//! ## Frontend Handling
+//!
+//! These events should trigger:
+//! - Collaborator list refresh
+//! - Permission UI updates
+//! - Notification toasts
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};

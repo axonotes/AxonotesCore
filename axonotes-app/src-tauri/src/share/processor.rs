@@ -1,3 +1,25 @@
+//! # Share Processor
+//!
+//! Core logic for processing share join requests.
+//!
+//! ## Responsibilities
+//!
+//! When a user joins a share session, this module:
+//! 1. Determines history access level (full or from join time)
+//! 2. Rotates keys if needed (no-history shares)
+//! 3. Encrypts appropriate keys for the joiner
+//! 4. Calls the add_user_to_document reducer
+//!
+//! ## History Modes
+//!
+//! - **Full History**: Joiner receives all historical keys, can decrypt all content
+//! - **No History**: Keys are rotated first, joiner only gets new key
+//!
+//! ## Role-Based Key Access
+//!
+//! - **Owner/Editor**: Receive encryption + signing keys (can edit)
+//! - **Reader**: Receive encryption key only (can read)
+
 use super::key_rotation::{encrypt_key_for_user, rotate_keys_for_share};
 use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
@@ -9,7 +31,7 @@ use crate::stdb_bindings::{EncryptedKeyEntry, Role};
 use crate::utils::vec_array::ByteArrayConversion;
 use spacetimedb_sdk::Identity;
 
-/// Process a joiner by encrypting keys and adding them to the document
+/// Processes a user joining a share session.
 ///
 /// This is the core logic that runs when a user joins a share session.
 ///

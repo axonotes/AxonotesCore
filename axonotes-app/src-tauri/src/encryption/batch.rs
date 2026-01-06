@@ -1,3 +1,17 @@
+//! # Batch Encryption and Decryption
+//!
+//! Handles encryption and decryption of document batches (groups of patches).
+//!
+//! ## Batch Structure
+//!
+//! A batch contains patches for a specific block, encrypted with the document's
+//! current encryption key. The key is selected based on the batch timestamp.
+//!
+//! ## Initial Batches
+//!
+//! When a batch's timestamp equals its key's timestamp, it's marked as "initial".
+//! Initial batches represent the starting state after a key rotation.
+
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
 use crate::encryption::helpers::find_correct_decryption_key;
@@ -5,39 +19,57 @@ use crate::stdb_bindings::DocumentBatch;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 
+/// Trait for decrypting a vector of document batches.
 pub trait DecryptDocumentBatchVec {
+    /// Decrypts all batches using the appropriate key from the provided key set.
     fn decrypt_all(
         self,
         document_keys: &[DecryptedDocumentKey],
     ) -> Result<Vec<DecryptedBatch>, String>;
 }
 
+/// Trait for encrypting a vector of decrypted batches.
 #[allow(dead_code)]
 pub trait EncryptDocumentBatchVec {
+    /// Encrypts all batches with the provided document key.
     fn encrypt_all(
         self,
         latest_document_key: &DecryptedDocumentKey,
     ) -> Result<Vec<DocumentBatch>, String>;
 }
 
+/// A single change operation within a batch.
+///
+/// Patches are applied sequentially to reconstruct block state.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Patch {
+    /// The binary delta (change) data
     pub delta: Vec<u8>,
+    /// Time offset in seconds from batch timestamp
     pub time_delta: u8,
 }
 
+/// The decrypted payload of a batch.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BatchData {
+    /// The block this batch applies to
     pub block_id: u64,
+    /// Ordered list of patches to apply
     pub patches: Vec<Patch>,
 }
 
+/// A decrypted document batch ready for processing.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedBatch {
+    /// True if this is an initial batch (snapshot) after key rotation
     pub is_initial: bool,
+    /// Unique batch identifier
     pub batch_id: String,
+    /// Document this batch belongs to
     pub doc_id: String,
+    /// Timestamp for ordering (microseconds since epoch)
     pub timestamp: u128,
+    /// The decrypted batch payload
     pub batch_data: BatchData,
 }
 

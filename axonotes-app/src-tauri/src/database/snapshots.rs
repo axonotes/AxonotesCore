@@ -1,3 +1,27 @@
+//! # Snapshot Storage
+//!
+//! Manages point-in-time snapshots for key rotation scenarios.
+//!
+//! ## When Snapshots Are Created
+//!
+//! Snapshots are created during key rotation when a user is removed or
+//! a no-history share completes. They capture the full block state at
+//! the rotation timestamp.
+//!
+//! ## Snapshot vs Batch
+//!
+//! - **Batch**: Stores delta patches between versions (incremental)
+//! - **Snapshot**: Stores complete block state (absolute)
+//!
+//! Snapshots always have `is_initial = 1` because they represent
+//! a complete starting point, not a delta from a previous state.
+//!
+//! ## Purpose
+//!
+//! When keys are rotated, users without the new key can still read
+//! historical content up to the snapshot. New content uses new keys
+//! and builds from the snapshot.
+
 #![allow(dead_code)]
 
 use crate::database::helpers::SqlU128;

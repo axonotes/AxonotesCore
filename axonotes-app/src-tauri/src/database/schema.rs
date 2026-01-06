@@ -1,6 +1,35 @@
+//! # Database Schema
+//!
+//! Defines the SQLite database schema for local data persistence.
+//!
+//! ## Tables
+//!
+//! | Table | Purpose |
+//! |-------|---------|
+//! | `profiles` | User login sessions (email, tokens, active flag) |
+//! | `keys` | User encryption/signing keys (per identity) |
+//! | `batches` | Document edit batches (synced and pending) |
+//! | `snapshots` | Point-in-time block snapshots for key rotation |
+//!
+//! ## Index Strategy
+//!
+//! Indexes are optimized for common query patterns:
+//! - Lookup by `doc_id` for document queries
+//! - Lookup by `doc_id + block_id` for block reconstruction
+//! - Lookup by `doc_id + timestamp` for time-travel queries
+//! - Partial indexes on `is_initial = 1` for efficient snapshot finding
+//!
+//! ## Timestamps
+//!
+//! Timestamps are stored as 16-byte big-endian blobs (`BLOB NOT NULL`)
+//! using the `SqlU128` helper. This preserves sort order in SQL.
+
 use rusqlite::{Connection, Result};
 
-/// Initialize all database tables and indexes
+/// Initialize all database tables and indexes.
+///
+/// Called once when the database is first opened. Uses `CREATE IF NOT EXISTS`
+/// to be idempotent on subsequent runs.
 pub fn init_schema(conn: &Connection) -> Result<()> {
     // Enable foreign keys
     conn.execute("PRAGMA foreign_keys = ON", [])?;

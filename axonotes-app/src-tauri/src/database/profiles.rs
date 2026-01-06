@@ -1,3 +1,18 @@
+//! # User Profile Storage
+//!
+//! Manages storage of user profiles and authentication tokens.
+//!
+//! ## Profile Management
+//!
+//! - Multiple profiles can exist (multi-account support)
+//! - Only one profile is "active" at a time
+//! - Profiles store OAuth tokens for SpacetimeDB authentication
+//!
+//! ## Sync Tracking
+//!
+//! Each profile tracks its last batch sync time (`last_batch_sync`) to enable
+//! incremental sync on reconnection.
+
 #![allow(dead_code)]
 
 use crate::database::helpers::SqlU128;

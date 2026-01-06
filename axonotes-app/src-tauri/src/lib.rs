@@ -1,3 +1,23 @@
+//! # Axonotes Application Library
+//!
+//! This is the core library for the Axonotes desktop application, built with Tauri.
+//!
+//! ## Architecture Overview
+//!
+//! The application follows a modular architecture with clear separation of concerns:
+//!
+//! - **`batch_handler`**: Manages document batches and block operations (CRDT-like sync)
+//! - **`commands`**: Tauri command handlers exposed to the frontend
+//! - **`crypto`**: Cryptographic primitives (ChaCha20-Poly1305, Ed25519, X25519, Argon2)
+//! - **`database`**: Local SQLite database for offline storage
+//! - **`encryption`**: High-level encryption/decryption for documents, batches, and user data
+//! - **`events`**: Event emission to the frontend via Tauri's event system
+//! - **`share`**: Document sharing and key rotation logic
+//! - **`stdb`**: SpacetimeDB integration for real-time sync
+//! - **`stdb_bindings`**: Generated bindings for SpacetimeDB tables and reducers
+//! - **`utils`**: Common utilities (timestamps, byte array conversions)
+//! - **`workos_auth`**: WorkOS-based authentication
+
 use tauri::Manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 

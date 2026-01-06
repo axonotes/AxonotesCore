@@ -1,6 +1,33 @@
-//! Sync status events
+//! # Sync Status Events
 //!
 //! Events for batch synchronization status.
+//!
+//! ## Sync Flow
+//!
+//! ```text
+//! Batches pending → sync-started (batch_count)
+//!       ↓
+//! Each batch sent → sync-progress (synced/total)
+//!       ↓
+//! All complete → sync-completed
+//!       or
+//! Failure → sync-error
+//! ```
+//!
+//! ## Event Types
+//!
+//! | Event | Trigger | Payload |
+//! |-------|---------|---------|
+//! | `sync-started` | Sync begins | doc_id, batch_count |
+//! | `sync-progress` | Batch synced | doc_id, synced_count, total_count |
+//! | `sync-completed` | All batches synced | doc_id, batch_count |
+//! | `sync-error` | Sync failed | doc_id, error |
+//!
+//! ## Frontend Handling
+//!
+//! - Show sync indicator (spinner/progress)
+//! - Display "Saved" on completion
+//! - Show retry option on error
 
 use crate::app_handle;
 use serde::{Deserialize, Serialize};
