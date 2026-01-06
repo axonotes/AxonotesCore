@@ -423,7 +423,7 @@ pub async fn save_batch(batch: DecryptedBatch) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())??;
 
-    invalidate_block_cache(doc_id, block_id);
+    invalidate_block_cache(doc_id, block_id).await;
     Ok(())
 }
 
@@ -438,7 +438,7 @@ pub async fn save_pending_batch(batch: DecryptedBatch) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())??;
 
-    invalidate_block_cache(doc_id, block_id);
+    invalidate_block_cache(doc_id, block_id).await;
     Ok(())
 }
 
@@ -456,7 +456,7 @@ pub async fn save_batches(batches_list: Vec<DecryptedBatch>) -> Result<(), Strin
     .map_err(|e| e.to_string())??;
 
     for (doc_id, block_id) in to_invalidate {
-        invalidate_block_cache(doc_id, block_id);
+        invalidate_block_cache(doc_id, block_id).await;
     }
     Ok(())
 }
@@ -644,7 +644,7 @@ pub async fn delete_batch(batch: &DecryptedBatch) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())??;
 
-    invalidate_block_cache(doc_id, block_id);
+    invalidate_block_cache(doc_id, block_id).await;
     Ok(())
 }
 

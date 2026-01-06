@@ -319,12 +319,12 @@ mod tests {
         database::save_batch(batch2).await.expect("save failed");
         database::save_batch(batch3).await.expect("save failed");
 
-        // Get v2, caches 110 and 210
+        // Get v2, caches batches up to ts=210
         let _ = get_blocks(doc_id.clone(), vec![1], 210)
             .await
             .expect("get_blocks failed");
 
-        // Now get v3 - should use cached 210 as starting point
+        // Now get v3 - should use cached batches as starting point
         let result = get_blocks(doc_id.clone(), vec![1], 310)
             .await
             .expect("get_blocks failed");
@@ -483,7 +483,6 @@ mod tests {
             .expect("get_blocks failed");
         assert_eq!(get_block_text(&result1.blocks[0].block), "v2");
         let ts1 = result1.blocks[0].timestamp;
-        let seq1 = result1.blocks[0].seq;
 
         // Second call - should hit KNOWN_LATEST fast path (no DB query)
         let result2 = get_blocks(doc_id.clone(), vec![1], u128::MAX)
@@ -491,7 +490,6 @@ mod tests {
             .expect("get_blocks failed");
         assert_eq!(get_block_text(&result2.blocks[0].block), "v2");
         assert_eq!(result2.blocks[0].timestamp, ts1);
-        assert_eq!(result2.blocks[0].seq, seq1);
 
         // Third call with timestamp beyond latest - should also use fast path
         let result3 = get_blocks(doc_id.clone(), vec![1], u128::MAX - 1)
@@ -511,39 +509,36 @@ mod tests {
         let v2 = make_test_block(1, "v2");
         let v3 = make_test_block(1, "v3");
 
-        // Three patches in one batch: v1 at 110, v2 at 120, v3 at 130
-        let patches = vec![
-            make_initial_patch(&v1, 2),
-            make_patch(&v1, &v2, 2),
-            make_patch(&v2, &v3, 2),
-        ];
-        let batch = make_batch(&doc_id, 1, 0, 100, true, patches);
-        database::save_batch(batch).await.expect("save failed");
+        // Three BATCHES (not patches) - batch-level consecutive detection
+        let batch1 = make_batch(&doc_id, 1, 0, 100, true, vec![make_initial_patch(&v1, 2)]);
+        let batch2 = make_batch(&doc_id, 1, 1, 200, false, vec![make_patch(&v1, &v2, 2)]);
+        let batch3 = make_batch(&doc_id, 1, 2, 300, false, vec![make_patch(&v2, &v3, 2)]);
 
-        // Get all states to populate cache with seq 1, 2, 3
+        database::save_batch(batch1).await.expect("save failed");
+        database::save_batch(batch2).await.expect("save failed");
+        database::save_batch(batch3).await.expect("save failed");
+
+        // Get all batches to populate cache
         let result = get_blocks(doc_id.clone(), vec![1], u128::MAX)
             .await
             .expect("get_blocks failed");
         assert_eq!(get_block_text(&result.blocks[0].block), "v3");
-        assert_eq!(result.blocks[0].seq, 3);
 
-        // Now query timestamp 115 (between v1 at 110 and v2 at 120)
-        // Cache has seq=1 at ts=110, seq=2 at ts=120
-        // Since seq 2 == seq 1 + 1, they're consecutive, no patches between
-        // Should return v1 without DB query
-        let result = get_blocks(doc_id.clone(), vec![1], 115)
+        // Query timestamp 150 (between batch1 at ts=100 and batch2 at ts=200)
+        // Cache has batch seq=0 at ts=100, seq=1 at ts=200
+        // Since seq 1 == seq 0 + 1, they're consecutive, no batches between
+        // Should return v1 (from batch1) without DB query
+        let result = get_blocks(doc_id.clone(), vec![1], 150)
             .await
             .expect("get_blocks failed");
         assert_eq!(get_block_text(&result.blocks[0].block), "v1");
-        assert_eq!(result.blocks[0].timestamp, 110);
 
-        // Query timestamp 125 (between v2 at 120 and v3 at 130)
-        // Should return v2 without DB query
-        let result = get_blocks(doc_id.clone(), vec![1], 125)
+        // Query timestamp 250 (between batch2 at ts=200 and batch3 at ts=300)
+        // Should return v2 (from batch2) without DB query
+        let result = get_blocks(doc_id.clone(), vec![1], 250)
             .await
             .expect("get_blocks failed");
         assert_eq!(get_block_text(&result.blocks[0].block), "v2");
-        assert_eq!(result.blocks[0].timestamp, 120);
 
         cleanup(&doc_id).await;
     }
@@ -558,53 +553,33 @@ mod tests {
         let v3 = make_test_block(1, "v3");
         let v4 = make_test_block(1, "v4");
 
-        // Batch 1: v1 at 110, v2 at 120
-        let batch1 = make_batch(
-            &doc_id,
-            1,
-            0,
-            100,
-            true,
-            vec![make_initial_patch(&v1, 2), make_patch(&v1, &v2, 2)],
-        );
+        // Batch 1 at ts=100
+        let batch1 = make_batch(&doc_id, 1, 0, 100, true, vec![make_initial_patch(&v1, 2)]);
         database::save_batch(batch1).await.expect("save failed");
 
-        // Batch 2: v3 at 310, v4 at 320
-        let batch2 = make_batch(
-            &doc_id,
-            1,
-            1,
-            300,
-            false,
-            vec![make_patch(&v2, &v3, 2), make_patch(&v3, &v4, 2)],
-        );
+        // Batch 2 at ts=200
+        let batch2 = make_batch(&doc_id, 1, 1, 200, false, vec![make_patch(&v1, &v2, 2)]);
         database::save_batch(batch2).await.expect("save failed");
 
-        // Get v2 (caches seq 1 and 2)
-        let result = get_blocks(doc_id.clone(), vec![1], 120)
-            .await
-            .expect("get_blocks failed");
-        assert_eq!(get_block_text(&result.blocks[0].block), "v2");
-        assert_eq!(result.blocks[0].seq, 2);
+        // Batch 3 at ts=300
+        let batch3 = make_batch(&doc_id, 1, 2, 300, false, vec![make_patch(&v2, &v3, 2)]);
+        database::save_batch(batch3).await.expect("save failed");
 
-        // Clear cache except through invalidation to simulate partial cache
-        invalidate_doc_cache(doc_id.clone());
+        // Batch 4 at ts=400
+        let batch4 = make_batch(&doc_id, 1, 3, 400, false, vec![make_patch(&v3, &v4, 2)]);
+        database::save_batch(batch4).await.expect("save failed");
 
-        // Get v4 (caches seq 3 and 4)
+        // Get all (caches all 4 batches)
         let result = get_blocks(doc_id.clone(), vec![1], u128::MAX)
             .await
             .expect("get_blocks failed");
         assert_eq!(get_block_text(&result.blocks[0].block), "v4");
-        assert_eq!(result.blocks[0].seq, 4);
 
-        // Now if we query ts=250 (between v2 at 120 and v3 at 310)
-        // Cache might have seq=2 at ts=120 and seq=3 at ts=310
-        // But seq 3 != seq 2 + 1 would mean... wait, they ARE consecutive!
-        // Actually in this case we need to verify the correct behavior
+        // Query ts=250 (between batch2 and batch3)
+        // With consecutive batches cached, should return v2
         let result = get_blocks(doc_id.clone(), vec![1], 250)
             .await
             .expect("get_blocks failed");
-        // Should return v2 since that's the last state before ts=250
         assert_eq!(get_block_text(&result.blocks[0].block), "v2");
 
         cleanup(&doc_id).await;
@@ -645,19 +620,40 @@ mod tests {
         let doc_id = setup_test().await;
         cleanup(&doc_id).await;
 
-        // Create 10 blocks, each with multiple patches
+        // Create 10 blocks, each with multiple batches
         for block_id in 1u64..=10 {
             let v1 = make_test_block(block_id, &format!("block_{}_v1", block_id));
             let v2 = make_test_block(block_id, &format!("block_{}_v2", block_id));
             let v3 = make_test_block(block_id, &format!("block_{}_final", block_id));
 
-            let patches = vec![
-                make_initial_patch(&v1, 2),
-                make_patch(&v1, &v2, 2),
-                make_patch(&v2, &v3, 2),
-            ];
-            let batch = make_batch(&doc_id, block_id, 0, 100, true, patches);
-            database::save_batch(batch).await.expect("save failed");
+            let batch1 = make_batch(
+                &doc_id,
+                block_id,
+                0,
+                100,
+                true,
+                vec![make_initial_patch(&v1, 2)],
+            );
+            let batch2 = make_batch(
+                &doc_id,
+                block_id,
+                1,
+                200,
+                false,
+                vec![make_patch(&v1, &v2, 2)],
+            );
+            let batch3 = make_batch(
+                &doc_id,
+                block_id,
+                2,
+                300,
+                false,
+                vec![make_patch(&v2, &v3, 2)],
+            );
+
+            database::save_batch(batch1).await.expect("save failed");
+            database::save_batch(batch2).await.expect("save failed");
+            database::save_batch(batch3).await.expect("save failed");
         }
 
         // First call - parallel reconstruction of all 10 blocks
@@ -672,7 +668,7 @@ mod tests {
             assert_eq!(get_block_text(&block_data.block), expected);
         }
 
-        // Second call - should be fast (all final states cached and fresh)
+        // Second call - should be fast (all batches cached)
         let result2 = get_blocks(doc_id.clone(), block_ids.clone(), u128::MAX)
             .await
             .expect("get_blocks failed");
@@ -683,10 +679,9 @@ mod tests {
             assert_eq!(get_block_text(&block_data.block), expected);
         }
 
-        // Verify timestamps and seqs match between calls
+        // Verify timestamps match between calls
         for i in 0..10 {
             assert_eq!(result1.blocks[i].timestamp, result2.blocks[i].timestamp);
-            assert_eq!(result1.blocks[i].seq, result2.blocks[i].seq);
         }
 
         cleanup(&doc_id).await;

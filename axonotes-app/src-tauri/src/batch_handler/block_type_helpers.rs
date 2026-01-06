@@ -63,14 +63,6 @@ macro_rules! define_blocks {
             pub content: BlockContent,
         }
 
-        impl Block {
-            pub fn estimated_size(&self) -> usize {
-                // Quick approximation: serialize to JSON and use that length
-                // More CPU but accurate and doesn't need manual maintenance
-                serde_json::to_vec(self).map(|v| v.len()).unwrap_or(256)
-            }
-        }
-
         // --- Deserialization ---
 
         #[derive(Deserialize)]
