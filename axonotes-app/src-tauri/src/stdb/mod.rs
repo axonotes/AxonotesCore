@@ -178,6 +178,9 @@ pub(crate) async fn ensure_connection_for_profile(
 
     log::info!("Creating SpacetimeDB connection for profile {profile_id}");
 
+    // Reset subscription ready flag before setting up new connection
+    callbacks::reset_subscription_ready();
+
     // Build new connection
     let config = StdbConfig::new();
     let conn = build_connection(&config, access_token, profile_id).await?;
@@ -214,8 +217,16 @@ pub(crate) async fn ensure_connection_for_profile(
     // Run in background thread
     conn.run_threaded();
 
-    // Store connection
+    // Store connection (before waiting, so other code can access it)
     map.insert(profile_id.to_string(), Arc::new(Mutex::new(conn)));
+
+    // Release the map lock before blocking wait
+    drop(map);
+
+    // Wait for initial subscriptions to be applied
+    // This ensures the cache is populated before we return
+    log::debug!("Waiting for initial subscriptions...");
+    callbacks::wait_for_subscriptions()?;
 
     log::info!("✓ SpacetimeDB connection established for profile {profile_id}");
     Ok(())

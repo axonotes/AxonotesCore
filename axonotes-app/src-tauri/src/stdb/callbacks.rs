@@ -32,13 +32,14 @@ use crate::utils::timestamp::timestamp;
 use once_cell::sync::OnceCell;
 use spacetimedb_sdk::Table;
 use std::collections::HashSet;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Condvar, Mutex};
 
 /// Lock timeout in milliseconds (60 seconds)
 const LOCK_TIMEOUT_MS: u128 = 60_000;
 /// How often to check for expired locks (10 seconds)
 const EXPIRY_CHECK_INTERVAL_MS: u64 = 10_000;
+/// Timeout for waiting for initial subscriptions (10 seconds)
+const SUBSCRIPTION_TIMEOUT_MS: u64 = 10_000;
 
 /// Track which locks we've already emitted expiry events for.
 ///
@@ -51,6 +52,62 @@ fn get_expired_locks() -> Arc<Mutex<HashSet<String>>> {
     EXPIRED_LOCKS
         .get_or_init(|| Arc::new(Mutex::new(HashSet::new())))
         .clone()
+}
+
+// ==========================================
+// Subscription Readiness Tracking
+// ==========================================
+
+/// Tracks whether initial subscriptions have been applied.
+/// Uses a Condvar to allow waiting for subscriptions without busy-polling.
+static SUBSCRIPTION_READY: OnceCell<Arc<(Mutex<bool>, Condvar)>> = OnceCell::new();
+
+fn get_subscription_ready() -> Arc<(Mutex<bool>, Condvar)> {
+    SUBSCRIPTION_READY
+        .get_or_init(|| Arc::new((Mutex::new(false), Condvar::new())))
+        .clone()
+}
+
+/// Resets the subscription ready flag (call before setting up new connection)
+pub fn reset_subscription_ready() {
+    let ready = get_subscription_ready();
+    if let Ok(mut is_ready) = ready.0.lock() {
+        *is_ready = false;
+    };
+}
+
+/// Waits for initial subscriptions to be applied (with timeout).
+/// Returns Ok(()) if subscriptions were applied, Err if timeout.
+pub fn wait_for_subscriptions() -> Result<(), String> {
+    let ready = get_subscription_ready();
+    let (lock, cvar) = &*ready;
+
+    let guard = lock
+        .lock()
+        .map_err(|e| format!("Failed to acquire subscription lock: {e}"))?;
+
+    // Wait with timeout
+    let timeout = std::time::Duration::from_millis(SUBSCRIPTION_TIMEOUT_MS);
+    let result = cvar
+        .wait_timeout_while(guard, timeout, |is_ready| !*is_ready)
+        .map_err(|e| format!("Failed to wait for subscriptions: {e}"))?;
+
+    if result.1.timed_out() {
+        Err("Timeout waiting for initial subscriptions".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+/// Signals that subscriptions are ready (called from on_subscription_applied callback)
+fn signal_subscription_ready() {
+    let ready = get_subscription_ready();
+    if let Ok(mut is_ready) = ready.0.lock() {
+        if !*is_ready {
+            *is_ready = true;
+            ready.1.notify_all();
+        }
+    };
 }
 
 /// Registers all SpacetimeDB table change callbacks.
@@ -72,13 +129,12 @@ pub fn register_callbacks(conn: &DbConnection) {
                 );
             }
 
-            // Remove from expired set if re-locked
+            // Remove from expired set if re-locked (sync, runs on STDB thread)
             let lock_id = live_block.live_block_id.clone();
-            tokio::spawn(async move {
-                let expired_locks = get_expired_locks();
-                let mut set = expired_locks.lock().await;
+            let expired_locks = get_expired_locks();
+            if let Ok(mut set) = expired_locks.lock() {
                 set.remove(&lock_id);
-            });
+            };
         });
 
     // Register live block delete callback (block unlocked)
@@ -91,13 +147,12 @@ pub fn register_callbacks(conn: &DbConnection) {
                 live_block.user_id.to_hex().to_string(),
             );
 
-            // Remove from expired set when deleted
+            // Remove from expired set when deleted (sync, runs on STDB thread)
             let lock_id = live_block.live_block_id.clone();
-            tokio::spawn(async move {
-                let expired_locks = get_expired_locks();
-                let mut set = expired_locks.lock().await;
+            let expired_locks = get_expired_locks();
+            if let Ok(mut set) = expired_locks.lock() {
                 set.remove(&lock_id);
-            });
+            };
         });
 
     // Register user metadata insert callback (document access granted)
@@ -136,7 +191,9 @@ async fn check_expired_locks() -> Result<(), String> {
 
     let now = timestamp();
     let expired_locks_set = get_expired_locks();
-    let mut expired_set = expired_locks_set.lock().await;
+    let mut expired_set = expired_locks_set
+        .lock()
+        .map_err(|e| format!("Failed to lock expired set: {e}"))?;
 
     for block in live_blocks {
         // Only check blocks that are actually locked
@@ -167,6 +224,8 @@ async fn check_expired_locks() -> Result<(), String> {
 
 pub fn on_subscription_applied(_ctx: &SubscriptionEventContext) {
     log::info!("✓ Subscriptions applied");
+    // Signal that initial subscriptions are ready (first callback wins)
+    signal_subscription_ready();
 }
 
 #[allow(clippy::needless_pass_by_value)] // Signature constrained by SpacetimeDB callback API

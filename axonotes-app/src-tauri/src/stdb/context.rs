@@ -20,6 +20,7 @@ use crate::stdb_bindings::*;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
 use postcard::to_allocvec;
+use spacetimedb_sdk::__codegen::log;
 use spacetimedb_sdk::{DbContext, Identity, Table};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -165,10 +166,13 @@ impl ProfileStdbContext {
 
     /// Get cached live blocks from SpacetimeDB
     pub async fn get_cached_live_blocks(&self) -> Result<Vec<DecryptedLiveBlock>, String> {
+        // Get document keys BEFORE acquiring connection lock to avoid deadlock
+        // (get_cached_document_keys also acquires the connection lock)
+        let cached_document_keys = self.get_cached_document_keys().await?;
+
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
 
-        let cached_document_keys = self.get_cached_document_keys().await?;
         conn.db
             .accessible_live_blocks()
             .iter()
@@ -207,10 +211,11 @@ impl ProfileStdbContext {
         &self,
         doc_id: &str,
     ) -> Result<Vec<DecryptedVersionTag>, String> {
+        // Get document keys BEFORE acquiring connection lock to avoid deadlock
+        let document_keys = self.get_cached_document_keys().await?;
+
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
-
-        let document_keys = self.get_cached_document_keys().await?;
 
         conn.db
             .accessible_version_tags()
@@ -226,8 +231,11 @@ impl ProfileStdbContext {
 
     /// Create a new user in SpacetimeDB with encryption keys
     pub async fn create_user(&self, stdb_keys: UserKeysEncrypted) -> Result<(), String> {
+        log::debug!("[stdb::create_user] Getting connection...");
         let conn = self.get_connection().await?;
+        log::debug!("[stdb::create_user] Locking connection...");
         let conn = conn.lock().await;
+        log::debug!("[stdb::create_user] Connection acquired");
 
         let public_encryption_key = stdb_keys.public_encryption_key;
         let pwd_encrypted_private_encryption_key = stdb_keys.pwd_encrypted_private_encryption_key;
@@ -238,7 +246,8 @@ impl ProfileStdbContext {
         let mnemonic_encrypted_private_signing_key =
             stdb_keys.mnemonic_encrypted_private_signing_key;
 
-        call_reducer_await!(
+        log::info!("[stdb::create_user] Calling create_user reducer...");
+        let result = call_reducer_await!(
             conn,
             create_user,
             public_encryption_key,
@@ -247,7 +256,14 @@ impl ProfileStdbContext {
             public_signing_key,
             pwd_encrypted_private_signing_key,
             mnemonic_encrypted_private_signing_key
-        )
+        );
+
+        match &result {
+            Ok(()) => log::info!("[stdb::create_user] ✓ Reducer completed successfully"),
+            Err(e) => log::error!("[stdb::create_user] ✗ Reducer failed: {e}"),
+        }
+
+        result
     }
 
     /// Update encryption keys (requires signature for verification)
@@ -380,12 +396,13 @@ impl ProfileStdbContext {
         content: &Block,
         username: String,
     ) -> Result<(), String> {
-        let conn = self.get_connection().await?;
-        let conn = conn.lock().await;
-
+        // Get document keys BEFORE acquiring connection lock to avoid deadlock
         let cached_document_keys = self.get_cached_document_keys().await?;
         let latest_document_key =
             find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
+
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
 
         let username_blob =
             to_allocvec(&username).map_err(|e| format!("Error serializing batch data: {e}"))?;
@@ -421,12 +438,13 @@ impl ProfileStdbContext {
         block_id: u64,
         content: &Block,
     ) -> Result<(), String> {
-        let conn = self.get_connection().await?;
-        let conn = conn.lock().await;
-
+        // Get document keys BEFORE acquiring connection lock to avoid deadlock
         let cached_document_keys = self.get_cached_document_keys().await?;
         let latest_document_key =
             find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
+
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
 
         let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
 

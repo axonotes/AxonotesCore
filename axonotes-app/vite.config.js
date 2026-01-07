@@ -37,4 +37,8 @@ export default defineConfig(async () => ({
       $lib: path.resolve("./src/lib"),
     },
   },
+  // Pre-bundle Lucide icons to prevent page reloads during dev
+  optimizeDeps: {
+    include: ["@lucide/svelte"],
+  },
 }));

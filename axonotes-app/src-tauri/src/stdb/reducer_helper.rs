@@ -33,47 +33,77 @@
 ///
 /// This macro wraps the async callback dance required by SpacetimeDB
 /// into a simple synchronous-looking call.
+///
+/// IMPORTANT: The callback runs on SpacetimeDB's background thread (from run_threaded()),
+/// NOT on the Tokio runtime. We must use std::sync primitives, not tokio::sync.
 #[macro_export]
 macro_rules! call_reducer_await {
     ($conn:expr, $reducer_name:ident, $($arg:expr),* $(,)?) => {{
         use tokio::sync::oneshot;
-        use std::sync::Arc;
-        use tokio::sync::Mutex as TokioMutex;
+        use std::sync::{Arc, Mutex as StdMutex};
+        use spacetimedb_sdk::__codegen::log;
+
+        log::info!("[reducer_await] Setting up {} reducer callback...", stringify!($reducer_name));
 
         let (tx, rx) = oneshot::channel::<Result<(), String>>();
-        let tx = Arc::new(TokioMutex::new(Some(tx)));
+        let tx = Arc::new(StdMutex::new(Some(tx)));
 
         // Clone all arguments for comparison
         let expected = ($($arg.clone()),*);
 
         paste::paste! {
             let callback_ref = $conn.reducers.[<on_ $reducer_name>](move |ctx, $($arg),*| {
+                log::info!("[reducer_await] {} callback fired!", stringify!($reducer_name));
+
                 // Check if ALL arguments match
                 let actual = ($($arg.clone()),*);
                 if actual != expected {
+                    log::debug!("[reducer_await] {} callback: args don't match, ignoring", stringify!($reducer_name));
                     return;
                 }
 
+                log::debug!("[reducer_await] {} callback: args match, checking status...", stringify!($reducer_name));
+
                 let result = match &ctx.event.status {
-                    spacetimedb_sdk::Status::Failed(err) => Err(err.to_string()),
-                    spacetimedb_sdk::Status::Committed => Ok(()),
-                    _ => return,
+                    spacetimedb_sdk::Status::Failed(err) => {
+                        log::error!("[reducer_await] {} failed: {}", stringify!($reducer_name), err);
+                        Err(err.to_string())
+                    },
+                    spacetimedb_sdk::Status::Committed => {
+                        log::debug!("[reducer_await] {} committed successfully", stringify!($reducer_name));
+                        Ok(())
+                    },
+                    status => {
+                        log::debug!("[reducer_await] {} unexpected status: {:?}", stringify!($reducer_name), status);
+                        return;
+                    },
                 };
 
-                let tx = tx.clone();
-                tokio::spawn(async move {
-                    if let Some(sender) = tx.lock().await.take() {
+                // Use std::sync::Mutex since this callback runs on SpacetimeDB's
+                // background thread, not the Tokio runtime
+                if let Ok(mut guard) = tx.lock() {
+                    if let Some(sender) = guard.take() {
+                        log::debug!("[reducer_await] {} sending result through channel", stringify!($reducer_name));
                         let _ = sender.send(result);
                     }
-                });
+                }
             });
 
+            log::info!("[reducer_await] Calling {} reducer...", stringify!($reducer_name));
             $conn.reducers.$reducer_name($($arg),*)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    log::error!("[reducer_await] Failed to call {} reducer: {}", stringify!($reducer_name), e);
+                    e.to_string()
+                })?;
 
+            log::info!("[reducer_await] {} reducer called, waiting for callback...", stringify!($reducer_name));
             let result: Result<(), String> = rx.await
-                .map_err(|_| concat!("Reducer ", stringify!($reducer_name), " callback never called").to_string())?;
+                .map_err(|_| {
+                    log::error!("[reducer_await] {} callback never called (channel closed)", stringify!($reducer_name));
+                    concat!("Reducer ", stringify!($reducer_name), " callback never called").to_string()
+                })?;
 
+            log::debug!("[reducer_await] {} completed, cleaning up callback", stringify!($reducer_name));
             $conn.reducers.[<remove_on_ $reducer_name>](callback_ref);
 
             result

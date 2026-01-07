@@ -24,6 +24,8 @@
     "core:tray:default",
     "shell:allow-open",
     "store:default",
-    "decorum:allow-show-snap-overlay"
+    "decorum:allow-show-snap-overlay",
+    "log:default",
+    "window-state:default"
   ]
 }

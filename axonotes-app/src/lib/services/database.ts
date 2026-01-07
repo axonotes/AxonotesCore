@@ -65,4 +65,11 @@ export class DatabaseService {
   static async wipe(): Promise<void> {
     await invoke("wipe_database");
   }
+
+  /**
+   * Lock the database
+   */
+  static async lock(): Promise<void> {
+    await invoke("lock_database");
+  }
 }

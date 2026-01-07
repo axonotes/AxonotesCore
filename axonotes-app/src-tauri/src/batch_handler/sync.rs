@@ -79,10 +79,15 @@ pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), Str
         .on_applied(|ctx| {
             let batches: Vec<DocumentBatch> = ctx.db.accessible_batches().iter().collect();
 
-            tokio::spawn(async move {
-                if let Err(e) = sync_batches_with_data(batches).await {
-                    eprintln!("Batch sync error: {e}");
-                }
+            // This callback runs on SpacetimeDB's background thread, NOT the Tokio runtime.
+            // Use std::thread::spawn with a blocking runtime to run async code.
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    if let Err(e) = sync_batches_with_data(batches).await {
+                        eprintln!("Batch sync error: {e}");
+                    }
+                });
             });
         })
         .on_error(|_error_ctx, error| {

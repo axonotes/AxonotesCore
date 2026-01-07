@@ -50,10 +50,17 @@ use crate::{database, stdb};
 /// BIP-39 mnemonic phrase for key recovery (must be saved by user).
 #[tauri::command]
 pub async fn create_stdb_user(password: String) -> Result<String, String> {
+    log::info!("[create_stdb_user] Starting...");
+
     let mnemonic = get_mnemonic().map_err(|e| format!("Failed to generate mnemonic: {e}"))?;
+    log::debug!("[create_stdb_user] Mnemonic generated");
+
     let decrypted_keys = generate_decrypted_keys();
+    log::debug!("[create_stdb_user] Keys generated");
+
     let encrypted_keys =
         decrypted_to_encrypted(decrypted_keys.clone(), password, mnemonic.clone())?;
+    log::debug!("[create_stdb_user] Keys encrypted");
 
     // Store in local db
     database::save_active_user_keys(Keys {
@@ -64,9 +71,12 @@ pub async fn create_stdb_user(password: String) -> Result<String, String> {
         private_signing_key: decrypted_keys.private_signing_key,
     })
     .await?;
+    log::debug!("[create_stdb_user] Keys saved to local db");
 
     // Store on stdb
+    log::info!("[create_stdb_user] Calling stdb create_user reducer...");
     stdb::active_profile().create_user(encrypted_keys).await?;
+    log::info!("[create_stdb_user] ✓ STDB user created successfully");
 
     Ok(mnemonic)
 }

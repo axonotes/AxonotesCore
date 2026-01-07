@@ -1,6 +1,7 @@
-import {writable, derived, get} from "svelte/store";
+import {derived, get, writable} from "svelte/store";
 import {DatabaseService, type UnlockMode} from "$lib/services/database";
 import {AuthService, type Profile} from "$lib/services/auth";
+import {EncryptionService} from "$lib/services/encryption";
 
 /**
  * Application State
@@ -15,9 +16,17 @@ export const databaseMode = writable<UnlockMode>("none");
 export const activeProfile = writable<Profile | null>(null);
 export const allProfiles = writable<Profile[]>([]);
 
+// Encryption state
+export const stdbUserExists = writable<boolean | null>(null);
+export const keysNeedSync = writable<boolean | null>(null);
+
 // UI state
 export const isInitialized = writable(false);
 export const isLoading = writable(false);
+
+// Flow state - tracks when user is in the middle of setup/sync flow
+// This prevents premature redirects when setting up local security
+export const isSettingUpLocalSecurity = writable(false);
 
 /**
  * Derived state
@@ -30,6 +39,23 @@ export const isAuthenticated = derived(
 export const needsUnlock = derived(
   [databaseUnlocked, databaseMode],
   ([$unlocked, $mode]) => !$unlocked && $mode !== "none"
+);
+
+export const needsSetup = derived(
+  [activeProfile, stdbUserExists],
+  ([$profile, $exists]) => $profile !== null && $exists === false
+);
+
+export const needsSync = derived(
+  [activeProfile, stdbUserExists, keysNeedSync],
+  ([$profile, $exists, $needsSync]) =>
+    $profile !== null && $exists === true && $needsSync === true
+);
+
+export const isReady = derived(
+  [activeProfile, stdbUserExists, keysNeedSync],
+  ([$profile, $exists, $needsSync]) =>
+    $profile !== null && $exists === true && $needsSync === false
 );
 
 /**
@@ -112,11 +138,43 @@ export const app = {
       console.log(
         `[App] Loaded auth: active=${active?.email}, total=${all.length}`
       );
+
+      // If we have an active profile, check encryption state
+      if (active) {
+        await this.checkEncryptionState();
+      }
     } catch (error) {
       console.error("[App] Failed to load auth:", error);
       // Don't throw - this might happen if DB is empty
       activeProfile.set(null);
       allProfiles.set([]);
+    }
+  },
+
+  /**
+   * Check encryption key state
+   * REQUIRES active profile to be set
+   * Can be called from layout to retry on null states
+   */
+  async checkEncryptionState() {
+    console.log("[App] Checking encryption state...");
+    try {
+      const exists = await EncryptionService.doesUserExist();
+      stdbUserExists.set(exists);
+      console.log(`[App] STDB user exists: ${exists}`);
+
+      if (exists) {
+        const needsSync = await EncryptionService.doKeysNeedSync();
+        keysNeedSync.set(needsSync);
+        console.log(`[App] Keys need sync: ${needsSync}`);
+      } else {
+        keysNeedSync.set(false);
+      }
+    } catch (error) {
+      console.error("[App] Failed to check encryption state:", error);
+      // Reset state on error
+      stdbUserExists.set(null);
+      keysNeedSync.set(null);
     }
   },
 
@@ -202,5 +260,59 @@ export const app = {
       console.error("[App] Failed to switch profile:", error);
       throw error;
     }
+  },
+
+  /**
+   * Lock the database
+   * Clears all state and redirects appropriately
+   */
+  async lockDatabase() {
+    try {
+      const mode = get(databaseMode);
+      await DatabaseService.lock();
+
+      // Clear all state
+      databaseUnlocked.set(false);
+      activeProfile.set(null);
+      allProfiles.set([]);
+      stdbUserExists.set(null);
+      keysNeedSync.set(null);
+      isSettingUpLocalSecurity.set(false);
+
+      console.log("[App] Database locked");
+
+      // Use goto-style navigation based on mode
+      // If mode is "none", there's no unlock screen - user needs to login again
+      // If mode is "pin" or "pass", show unlock screen
+      if (mode === "none") {
+        // No encryption - just restart the app flow
+        window.location.href = "/";
+      } else {
+        window.location.href = "/unlock";
+      }
+    } catch (error) {
+      console.error("[App] Failed to lock database:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Start local security setup flow
+   * Call this before navigating to /setup/local-security after sync
+   */
+  startLocalSecuritySetup() {
+    console.log("[App] Starting local security setup flow");
+    isSettingUpLocalSecurity.set(true);
+  },
+
+  /**
+   * Finish local security setup flow
+   * Call this after user completes or skips local security
+   */
+  async finishLocalSecuritySetup() {
+    console.log("[App] Finishing local security setup flow");
+    isSettingUpLocalSecurity.set(false);
+    // Re-initialize to ensure clean state
+    await this.initialize();
   },
 };

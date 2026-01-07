@@ -4,36 +4,114 @@
   import LightSwitch from "$lib/components/LightSwitch.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
   import {onMount} from "svelte";
+  import {goto} from "$app/navigation";
+  import {resolve} from "$app/paths";
   import {
     app,
     isInitialized,
     activeProfile,
     databaseUnlocked,
+    databaseMode,
     needsUnlock,
+    needsSetup,
+    needsSync,
+    isReady,
+    stdbUserExists,
+    keysNeedSync,
+    isSettingUpLocalSecurity,
   } from "$lib/stores/app";
-  import ProfileSwitcher from "$lib/components/ProfileSwitcher.svelte";
+  import {Button} from "$lib/components/ui/button";
+  import {LockKeyhole} from "@lucide/svelte";
+  import * as m from "$lib/paraglide/messages.js";
 
   let {children} = $props();
 
+  // Only show lock button if database has encryption enabled
+  let showLockButton = $derived($databaseMode !== "none");
+
+  // Auth flow pages that don't need redirects when in their flow
+  const authPages = ["/login", "/unlock", "/setup", "/sync"];
+  function isAuthPage(path: string): boolean {
+    return authPages.some((p) => path === p || path.startsWith(p + "/"));
+  }
+
+  // Local security pages - accessible during setup/sync even when isReady
+  function isLocalSecurityPage(path: string): boolean {
+    return path.startsWith("/setup/local-security");
+  }
+
   onMount(async () => {
     await app.initialize();
+    handleRedirects();
+  });
 
-    // Handle redirects after initialization
-    const path = window.location.pathname;
-
-    if ($needsUnlock && path !== "/unlock") {
-      window.location.href = "/unlock";
-    } else if (
-      $databaseUnlocked &&
-      !$activeProfile &&
-      path !== "/login" &&
-      path !== "/unlock"
-    ) {
-      window.location.href = "/login";
-    } else if ($activeProfile && (path === "/login" || path === "/unlock")) {
-      window.location.href = "/";
+  // React to state changes and redirect accordingly
+  $effect(() => {
+    if ($isInitialized) {
+      handleRedirects();
     }
   });
+
+  function handleRedirects() {
+    const path = window.location.pathname;
+
+    // Priority 1: Database needs unlock
+    if ($needsUnlock) {
+      if (path !== "/unlock") {
+        goto(resolve("/unlock"), {replaceState: true});
+      }
+      return;
+    }
+
+    // Priority 2: No active profile → login
+    if ($databaseUnlocked && !$activeProfile) {
+      if (path !== "/login") {
+        goto(resolve("/login"), {replaceState: true});
+      }
+      return;
+    }
+
+    // Priority 3: User doesn't exist on STDB → setup wizard
+    if ($needsSetup) {
+      if (!path.startsWith("/setup")) {
+        goto(resolve("/setup/master-password"), {replaceState: true});
+      }
+      return;
+    }
+
+    // Priority 4: Keys need sync → sync page
+    if ($needsSync) {
+      if (!path.startsWith("/sync")) {
+        goto(resolve("/sync"), {replaceState: true});
+      }
+      return;
+    }
+
+    // Priority 5: Allow local security pages during setup flow
+    // (User is technically ready but we want them to set local security first)
+    if ($isSettingUpLocalSecurity && isLocalSecurityPage(path)) {
+      // Don't redirect - let them finish local security setup
+      return;
+    }
+
+    // Priority 6: Handle null/error states - show error or retry
+    // If we have a profile but encryption state is null, something went wrong
+    if (
+      $activeProfile &&
+      ($stdbUserExists === null || ($stdbUserExists && $keysNeedSync === null))
+    ) {
+      // Error state - encryption check failed. Try to reinitialize.
+      console.warn("[Layout] Encryption state is null, attempting re-check...");
+      app.checkEncryptionState();
+      return;
+    }
+
+    // Priority 7: User is ready → redirect away from auth pages
+    if ($isReady && isAuthPage(path)) {
+      goto(resolve("/app"), {replaceState: true});
+      return;
+    }
+  }
 </script>
 
 <ModeWatcher />
@@ -45,33 +123,31 @@
   <!-- Content area -->
   <div class="flex-1 overflow-auto">
     {#if $isInitialized}
-      {#if $activeProfile && $databaseUnlocked}
-        <!-- App layout with profile switcher -->
-        <div class="bg-background min-h-full">
-          <!-- Header -->
-          <header class="border-b">
-            <div class="container flex h-16 items-center justify-between px-4">
-              <div class="flex items-center gap-2">
-                <h1 class="text-xl font-bold">Axonotes</h1>
-              </div>
-
-              <div class="flex items-center gap-3">
-                <LightSwitch />
-                <div class="w-64">
-                  <ProfileSwitcher />
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <!-- Main content -->
-          <main class="container px-4 py-6">
-            {@render children()}
-          </main>
+      {#if $isReady && !$isSettingUpLocalSecurity}
+        <!-- App layout - only when fully ready (logged in, keys synced) -->
+        <div class="bg-background relative min-h-full">
+          <!-- Top right controls -->
+          <div
+            class="absolute top-0 right-0 z-10 flex items-center gap-1 p-3.5"
+          >
+            {#if showLockButton}
+              <Button
+                variant="ghost"
+                size="icon"
+                onclick={() => app.lockDatabase()}
+                aria-label={m.common_action_lock_database()}
+                title={m.common_action_lock_database()}
+              >
+                <LockKeyhole class="h-4 w-4" />
+              </Button>
+            {/if}
+            <LightSwitch />
+          </div>
+          {@render children()}
         </div>
       {:else}
-        <!-- Show login/unlock page if no active profile or database locked -->
-        <div class="relative min-h-full">
+        <!-- Auth pages: login, unlock, setup, sync -->
+        <div class="relative h-full">
           <div class="absolute top-0 right-0 p-3.5">
             <LightSwitch />
           </div>
@@ -85,7 +161,7 @@
           <div
             class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
           ></div>
-          <p class="text-muted-foreground mt-4">Loading...</p>
+          <p class="text-muted-foreground mt-4">{m.common_loading()}</p>
         </div>
       </div>
     {/if}

@@ -13,6 +13,7 @@
   import {Label} from "$lib/components/ui/label";
   import {Badge} from "$lib/components/ui/badge";
   import {AlertCircle, Lock, Trash2, RefreshCw} from "@lucide/svelte";
+  import * as m from "$lib/paraglide/messages.js";
 
   let password = $state("");
   let confirmPassword = $state("");
@@ -28,25 +29,28 @@
 
     try {
       if (!password) {
-        error = "Please enter a password";
+        error = m.settings_encryption_error_empty();
         return;
       }
 
       if (password !== confirmPassword) {
-        error = "Passwords do not match";
+        error = m.settings_encryption_error_mismatch();
         return;
       }
 
       if (
         mode === "pin" &&
-        (password.length !== 8 || !/^[0-9A-Z]+$/.test(password))
+        (password.length !== 6 || !/^[0-9A-Z]+$/.test(password))
       ) {
-        error = "PIN must be exactly 8 characters (0-9, A-Z uppercase only)";
+        error = m.settings_encryption_error_pin_format();
         return;
       }
 
       await DatabaseService.setEncryption(password, mode);
-      success = `Encryption ${$databaseMode === "none" ? "set" : "updated"}! Mode: ${mode}. Reloading...`;
+      success =
+        $databaseMode === "none"
+          ? m.settings_encryption_success_set({mode})
+          : m.settings_encryption_success_change({mode});
       password = "";
       confirmPassword = "";
 
@@ -60,11 +64,7 @@
   }
 
   async function handleRemoveEncryption() {
-    if (
-      !confirm(
-        "Remove database encryption? This will make your data unencrypted."
-      )
-    ) {
+    if (!confirm(m.settings_danger_remove_confirm())) {
       return;
     }
 
@@ -74,7 +74,7 @@
 
     try {
       await DatabaseService.removeEncryption();
-      success = "Encryption removed! Reloading...";
+      success = m.settings_encryption_success_remove();
 
       // Reload to re-initialize
       setTimeout(() => window.location.reload(), 1500);
@@ -93,7 +93,7 @@
     try {
       const newMode: "pin" | "pass" = $databaseMode === "pin" ? "pass" : "pin";
       await DatabaseService.switchMode(newMode);
-      success = `Switched to ${newMode} mode! Reloading...`;
+      success = m.settings_switch_success({mode: newMode.toUpperCase()});
 
       // Reload to re-initialize
       setTimeout(() => window.location.reload(), 1500);
@@ -105,7 +105,7 @@
   }
 
   async function handleWipe() {
-    if (!confirm("Wipe entire database? This cannot be undone!")) {
+    if (!confirm(m.settings_danger_wipe_confirm())) {
       return;
     }
 
@@ -123,22 +123,24 @@
 
 <div class="space-y-6">
   <div>
-    <h2 class="text-3xl font-bold tracking-tight">Settings</h2>
-    <p class="text-muted-foreground">Manage database security</p>
+    <h2 class="text-3xl font-semibold tracking-tight">{m.settings_title()}</h2>
+    <p class="text-muted-foreground">{m.settings_description()}</p>
   </div>
 
   <div class="grid gap-4 lg:grid-cols-2">
     <!-- Current Status -->
     <Card>
       <CardHeader>
-        <CardTitle>Database Security</CardTitle>
-        <CardDescription>Current encryption status</CardDescription>
+        <CardTitle>{m.settings_security_title()}</CardTitle>
+        <CardDescription>{m.settings_security_description()}</CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <Lock class="h-4 w-4" />
-            <span class="text-sm font-medium">Unlock Mode</span>
+            <span class="text-sm font-medium"
+              >{m.settings_security_mode_label()}</span
+            >
           </div>
           <Badge
             variant={$databaseMode === "none" ? "outline" : "default"}
@@ -158,8 +160,7 @@
               class="mt-0.5 h-4 w-4 text-yellow-700 dark:text-yellow-400"
             />
             <p class="text-sm text-yellow-700 dark:text-yellow-400">
-              Your database is not encrypted. Set a password for better
-              security.
+              {m.settings_security_unencrypted_warning()}
             </p>
           </div>
         {/if}
@@ -169,15 +170,15 @@
     <!-- Set/Change Encryption -->
     <Card>
       <CardHeader>
-        <CardTitle
-          >{$databaseMode === "none"
-            ? "Set Encryption"
-            : "Change Password"}</CardTitle
-        >
+        <CardTitle>
+          {$databaseMode === "none"
+            ? m.settings_encryption_title_set()
+            : m.settings_encryption_title_change()}
+        </CardTitle>
         <CardDescription>
           {$databaseMode === "none"
-            ? "Encrypt your database"
-            : "Update encryption password"}
+            ? m.settings_encryption_description_set()
+            : m.settings_encryption_description_change()}
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -185,38 +186,44 @@
           <div class="flex gap-4">
             <label class="flex cursor-pointer items-center gap-2">
               <input type="radio" bind:group={mode} value="pin" />
-              <span class="text-sm">PIN (8 chars, 0-9A-Z)</span>
+              <span class="text-sm">{m.settings_encryption_mode_pin()}</span>
             </label>
             <label class="flex cursor-pointer items-center gap-2">
               <input type="radio" bind:group={mode} value="pass" />
-              <span class="text-sm">Password (any)</span>
+              <span class="text-sm"
+                >{m.settings_encryption_mode_password()}</span
+              >
             </label>
           </div>
         </div>
 
         <div class="space-y-2">
-          <Label for="new-password"
-            >New {mode === "pin" ? "PIN" : "Password"}</Label
-          >
+          <Label for="new-password">
+            {mode === "pin"
+              ? m.settings_encryption_new_label_pin()
+              : m.settings_encryption_new_label_password()}
+          </Label>
           <Input
             id="new-password"
             type="password"
             placeholder={mode === "pin"
-              ? "8 characters (0-9A-Z)"
-              : "Enter password"}
+              ? m.settings_encryption_new_placeholder_pin()
+              : m.settings_encryption_new_placeholder_password()}
             bind:value={password}
             disabled={loading}
           />
         </div>
 
         <div class="space-y-2">
-          <Label for="confirm-password"
-            >Confirm {mode === "pin" ? "PIN" : "Password"}</Label
-          >
+          <Label for="confirm-password">
+            {mode === "pin"
+              ? m.settings_encryption_confirm_label_pin()
+              : m.settings_encryption_confirm_label_password()}
+          </Label>
           <Input
             id="confirm-password"
             type="password"
-            placeholder="Confirm"
+            placeholder={m.auth_setup_master_confirm_placeholder()}
             bind:value={confirmPassword}
             disabled={loading}
           />
@@ -232,7 +239,9 @@
 
         <div class="flex gap-2">
           <Button onclick={handleSetEncryption} disabled={loading}>
-            {$databaseMode === "none" ? "Set Encryption" : "Change Password"}
+            {$databaseMode === "none"
+              ? m.settings_encryption_button_set()
+              : m.settings_encryption_button_change()}
           </Button>
 
           {#if $databaseMode !== "none"}
@@ -241,7 +250,7 @@
               onclick={handleRemoveEncryption}
               disabled={loading}
             >
-              Remove Encryption
+              {m.settings_encryption_button_remove()}
             </Button>
           {/if}
         </div>
@@ -252,21 +261,21 @@
     {#if $databaseMode === "pin" || $databaseMode === "pass"}
       <Card class="lg:col-span-2">
         <CardHeader>
-          <CardTitle>Switch Unlock Mode</CardTitle>
+          <CardTitle>{m.settings_switch_title()}</CardTitle>
           <CardDescription>
-            Switch between PIN and Password mode without changing your password
+            {m.settings_switch_description()}
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
           <div class="flex items-center justify-between">
             <div class="space-y-1">
               <p class="text-sm font-medium">
-                Current Mode: {$databaseMode.toUpperCase()}
+                {m.settings_switch_current({mode: $databaseMode.toUpperCase()})}
               </p>
               <p class="text-muted-foreground text-xs">
                 {$databaseMode === "pin"
-                  ? "Switch to Password mode to allow any password length and characters"
-                  : "Switch to PIN mode to use an 8-character alphanumeric code"}
+                  ? m.settings_switch_hint_pin()
+                  : m.settings_switch_hint_password()}
               </p>
             </div>
             <Button
@@ -275,7 +284,9 @@
               disabled={loading}
             >
               <RefreshCw class="mr-2 h-4 w-4" />
-              Switch to {$databaseMode === "pin" ? "Password" : "PIN"}
+              {$databaseMode === "pin"
+                ? m.settings_switch_to_password()
+                : m.settings_switch_to_pin()}
             </Button>
           </div>
 
@@ -293,16 +304,18 @@
     <!-- Danger Zone -->
     <Card class="border-destructive/50 lg:col-span-2">
       <CardHeader>
-        <CardTitle class="text-destructive">Danger Zone</CardTitle>
-        <CardDescription>Irreversible actions</CardDescription>
+        <CardTitle class="text-destructive"
+          >{m.settings_danger_title()}</CardTitle
+        >
+        <CardDescription>{m.settings_danger_description()}</CardDescription>
       </CardHeader>
       <CardContent>
         <Button variant="destructive" onclick={handleWipe} disabled={loading}>
           <Trash2 class="mr-2 h-4 w-4" />
-          Wipe Database
+          {m.settings_danger_wipe_button()}
         </Button>
         <p class="text-muted-foreground mt-2 text-xs">
-          Permanently deletes all data and resets encryption.
+          {m.settings_danger_wipe_description()}
         </p>
       </CardContent>
     </Card>

@@ -110,10 +110,15 @@ pub fn setup_share_sync(conn: &DbConnection) -> Result<(), String> {
             let share_requests: Vec<ShareRequest> =
                 ctx.db.pending_share_requests().iter().collect();
 
-            tokio::spawn(async move {
-                if let Err(e) = process_share_updates(pending_shares, share_requests).await {
-                    eprintln!("Share sync error: {e}");
-                }
+            // This callback runs on SpacetimeDB's background thread, NOT the Tokio runtime.
+            // Use std::thread::spawn with a blocking runtime to run async code.
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    if let Err(e) = process_share_updates(pending_shares, share_requests).await {
+                        eprintln!("Share sync error: {e}");
+                    }
+                });
             });
         })
         .on_error(|_ctx, error| {
@@ -161,18 +166,17 @@ async fn process_share_updates(
         .map(|s| (s.share_code.clone(), s.doc_id.clone()))
         .collect();
 
-    // Process share requests (auto-accept joiners)
-    for request in share_requests {
-        // Find the doc_id for this share code
-        let doc_id = match share_code_to_doc.get(&request.share_code) {
-            Some(id) => id,
-            None => continue, // Share code not in our pending shares
-        };
+    // Drop the sessions lock before async processing to avoid holding it
+    // across await points
+    let requests_to_process: Vec<_> = share_requests
+        .into_iter()
+        .filter_map(|request| {
+            let doc_id = share_code_to_doc.get(&request.share_code)?;
+            let session = sessions.get_mut(doc_id)?;
 
-        if let Some(session) = sessions.get_mut(doc_id) {
             // Skip if already processed
             if session.processed_requests.contains(&request.request_id) {
-                continue;
+                return None;
             }
 
             // Mark as processing
@@ -180,33 +184,37 @@ async fn process_share_updates(
                 .processed_requests
                 .insert(request.request_id.clone());
 
-            // Clone data for async processing
-            let doc_id = session.doc_id.clone();
-            let role = session.role;
-            let full_history = session.full_history;
-            let joiner_id = request.user_id;
-            let joiner_public_key = request.public_encryption_key.clone();
+            Some((
+                session.doc_id.clone(),
+                session.role,
+                session.full_history,
+                request.user_id,
+                request.public_encryption_key.clone(),
+            ))
+        })
+        .collect();
 
-            // Spawn async task to process the joiner
-            tokio::spawn(async move {
-                match process_share_joiner(
-                    doc_id.clone(),
-                    role,
-                    full_history,
-                    joiner_id,
-                    joiner_public_key,
-                )
-                .await
-                {
-                    Ok(_) => {
-                        emit_share_user_added(doc_id, joiner_id.to_hex().to_string());
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to process share joiner: {e}");
-                        emit_share_error(doc_id, e);
-                    }
-                }
-            });
+    // Drop the lock before processing
+    drop(sessions);
+
+    // Process share requests (auto-accept joiners) - await directly instead of spawning
+    for (doc_id, role, full_history, joiner_id, joiner_public_key) in requests_to_process {
+        match process_share_joiner(
+            doc_id.clone(),
+            role,
+            full_history,
+            joiner_id,
+            joiner_public_key,
+        )
+        .await
+        {
+            Ok(_) => {
+                emit_share_user_added(doc_id, joiner_id.to_hex().to_string());
+            }
+            Err(e) => {
+                eprintln!("Failed to process share joiner: {e}");
+                emit_share_error(doc_id, e);
+            }
         }
     }
 

@@ -10,41 +10,33 @@
   </head>
   <body>
     <div
-      class="bg-background flex min-h-screen items-center justify-center p-4"
+      class="bg-background flex min-h-screen items-center justify-center p-6"
     >
-      <div class="w-full max-w-md">
-        <div class="bg-card border-border rounded-lg border p-8 shadow-sm">
-          <div class="flex flex-col items-center space-y-6 text-center">
-            <div class="bg-primary/10 rounded-full p-3">
-              <i data-lucide="check-circle" class="text-primary h-12 w-12"></i>
-            </div>
-
-            <div class="space-y-2">
-              <h1 class="text-card-foreground text-2xl font-semibold">
-                Authentication Successful!
-              </h1>
-              <p class="text-muted-foreground">
-                You have been successfully authenticated.
-              </p>
-            </div>
-
-            <div class="w-full pt-4">
-              <div class="bg-muted/50 border-border rounded-lg border p-4">
-                <p class="text-muted-foreground text-sm">
-                  You can safely close this window and return to the
-                  application.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onclick="window.close()"
-              class="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring w-full rounded-md px-4 py-2.5 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-            >
-              Close Window
-            </button>
+      <div class="w-full max-w-sm space-y-8">
+        <!-- Header -->
+        <div class="space-y-4 text-center">
+          <div
+            class="bg-muted mx-auto flex h-12 w-12 items-center justify-center rounded-full"
+          >
+            <i class="text-muted-foreground h-5 w-5" data-lucide="check"></i>
+          </div>
+          <div class="space-y-2">
+            <h1 class="text-xl font-semibold tracking-tight">
+              Authentication Successful
+            </h1>
+            <p class="text-muted-foreground text-sm">
+              You can close this window and return to the app.
+            </p>
           </div>
         </div>
+
+        <!-- Button -->
+        <button
+          class="bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring h-10 w-full rounded-md font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          onclick="window.close()"
+        >
+          Close Window
+        </button>
       </div>
     </div>
 

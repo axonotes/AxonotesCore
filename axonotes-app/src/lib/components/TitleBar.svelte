@@ -38,6 +38,7 @@
     <button
       onclick={minimize}
       class="hover:bg-accent hover:text-accent-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      style="-webkit-app-region: no-drag"
       aria-label="Minimize"
     >
       <Minus class="h-4 w-4" />
@@ -46,6 +47,7 @@
     <button
       onclick={toggleMaximize}
       class="hover:bg-accent hover:text-accent-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      style="-webkit-app-region: no-drag"
       aria-label={isMaximized ? "Restore" : "Maximize"}
     >
       <Square class="h-3.5 w-3.5" />
@@ -54,16 +56,10 @@
     <button
       onclick={close}
       class="hover:bg-destructive hover:text-destructive-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      style="-webkit-app-region: no-drag"
       aria-label="Close"
     >
       <X class="h-4 w-4" />
     </button>
   </div>
 </div>
-
-<style>
-  /* Prevent dragging on buttons */
-  button {
-    -webkit-app-region: no-drag;
-  }
-</style>
