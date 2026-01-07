@@ -11,6 +11,7 @@
 //! | `batches` | Document edit batches (synced and pending) |
 //! | `snapshots` | Point-in-time block snapshots for key rotation |
 //! | `blob_cache` | Cached encrypted media blobs metadata |
+//! | `workspaces` | UI workspace configurations (Dockview layouts) |
 //!
 //! ## Index Strategy
 //!
@@ -165,6 +166,17 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     // Index for looking up blobs by document (for deletion on doc delete)
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_blob_cache_doc ON blob_cache(doc_id)",
+        [],
+    )?;
+
+    // Create workspaces table for storing Dockview UI layouts
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            config TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )",
         [],
     )?;
 
