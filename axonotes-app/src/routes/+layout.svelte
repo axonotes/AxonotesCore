@@ -11,7 +11,6 @@
     isInitialized,
     activeProfile,
     databaseUnlocked,
-    databaseMode,
     needsUnlock,
     needsSetup,
     needsSync,
@@ -20,14 +19,9 @@
     keysNeedSync,
     isSettingUpLocalSecurity,
   } from "$lib/stores/app";
-  import {Button} from "$lib/components/ui/button";
-  import {LockKeyhole} from "@lucide/svelte";
   import * as m from "$lib/paraglide/messages.js";
 
   let {children} = $props();
-
-  // Only show lock button if database has encryption enabled
-  let showLockButton = $derived($databaseMode !== "none");
 
   // Auth flow pages that don't need redirects when in their flow
   const authPages = ["/login", "/unlock", "/setup", "/sync"];
@@ -121,33 +115,16 @@
   <TitleBar />
 
   <!-- Content area -->
-  <div class="flex-1 overflow-auto">
+  <div class="flex-1 overflow-hidden">
     {#if $isInitialized}
       {#if $isReady && !$isSettingUpLocalSecurity}
         <!-- App layout - only when fully ready (logged in, keys synced) -->
-        <div class="bg-background relative min-h-full">
-          <!-- Top right controls -->
-          <div
-            class="absolute top-0 right-0 z-10 flex items-center gap-1 p-3.5"
-          >
-            {#if showLockButton}
-              <Button
-                variant="ghost"
-                size="icon"
-                onclick={() => app.lockDatabase()}
-                aria-label={m.common_action_lock_database()}
-                title={m.common_action_lock_database()}
-              >
-                <LockKeyhole class="h-4 w-4" />
-              </Button>
-            {/if}
-            <LightSwitch />
-          </div>
+        <div class="bg-background relative h-full">
           {@render children()}
         </div>
       {:else}
         <!-- Auth pages: login, unlock, setup, sync -->
-        <div class="relative h-full">
+        <div class="relative h-full min-h-full">
           <div class="absolute top-0 right-0 p-3.5">
             <LightSwitch />
           </div>

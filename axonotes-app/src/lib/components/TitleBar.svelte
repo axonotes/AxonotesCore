@@ -1,6 +1,8 @@
 <script lang="ts">
   import {getCurrentWindow} from "@tauri-apps/api/window";
   import {Minus, Square, X} from "@lucide/svelte";
+  import ViewMenu from "./workspace/ViewMenu.svelte";
+  import {isReady} from "$lib/stores/app";
 
   const appWindow = getCurrentWindow();
 
@@ -30,7 +32,9 @@
   class="bg-background flex h-12 items-center justify-between border-b px-4 select-none"
 >
   <div class="flex items-center gap-2">
-    <!-- App icon/logo here if you want -->
+    {#if $isReady}
+      <ViewMenu />
+    {/if}
     <span class="text-sm font-semibold">Axonotes</span>
   </div>
 

@@ -170,5 +170,15 @@
   "settings_danger_wipe_button": "Wipe Database",
   "settings_danger_wipe_description": "Permanently deletes all data and resets encryption.",
   "settings_danger_wipe_confirm": "Wipe entire database? This cannot be undone!",
-  "settings_danger_remove_confirm": "Remove database encryption? This will make your data unencrypted."
+  "settings_danger_remove_confirm": "Remove database encryption? This will make your data unencrypted.",
+
+  "workspace_indicator_new": "New workspace",
+  "workspace_indicator_aria_label": "Workspace switcher",
+  "workspace_panel_placeholder_title": "Panel",
+  "workspace_context_rename": "Rename",
+  "workspace_context_delete": "Delete",
+  "workspace_context_delete_confirm": "Delete this workspace?",
+  "workspace_context_delete_last": "Cannot delete the last workspace",
+  "workspace_rename_title": "Rename Workspace",
+  "workspace_rename_placeholder": "Workspace name"
 }

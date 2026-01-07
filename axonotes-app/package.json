@@ -17,6 +17,7 @@
     "@tauri-apps/plugin-log": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-shell": "^2.3.3",
+    "dockview-core": "^4.13.1",
     "mode-watcher": "^1.1.0",
     "zxcvbn": "^4.4.2"
   },
