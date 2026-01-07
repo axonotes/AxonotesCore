@@ -28,6 +28,7 @@ export const OAuthSchema = z.object({
   }),
   storage: z
     .object({
+      base_url: z.url("Must be a valid URL"),
       api_port: z.number().min(1024).max(65535).optional(),
       minio_api_port: z.number().min(1024).max(65535).optional(),
       minio_console_port: z.number().min(1024).max(65535).optional(),

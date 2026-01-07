@@ -1,5 +1,8 @@
 //! HTTP client for the Storage API.
 
+#![allow(clippy::must_use_candidate)] // Client methods - callers understand return semantics
+#![allow(clippy::missing_panics_doc)] // RwLock panics only if poisoned (thread panic), extremely rare
+
 use reqwest::{Client, StatusCode};
 use std::sync::RwLock;
 

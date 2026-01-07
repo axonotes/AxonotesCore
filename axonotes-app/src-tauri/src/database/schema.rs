@@ -10,6 +10,7 @@
 //! | `keys` | User encryption/signing keys (per identity) |
 //! | `batches` | Document edit batches (synced and pending) |
 //! | `snapshots` | Point-in-time block snapshots for key rotation |
+//! | `blob_cache` | Cached encrypted media blobs metadata |
 //!
 //! ## Index Strategy
 //!
@@ -147,6 +148,23 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     // Index for doc-wide snapshot lookups
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_snapshots_doc_ts ON snapshots(doc_id, timestamp DESC)",
+        [],
+    )?;
+
+    // Create blob_cache table for tracking cached encrypted media blobs
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS blob_cache (
+            hash TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            cached_at INTEGER NOT NULL
+        )",
+        [],
+    )?;
+
+    // Index for looking up blobs by document (for deletion on doc delete)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_blob_cache_doc ON blob_cache(doc_id)",
         [],
     )?;
 

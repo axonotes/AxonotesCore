@@ -1,5 +1,7 @@
 //! Request and response types for the Storage API.
 
+#![allow(clippy::must_use_candidate)] // Type methods - callers understand return semantics
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

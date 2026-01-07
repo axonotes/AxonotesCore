@@ -2,11 +2,20 @@
 //!
 //! This module provides a client for interacting with the Axonotes Storage backend,
 //! which handles encrypted media blob storage with quota management.
+
+#![allow(dead_code)] // Public API - functions will be used by storage module
+#![allow(unused_imports)] // Re-exports for public API
+#![allow(clippy::wildcard_imports)] // Explicit re-export of types module
+#![allow(clippy::doc_markdown)] // URLs and technical terms don't need backticks
+#![allow(clippy::missing_errors_doc)] // Error conditions documented in prose
+#![allow(clippy::use_self)] // Using full enum name for clarity in match arms
+#![allow(clippy::uninlined_format_args)] // Using explicit format args for readability
+#![allow(clippy::option_if_let_else)] // if-let-else is more readable for complex conditionals
 //!
 //! # Example
 //!
 //! ```rust,no_run
-//! use storage_bindings::{StorageClient, CreateDocumentRequest};
+//! use axonotes_app_lib::storage_bindings::{StorageClient, CreateDocumentRequest};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {

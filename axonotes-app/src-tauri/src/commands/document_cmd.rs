@@ -24,6 +24,7 @@ use crate::database::keys::Keys;
 use crate::encryption::document::{DecryptedDocumentMetadata, DecryptedKeyData, DecryptedMetadata};
 use crate::events::{emit_document_created, emit_document_deleted, emit_document_metadata_updated};
 use crate::stdb;
+use crate::storage;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
 use spacetimedb_sdk::Identity;
@@ -109,6 +110,17 @@ pub async fn create_document(title: Option<String>) -> Result<String, String> {
             )
             .await?;
 
+        // Register document with storage API (if storage is initialized)
+        // This is non-blocking - storage registration can fail without affecting document creation
+        if storage::is_initialized().await {
+            if let Err(e) = storage::active_profile()
+                .create_storage_document(&doc_id)
+                .await
+            {
+                eprintln!("Warning: Failed to register document with storage API: {e}");
+            }
+        }
+
         let user_identity: Option<Identity> = stdb::active_profile().get_identity().await?;
         let user_identity: Identity = user_identity.expect("User identity should be set by now");
         update_block(
@@ -155,6 +167,16 @@ pub async fn delete_document(doc_id: String) -> Result<(), String> {
         stdb::active_profile()
             .delete_document(doc_id.clone(), signature.to_vec())
             .await?;
+
+        // Unregister document from storage API and delete cached blobs (if storage is initialized)
+        if storage::is_initialized().await {
+            if let Err(e) = storage::active_profile()
+                .delete_storage_document(&doc_id)
+                .await
+            {
+                eprintln!("Warning: Failed to unregister document from storage API: {e}");
+            }
+        }
 
         emit_document_deleted(doc_id);
 

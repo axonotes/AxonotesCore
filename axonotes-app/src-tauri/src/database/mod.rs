@@ -70,6 +70,7 @@ type DbPool = Pool<SqliteConnectionManager>;
 static DB_POOL: RwLock<Option<DbPool>> = RwLock::new(None);
 static DB_PATH: OnceCell<PathBuf> = OnceCell::new();
 static APP_CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
+static BLOB_CACHE_DIR: OnceCell<PathBuf> = OnceCell::new();
 
 // Store the key for connection initialization
 static DB_KEY: RwLock<Option<String>> = RwLock::new(None);
@@ -96,6 +97,10 @@ impl Default for AppConfig {
 pub fn init_paths(app_data_dir: PathBuf) -> Result<(), String> {
     let db_path = app_data_dir.join("app.db");
     let config_path = app_data_dir.join("app_config.toml");
+    let cache_dir = app_data_dir.join("blob_cache");
+
+    // Create blob cache directory if it doesn't exist
+    fs::create_dir_all(&cache_dir).map_err(|e| format!("Failed to create blob cache dir: {e}"))?;
 
     DB_PATH
         .set(db_path)
@@ -105,7 +110,18 @@ pub fn init_paths(app_data_dir: PathBuf) -> Result<(), String> {
         .set(config_path)
         .map_err(|_| "Config path already initialized")?;
 
+    BLOB_CACHE_DIR
+        .set(cache_dir)
+        .map_err(|_| "Blob cache dir already initialized")?;
+
     Ok(())
+}
+
+/// Get the blob cache directory path
+pub fn get_blob_cache_dir() -> &'static PathBuf {
+    BLOB_CACHE_DIR
+        .get()
+        .expect("Blob cache dir not initialized. Call init_paths first.")
 }
 
 /// Get the current unlock mode from config file
@@ -768,6 +784,204 @@ pub async fn count_snapshots_by_doc(doc_id: String) -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let conn = get_conn()?;
         snapshots::count_by_doc(&conn, doc_id.as_str()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ========================================
+// Blob Cache Operations
+// ========================================
+
+/// Blob cache entry metadata.
+#[derive(Debug, Clone)]
+pub struct BlobCacheEntry {
+    pub hash: String,
+    pub doc_id: String,
+    pub size_bytes: u64,
+    pub cached_at: u64,
+}
+
+/// Insert or update blob cache metadata.
+pub async fn save_blob_cache_entry(
+    hash: String,
+    doc_id: String,
+    size_bytes: u64,
+    cached_at: u64,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conn.execute(
+            "INSERT OR REPLACE INTO blob_cache (hash, doc_id, size_bytes, cached_at) VALUES (?, ?, ?, ?)",
+            rusqlite::params![hash, doc_id, size_bytes as i64, cached_at as i64],
+        )
+        .map_err(|e| format!("Failed to insert blob cache entry: {e}"))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get blob cache entry by hash.
+pub async fn get_blob_cache_entry(hash: String) -> Result<Option<BlobCacheEntry>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        let mut stmt = conn
+            .prepare("SELECT hash, doc_id, size_bytes, cached_at FROM blob_cache WHERE hash = ?")
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+
+        use rusqlite::OptionalExtension;
+        let entry = stmt
+            .query_row([&hash], |row| {
+                Ok(BlobCacheEntry {
+                    hash: row.get(0)?,
+                    doc_id: row.get(1)?,
+                    size_bytes: row.get::<_, i64>(2)? as u64,
+                    cached_at: row.get::<_, i64>(3)? as u64,
+                })
+            })
+            .optional()
+            .map_err(|e| format!("Failed to query blob cache: {e}"))?;
+
+        Ok(entry)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get document ID for a cached blob.
+pub async fn get_blob_doc_id(hash: String) -> Result<Option<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        use rusqlite::OptionalExtension;
+        let doc_id = conn
+            .query_row(
+                "SELECT doc_id FROM blob_cache WHERE hash = ?",
+                [&hash],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query blob doc_id: {e}"))?;
+
+        Ok(doc_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete blob cache entry by hash.
+pub async fn delete_blob_cache_entry(hash: String) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        let rows = conn
+            .execute("DELETE FROM blob_cache WHERE hash = ?", [&hash])
+            .map_err(|e| format!("Failed to delete blob cache entry: {e}"))?;
+        Ok(rows > 0)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete all blob cache entries for a document.
+pub async fn delete_blob_cache_for_document(doc_id: String) -> Result<u64, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        let rows = conn
+            .execute("DELETE FROM blob_cache WHERE doc_id = ?", [&doc_id])
+            .map_err(|e| format!("Failed to delete blob cache entries: {e}"))?;
+        Ok(rows as u64)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all blob hashes for a document.
+pub async fn get_blob_hashes_for_document(doc_id: String) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        let mut stmt = conn
+            .prepare("SELECT hash FROM blob_cache WHERE doc_id = ?")
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+
+        let hashes = stmt
+            .query_map([&doc_id], |row| row.get(0))
+            .map_err(|e| format!("Failed to query blob hashes: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("Failed to collect hashes: {e}"))?;
+
+        Ok(hashes)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Clear all blob cache entries.
+pub async fn clear_blob_cache() -> Result<u64, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        let rows = conn
+            .execute("DELETE FROM blob_cache", [])
+            .map_err(|e| format!("Failed to clear blob cache: {e}"))?;
+        Ok(rows as u64)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get total blob cache size in bytes.
+pub async fn get_blob_cache_size() -> Result<u64, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        let size: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(size_bytes), 0) FROM blob_cache",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to query cache size: {e}"))?;
+        Ok(size as u64)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get blob cache entry count.
+pub async fn get_blob_cache_count() -> Result<u64, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM blob_cache", [], |row| row.get(0))
+            .map_err(|e| format!("Failed to query cache count: {e}"))?;
+        Ok(count as u64)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// List all blob cache entries.
+pub async fn list_blob_cache_entries() -> Result<Vec<BlobCacheEntry>, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT hash, doc_id, size_bytes, cached_at FROM blob_cache ORDER BY cached_at DESC",
+            )
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+
+        let entries = stmt
+            .query_map([], |row| {
+                Ok(BlobCacheEntry {
+                    hash: row.get(0)?,
+                    doc_id: row.get(1)?,
+                    size_bytes: row.get::<_, i64>(2)? as u64,
+                    cached_at: row.get::<_, i64>(3)? as u64,
+                })
+            })
+            .map_err(|e| format!("Failed to query blob cache: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect entries: {e}"))?;
+
+        Ok(entries)
     })
     .await
     .map_err(|e| e.to_string())?

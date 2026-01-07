@@ -43,6 +43,9 @@ r2d2_sqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
 spacetimedb-sdk = "1.11.1"
 
 # Auth & HTTP
+# Note: reqwest pinned to 0.12.x - v0.13+ has breaking changes with SSL/TLS backends
+# Note: jsonwebtoken pinned to 9.x - v10+ requires explicit feature flags (rust_crypto or aws_lc_rs)
+#       and has significant API changes. Upgrade requires careful testing.
 reqwest = { version = "0.12.23", features = ["json"] }
 tiny_http = "0.12.0"
 jsonwebtoken = "9"
@@ -56,6 +59,7 @@ chacha20poly1305 = "0.10.1"
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 sha2 = "0.10.9"
+subtle = "2.6"
 
 # Encoding
 base64 = "0.22.1"

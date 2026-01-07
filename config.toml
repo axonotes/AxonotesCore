@@ -17,6 +17,7 @@ default_host_uri="http://localhost:3000"
 default_module_name="axonotes"
 
 [storage]
+base_url="http://localhost:8081"
 api_port=8081
 minio_api_port=9000
 minio_console_port=9001

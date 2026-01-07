@@ -26,15 +26,18 @@ mod batch_handler;
 mod commands;
 mod config;
 mod crypto;
-mod database;
 mod encryption;
 mod events;
 mod share;
 mod stdb;
 mod stdb_bindings;
-mod storage_bindings;
 mod utils;
 mod workos_auth;
+
+// Public modules for integration testing
+pub mod database;
+pub mod storage;
+pub mod storage_bindings;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -92,6 +95,21 @@ pub fn run() {
             commands::version_tag_cmd::create_version_tag,
             commands::version_tag_cmd::delete_version_tag,
             commands::version_tag_cmd::list_version_tags,
+            commands::storage_cmd::storage_init,
+            commands::storage_cmd::storage_shutdown,
+            commands::storage_cmd::storage_is_initialized,
+            commands::storage_cmd::upload_blob_from_path,
+            commands::storage_cmd::upload_blob_from_bytes,
+            commands::storage_cmd::get_blob_url,
+            commands::storage_cmd::prefetch_blob,
+            commands::storage_cmd::is_blob_cached,
+            commands::storage_cmd::get_storage_quota,
+            commands::storage_cmd::clear_blob_cache,
+            commands::storage_cmd::get_blob_cache_info,
+            commands::storage_cmd::delete_cached_blob,
+            commands::storage_cmd::delete_cached_blobs_for_document,
+            commands::storage_cmd::get_media_type_from_extension,
+            commands::storage_cmd::get_mime_type,
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());

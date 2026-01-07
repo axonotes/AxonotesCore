@@ -39,6 +39,7 @@ use crate::stdb_bindings::{
     DocumentPermission, EncryptedKeyEntry, PublicUserInfo, ReEncryptedTag, Role, SnapshotBatch,
     UserKeyEntry,
 };
+use crate::storage;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
 use spacetimedb_sdk::Identity;
@@ -123,6 +124,16 @@ pub async fn rotate_keys_for_share(doc_id: &str) -> Result<KeyRotationResult, St
             signature.to_vec(),
         )
         .await?;
+
+    // Update storage API with new public signing key (if storage is initialized)
+    if storage::is_initialized().await {
+        if let Err(e) = storage::active_profile()
+            .update_storage_document_public_key(doc_id)
+            .await
+        {
+            eprintln!("Warning: Failed to update storage document key: {e}");
+        }
+    }
 
     emit_document_keys_rotated(doc_id.to_string(), new_key_timestamp);
 
