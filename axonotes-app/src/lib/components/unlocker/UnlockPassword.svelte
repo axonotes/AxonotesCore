@@ -3,9 +3,10 @@
     import { Label } from "$lib/components/ui/label";
     import { Button } from "$lib/components/ui/button";
     import { KeyRound } from "@lucide/svelte";
-    import {switchUnlockMode, unlockDatabase, type UnlockMode} from "$lib/services/database";
+    import {DatabaseService} from "$lib/services/database";
     import * as m from "$lib/paraglide/messages.js";
-    import {goto} from "$app/navigation";
+    import type {UnlockMode} from "$lib/types";
+    import {databaseMode, databaseUnlocked} from "$lib/stores/app";
 
     let { changeUnlockMode } = $props<{
         changeUnlockMode: (mode: UnlockMode) => void;
@@ -27,10 +28,12 @@
         isLoading = true;
 
         try {
-            await unlockDatabase(password);
+            await DatabaseService.unlockDatabase(password);
             // Success - navigation will be handled by parent/router
             console.log("Unlocking successful");
-            await goto("/app");
+            databaseUnlocked.set(true);
+            databaseMode.set("pass");
+            console.debug(`Database status: ${databaseUnlocked}, database mode: ${databaseMode}`)
         } catch (err) {
             console.error("Unlock failed:", err);
             error = m.auth_unlock_error_incorrect();
@@ -42,7 +45,7 @@
 
     async function handleSwitchToPin() {
         try {
-            await  switchUnlockMode("pin");
+            await DatabaseService.switchUnlockMode("pin");
             changeUnlockMode("pin");
         } catch (err) {
             console.error("Failed to switch unlock mode:", err);

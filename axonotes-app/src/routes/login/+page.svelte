@@ -1,12 +1,18 @@
 <script lang="ts">
 
     import {onMount} from "svelte";
+    import SignIn from "$lib/components/workos/SignIn.svelte";
+    import { activeProfile } from "$lib/stores/app";
 
     let isLoading = $state(true);
 
     onMount(async () => {
         try {
-
+            if (activeProfile === null) {
+                console.log("No active profile");
+            } else {
+                console.log("Active profile: ", activeProfile);
+            }
         } catch {
 
         } finally {
@@ -21,9 +27,11 @@
         <div class="flex h-full w-full items-center justify-center">
             <div class="text-muted-foreground text-sm">Loading...</div>
         </div>
+    {:else if activeProfile === undefined}
+        <SignIn />
     {:else}
         <div class="flex h-full w-full items-center justify-center">
-                Welcome to Axonotes!
+                Login page
         </div>
     {/if}
 </div>

@@ -2,9 +2,11 @@
     import { Label } from "$lib/components/ui/label/index.js";
     import { Button } from "$lib/components/ui/button";
     import { Hash } from "@lucide/svelte";
-    import {switchUnlockMode, unlockDatabase, type UnlockMode} from "$lib/services/database";
+    import {DatabaseService} from "$lib/services/database";
     import * as m from "$lib/paraglide/messages.js";
-    import {goto} from "$app/navigation";
+    import type {UnlockMode} from "$lib/types";
+    import {databaseMode, databaseUnlocked, isUnlocked} from "$lib/stores/app";
+    import {get} from "svelte/store";
 
     let { changeUnlockMode } = $props<{
         changeUnlockMode: (mode: UnlockMode) => void;
@@ -104,10 +106,12 @@
 
         try {
             console.log("pin:", pin);
-            await unlockDatabase(pin);
+            await DatabaseService.unlockDatabase(pin);
             // Success - navigation will be handled by parent/router
             console.log("Unlocking successful");
-            await goto("/app");
+            databaseUnlocked.set(true);
+            databaseMode.set("pin");
+            console.debug(`Database status: ${get(databaseUnlocked)}, database mode: ${get(databaseMode)}, databaseIsUnlocked: ${get(isUnlocked)}`);
         } catch (err) {
             console.error("Unlock failed:", err);
             error = m.auth_unlock_pin_error_incorrect();
@@ -122,7 +126,7 @@
 
     async function handleSwitchToPassword() {
         try {
-            await switchUnlockMode("pass");
+            await DatabaseService.switchUnlockMode("pass");
             changeUnlockMode("pass");
         } catch (err) {
             console.error("Failed to switch unlock mode:", err);
