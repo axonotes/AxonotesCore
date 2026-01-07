@@ -1,7 +1,11 @@
 [package]
 name = "axonotes-storage"
 version = "0.1.0"
+description = "Blob storage service with streaming uploads, JWT authentication, and dynamic quota management"
+authors = ["Oliver Seifert <oliver@axonotes.ch>"]
 edition = "2024"
+license-file = "../LICENSE"
+repository = "https://github.com/axonotes/AxonotesCore"
 
 [dependencies]
 anyhow = "1.0.100"

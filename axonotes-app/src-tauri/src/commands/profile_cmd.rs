@@ -1,3 +1,22 @@
+//! # Profile Management Commands
+//!
+//! Tauri commands for managing user profiles.
+//!
+//! ## Multi-Profile Support
+//!
+//! Axonotes supports multiple user profiles on a single device.
+//! Each profile has its own:
+//! - Email and identity
+//! - OAuth tokens
+//! - Encryption keys (stored separately in `keys` table)
+//!
+//! ## Commands
+//!
+//! - `get_active_profile`: Get the currently selected profile
+//! - `get_all_profiles`: List all profiles on this device
+//! - `switch_profile`: Change the active profile
+//! - `refresh_token`: Refresh the active profile's OAuth token
+
 use crate::{database, workos_auth};
 use serde::{Deserialize, Serialize};
 

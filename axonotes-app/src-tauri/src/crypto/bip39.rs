@@ -1,3 +1,29 @@
+//! # BIP-39 Mnemonic Phrase Generation and Validation
+//!
+//! Implements BIP-39 mnemonic phrases for human-readable backup and recovery of cryptographic keys.
+//!
+//! ## Features
+//!
+//! - **12-word mnemonics**: Generated from 128 bits of entropy (24,000+ years brute-force resistance)
+//! - **Checksum validation**: SHA-256 based checksum prevents transcription errors
+//! - **Fuzzy matching**: Corrects minor typos (edit distance ≤ 2) and prefix matches
+//! - **Key derivation**: Converts mnemonics to encryption/signing keys via Argon2id
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! // Generate a new recovery phrase
+//! let mnemonic = get_mnemonic()?;
+//!
+//! // Validate and auto-correct user input
+//! let (is_valid, corrected) = validate_and_correct_passphrase(&user_input);
+//!
+//! // Derive keys from mnemonic
+//! let encryption_key = mnemonic_to_key(&mnemonic, MNEMONIC_KEY_ENCRYPTION_CONTEXT);
+//! ```
+
+#![allow(dead_code)]
+
 use rand::rngs::OsRng;
 use rand::TryRngCore;
 use sha2::{Digest, Sha256};
@@ -6,6 +32,20 @@ use super::hash;
 
 const WORDLIST: &str = include_str!("bip39-en.txt");
 
+/// Generates a new 12-word BIP-39 mnemonic phrase.
+///
+/// Creates 128 bits of entropy, calculates a 4-bit SHA-256 checksum,
+/// and maps each 11-bit segment to a word from the BIP-39 English wordlist.
+///
+/// # Returns
+///
+/// A space-separated string of 12 words from the BIP-39 wordlist.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The bundled wordlist is corrupted (not exactly 2048 words)
+/// - The system's random number generator fails
 pub fn get_mnemonic() -> Result<String, Box<dyn std::error::Error>> {
     let words: Vec<&str> = WORDLIST.lines().collect();
 
@@ -40,7 +80,7 @@ pub fn get_mnemonic() -> Result<String, Box<dyn std::error::Error>> {
     for chunk in bits.chunks(11) {
         let mut index = 0u16;
         for bit in chunk {
-            index = (index << 1) | (*bit as u16);
+            index = (index << 1) | u16::from(*bit);
         }
         mnemonic.push(words[index as usize]);
     }
@@ -48,18 +88,53 @@ pub fn get_mnemonic() -> Result<String, Box<dyn std::error::Error>> {
     Ok(mnemonic.join(" "))
 }
 
+/// Context string for deriving the encryption key from a mnemonic.
 pub const MNEMONIC_KEY_ENCRYPTION_CONTEXT: &str = "encryption_context";
+
+/// Context string for deriving the signing key from a mnemonic.
 pub const MNEMONIC_KEY_SIGNING_CONTEXT: &str = "signing_context";
 
-/**
- * Use function with
- * - `MNEMONIC_KEY_ENCRYPTION_CONTEXT` or
- * - `MNEMONIC_KEY_SIGNING_CONTEXT`
- */
+/// Derives a 32-byte key from a mnemonic phrase using Argon2id.
+///
+/// Different contexts produce different keys from the same mnemonic,
+/// allowing separation of encryption and signing keys.
+///
+/// # Arguments
+///
+/// * `mnemonic` - The BIP-39 mnemonic phrase
+/// * `context` - Use [`MNEMONIC_KEY_ENCRYPTION_CONTEXT`] for encryption keys
+///               or [`MNEMONIC_KEY_SIGNING_CONTEXT`] for signing keys
+///
+/// # Returns
+///
+/// A 32-byte key suitable for use with X25519 or Ed25519.
 pub fn mnemonic_to_key(mnemonic: &str, context: &str) -> Vec<u8> {
     hash::derive_key(mnemonic, context)
 }
 
+/// Validates a mnemonic phrase and attempts to correct minor errors.
+///
+/// This function performs several levels of matching:
+/// 1. **Exact match**: Words that match the wordlist exactly
+/// 2. **Prefix match**: Unique prefix matches (e.g., "aban" → "abandon")
+/// 3. **Fuzzy match**: Words within edit distance 2 (e.g., "abanbon" → "abandon")
+///
+/// After word matching, verifies the BIP-39 checksum.
+///
+/// # Arguments
+///
+/// * `input` - The user-entered mnemonic phrase
+///
+/// # Returns
+///
+/// A tuple of `(is_valid, corrected_phrase)`:
+/// - `is_valid`: `true` if the phrase has a valid checksum after correction
+/// - `corrected_phrase`: The normalized phrase (lowercase, corrected typos)
+///   or empty string if validation failed
+///
+/// # Supported Lengths
+///
+/// BIP-39 supports 12, 15, 18, 21, or 24 word mnemonics.
 pub fn validate_and_correct_passphrase(input: &str) -> (bool, String) {
     let words: Vec<&str> = WORDLIST.lines().collect();
 
@@ -130,11 +205,16 @@ pub fn validate_and_correct_passphrase(input: &str) -> (bool, String) {
     (is_valid, corrected)
 }
 
+/// Validates the BIP-39 checksum for a set of word indices.
+///
+/// The checksum is calculated as the first N bits of SHA-256(entropy),
+/// where N = total_bits / 33 (1 bit per 32 bits of entropy).
 fn validate_checksum(word_indices: &[usize]) -> bool {
     // Convert word indices to bits
     let mut bits = Vec::new();
     for &index in word_indices {
         for i in (0..11).rev() {
+            #[allow(clippy::cast_possible_truncation)] // Result is 0 or 1, always fits in u8
             bits.push(((index >> i) & 1) as u8);
         }
     }
@@ -169,6 +249,12 @@ fn validate_checksum(word_indices: &[usize]) -> bool {
     true
 }
 
+/// Calculates the Levenshtein edit distance between two strings.
+///
+/// Used for fuzzy matching of misspelled words in mnemonic validation.
+/// Returns the minimum number of single-character edits (insertions,
+/// deletions, or substitutions) required to transform `a` into `b`.
+#[allow(clippy::needless_range_loop)] // Index used both for iteration and value assignment
 fn levenshtein_distance(a: &str, b: &str) -> usize {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();

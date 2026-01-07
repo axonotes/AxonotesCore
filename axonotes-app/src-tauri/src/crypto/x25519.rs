@@ -1,8 +1,52 @@
+//! # X25519 Elliptic Curve Diffie-Hellman Key Exchange
+//!
+//! Provides X25519 key generation and hybrid encryption for secure
+//! message exchange between users.
+//!
+//! ## Features
+//!
+//! - **32-byte keys**: Compact key sizes (32 bytes private, 32 bytes public)
+//! - **Hybrid encryption**: Combines X25519 key exchange with ChaCha20-Poly1305
+//! - **Sender identification**: Ciphertext includes sender's public key
+//!
+//! ## Wire Format
+//!
+//! Encrypted message format:
+//! `[sender_public_key (32 bytes)][nonce (12 bytes)][ciphertext][auth_tag (16 bytes)]`
+//!
+//! ## Use Cases
+//!
+//! - Encrypting document keys for specific users
+//! - Encrypting private keys with user's password-derived key
+//! - Secure key exchange in share invitations
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! let (alice_priv, alice_pub) = generate_x25519_keys();
+//! let (bob_priv, bob_pub) = generate_x25519_keys();
+//!
+//! // Alice encrypts for Bob
+//! let encrypted = encrypt_for_recipient(&alice_priv, &alice_pub, &bob_pub, b"secret")?;
+//!
+//! // Bob decrypts
+//! let (plaintext, sender_pub) = decrypt_from_anyone(&bob_priv, &encrypted)?;
+//! ```
+
 use rand_core::OsRng;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use super::chacha::{decrypt, encrypt};
 
+/// Generates a new X25519 keypair for asymmetric encryption.
+///
+/// Uses the operating system's secure random number generator.
+///
+/// # Returns
+///
+/// A tuple of `(private_key, public_key)`, both 32 bytes.
+/// - The private key should be kept secret and encrypted at rest
+/// - The public key can be shared freely for others to encrypt messages to you
 pub fn generate_x25519_keys() -> ([u8; 32], [u8; 32]) {
     let private_key = StaticSecret::random_from_rng(OsRng);
     let public_key = PublicKey::from(&private_key);
@@ -13,6 +57,27 @@ pub fn generate_x25519_keys() -> ([u8; 32], [u8; 32]) {
     (private_bytes, public_bytes)
 }
 
+/// Encrypts data for a specific recipient using X25519 + ChaCha20-Poly1305.
+///
+/// Performs X25519 Diffie-Hellman key exchange between sender and recipient,
+/// then encrypts the content with the shared secret. The sender's public key
+/// is prepended to allow the recipient to identify who sent the message and
+/// derive the same shared secret.
+///
+/// # Arguments
+///
+/// * `my_private_key` - Sender's 32-byte X25519 private key
+/// * `my_public_key` - Sender's 32-byte X25519 public key (prepended to output)
+/// * `their_public_key` - Recipient's 32-byte X25519 public key
+/// * `content` - The plaintext data to encrypt
+///
+/// # Returns
+///
+/// A vector containing `[sender_pub (32)][nonce (12)][ciphertext][tag (16)]`
+///
+/// # Errors
+///
+/// Returns an error if encryption fails.
 pub fn encrypt_for_recipient(
     my_private_key: &[u8; 32],
     my_public_key: &[u8; 32],
@@ -36,6 +101,28 @@ pub fn encrypt_for_recipient(
     Ok(result)
 }
 
+/// Decrypts data encrypted with [`encrypt_for_recipient`].
+///
+/// Extracts the sender's public key from the ciphertext, performs X25519
+/// key exchange to derive the shared secret, and decrypts the content.
+///
+/// # Arguments
+///
+/// * `my_private_key` - Recipient's 32-byte X25519 private key
+/// * `encrypted_data` - The ciphertext produced by [`encrypt_for_recipient`]
+///
+/// # Returns
+///
+/// A tuple of `(plaintext, sender_public_key)`:
+/// - `plaintext`: The decrypted data
+/// - `sender_public_key`: The 32-byte public key of whoever encrypted the data
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The encrypted data is too short (< 60 bytes minimum)
+/// - The decryption key doesn't match (wrong recipient)
+/// - The ciphertext has been tampered with
 pub fn decrypt_from_anyone(
     my_private_key: &[u8; 32],
     encrypted_data: &[u8],

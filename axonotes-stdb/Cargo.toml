@@ -1,9 +1,11 @@
 [package]
 name = "axonotes_stdb"
 version = "0.1.0"
+description = "SpaceTimeDB module for real-time collaboration with end-to-end encryption and access control"
+authors = ["Oliver Seifert <oliver@axonotes.ch>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license-file = "../LICENSE"
+repository = "https://github.com/axonotes/AxonotesCore"
 
 [lib]
 crate-type = ["cdylib"]

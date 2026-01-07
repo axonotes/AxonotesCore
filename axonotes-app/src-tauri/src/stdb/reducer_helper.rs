@@ -1,4 +1,38 @@
-/// Helper to call a reducer and wait for its completion
+//! # Reducer Helper Macros
+//!
+//! Provides synchronous reducer invocation for SpacetimeDB.
+//!
+//! ## Problem
+//!
+//! SpacetimeDB reducers are asynchronous - calling a reducer returns immediately
+//! but the actual database operation happens later. To wait for completion,
+//! you need to register a callback and coordinate with channels.
+//!
+//! ## Solution
+//!
+//! The `call_reducer_await!` macro handles all the coordination:
+//! 1. Creates a oneshot channel for the result
+//! 2. Registers a temporary callback on the reducer
+//! 3. Calls the reducer
+//! 4. Waits for the callback to fire
+//! 5. Cleans up the callback
+//! 6. Returns the result
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! let result = call_reducer_await!(
+//!     conn,
+//!     create_document,
+//!     doc_id,
+//!     encrypted_data
+//! )?;
+//! ```
+
+/// Helper to call a reducer and wait for its completion.
+///
+/// This macro wraps the async callback dance required by SpacetimeDB
+/// into a simple synchronous-looking call.
 #[macro_export]
 macro_rules! call_reducer_await {
     ($conn:expr, $reducer_name:ident, $($arg:expr),* $(,)?) => {{

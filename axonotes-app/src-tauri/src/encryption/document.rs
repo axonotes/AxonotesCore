@@ -1,16 +1,40 @@
+//! # Document Encryption
+//!
+//! Handles encryption and decryption of document metadata and keys.
+//!
+//! ## Document Keys
+//!
+//! Each document has a unique encryption key (ChaCha20) and signing key (Ed25519).
+//! Keys are encrypted per-user using X25519 hybrid encryption.
+//!
+//! ## Role-Based Key Access
+//!
+//! - **Owner/Editor**: Receive both encryption and signing keys
+//! - **Reader**: Receive only encryption key (can read, not modify)
+//!
+//! ## Metadata
+//!
+//! Document metadata (path, tags) is encrypted per-user and stored separately
+//! from document content, allowing users to have different organizational views.
+
 use crate::crypto::x25519::{decrypt_from_anyone, encrypt_for_recipient};
-use crate::stdb_bindings::{DocumentKey, DocumentMetadata};
+use crate::stdb_bindings::{DocumentKey, DocumentMetadata, Role};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use spacetimedb_sdk::Identity;
 
-pub trait DecryptVec {
+/// Trait for decrypting document metadata or keys.
+pub trait DecryptDocumentMetaAndKeyVec {
     type Output;
+    /// Decrypts all items using the user's private encryption key.
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String>;
 }
 
+/// Trait for encrypting document metadata.
+#[allow(dead_code)]
 pub trait EncryptDocumentMetadataVec {
     type Output;
+    /// Encrypts all items using the user's keypair (self-encryption).
     fn encrypt_all(
         self,
         my_private_key: &[u8; 32],
@@ -18,18 +42,27 @@ pub trait EncryptDocumentMetadataVec {
     ) -> Result<Self::Output, String>;
 }
 
+/// Decrypted document metadata payload.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedMetadata {
+    /// Schema version for forward compatibility
     pub version: u16,
+    /// User's path for this document (e.g., "/Work/Project/notes.doc")
     pub path: String,
+    /// User-defined tags for organization
     pub tags: Vec<String>,
 }
 
+/// Complete decrypted document metadata with identifiers.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedDocumentMetadata {
+    /// Unique metadata entry identifier
     pub meta_id: String,
+    /// User this metadata belongs to
     pub user_id: Identity,
+    /// Document this metadata describes
     pub doc_id: String,
+    /// The decrypted metadata payload
     pub metadata: DecryptedMetadata,
 }
 
@@ -40,7 +73,7 @@ impl DecryptedMetadata {
         my_public_key: &[u8; 32],
         their_public_key: &[u8; 32],
     ) -> Result<Vec<u8>, String> {
-        let blob = to_allocvec(self).map_err(|e| format!("Error serializing metadata: {}", e))?;
+        let blob = to_allocvec(self).map_err(|e| format!("Error serializing metadata: {e}"))?;
 
         encrypt_for_recipient(
             my_private_key,
@@ -48,16 +81,16 @@ impl DecryptedMetadata {
             their_public_key,
             blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting metadata: {}", e))
+        .map_err(|e| format!("Error when encrypting metadata: {e}"))
     }
 
     pub fn from_encrypted(encrypted_blob: &[u8], private_key: &[u8; 32]) -> Result<Self, String> {
         let (decrypted_blob, _): (Vec<u8>, [u8; 32]) =
             decrypt_from_anyone(private_key, encrypted_blob)
-                .map_err(|e| format!("Error when decrypting metadata: {}", e))?;
+                .map_err(|e| format!("Error when decrypting metadata: {e}"))?;
 
         from_bytes(decrypted_blob.as_slice())
-            .map_err(|e| format!("Error deserializing metadata: {}", e))
+            .map_err(|e| format!("Error deserializing metadata: {e}"))
     }
 }
 
@@ -75,7 +108,7 @@ impl DocumentMetadata {
     }
 }
 
-impl DecryptVec for Vec<DocumentMetadata> {
+impl DecryptDocumentMetaAndKeyVec for Vec<DocumentMetadata> {
     type Output = Vec<DecryptedDocumentMetadata>;
 
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String> {
@@ -86,6 +119,7 @@ impl DecryptVec for Vec<DocumentMetadata> {
 }
 
 impl DecryptedDocumentMetadata {
+    #[allow(dead_code)]
     pub fn encrypt(
         self,
         private_key: &[u8; 32],
@@ -116,7 +150,10 @@ impl EncryptDocumentMetadataVec for Vec<DecryptedDocumentMetadata> {
     }
 }
 
+/// Trait for encrypting document keys for a recipient.
+#[allow(dead_code)]
 pub trait EncryptDocumentKeyVec {
+    /// Encrypts all keys for a specific recipient's public key.
     fn encrypt_all(
         self,
         my_private_key: &[u8; 32],
@@ -125,18 +162,29 @@ pub trait EncryptDocumentKeyVec {
     ) -> Result<Vec<DocumentKey>, String>;
 }
 
+/// Decrypted document key data.
+///
+/// Contains the symmetric encryption key and Ed25519 signing key for a document.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedKeyData {
+    /// 32-byte ChaCha20-Poly1305 encryption key
     pub encryption_key: Vec<u8>,
+    /// 32-byte Ed25519 private signing key (empty for Readers)
     pub signing_private_key: Vec<u8>,
 }
 
+/// A decrypted document key with full context.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedDocumentKey {
+    /// Unique key identifier
     pub key_id: String,
+    /// Document this key is for
     pub doc_id: String,
+    /// User this key is encrypted for
     pub user_id: Identity,
+    /// Timestamp when this key was created (for key rotation ordering)
     pub key_timestamp: u128,
+    /// The decrypted key material
     pub key_data: DecryptedKeyData,
 }
 
@@ -147,7 +195,7 @@ impl DecryptedKeyData {
         my_public_key: &[u8; 32],
         their_public_key: &[u8; 32],
     ) -> Result<Vec<u8>, String> {
-        let blob = to_allocvec(self).map_err(|e| format!("Error serializing key data: {}", e))?;
+        let blob = to_allocvec(self).map_err(|e| format!("Error serializing key data: {e}"))?;
 
         encrypt_for_recipient(
             my_private_key,
@@ -155,16 +203,37 @@ impl DecryptedKeyData {
             their_public_key,
             blob.as_slice(),
         )
-        .map_err(|e| format!("Error when encrypting key data: {}", e))
+        .map_err(|e| format!("Error when encrypting key data: {e}"))
+    }
+
+    /// Encrypt key data for a specific role
+    /// - Readers get empty signing_private_key (can only decrypt, not sign)
+    /// - Editors/Owners get full signing_private_key
+    pub fn encrypt_for_role(
+        &self,
+        role: Role,
+        my_private_key: &[u8; 32],
+        my_public_key: &[u8; 32],
+        their_public_key: &[u8; 32],
+    ) -> Result<Vec<u8>, String> {
+        let key_data = match role {
+            Role::Reader => DecryptedKeyData {
+                encryption_key: self.encryption_key.clone(),
+                signing_private_key: vec![], // Readers don't get signing key
+            },
+            Role::Editor | Role::Owner => self.clone(),
+        };
+
+        key_data.encrypt(my_private_key, my_public_key, their_public_key)
     }
 
     pub fn from_encrypted(encrypted_blob: &[u8], private_key: &[u8; 32]) -> Result<Self, String> {
         let (decrypted_blob, _): (Vec<u8>, [u8; 32]) =
             decrypt_from_anyone(private_key, encrypted_blob)
-                .map_err(|e| format!("Error when decrypting key data: {}", e))?;
+                .map_err(|e| format!("Error when decrypting key data: {e}"))?;
 
         from_bytes(decrypted_blob.as_slice())
-            .map_err(|e| format!("Error deserializing key data: {}", e))
+            .map_err(|e| format!("Error deserializing key data: {e}"))
     }
 }
 
@@ -183,7 +252,7 @@ impl DocumentKey {
     }
 }
 
-impl DecryptVec for Vec<DocumentKey> {
+impl DecryptDocumentMetaAndKeyVec for Vec<DocumentKey> {
     type Output = Vec<DecryptedDocumentKey>;
 
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String> {
@@ -194,6 +263,7 @@ impl DecryptVec for Vec<DocumentKey> {
 }
 
 impl DecryptedDocumentKey {
+    #[allow(dead_code)]
     pub fn encrypt(
         self,
         my_private_key: &[u8; 32],
@@ -255,7 +325,7 @@ mod tests {
             .encrypt(&private_key, &public_key, &public_key)
             .expect("Encryption failed");
 
-        let decrypted = DecryptedMetadata::from_encrypted(&encrypted.as_slice(), &private_key)
+        let decrypted = DecryptedMetadata::from_encrypted(encrypted.as_slice(), &private_key)
             .expect("Decryption failed");
 
         assert_eq!(decrypted.version, original.version);
@@ -349,7 +419,7 @@ mod tests {
             .encrypt(&private_key, &public_key, &public_key)
             .expect("Encryption failed");
 
-        let decrypted = DecryptedKeyData::from_encrypted(&encrypted.as_slice(), &private_key)
+        let decrypted = DecryptedKeyData::from_encrypted(encrypted.as_slice(), &private_key)
             .expect("Decryption failed");
 
         assert_eq!(decrypted.encryption_key, original.encryption_key);
@@ -444,5 +514,69 @@ mod tests {
             .encrypt_all(&private_key, &public_key, &public_key)
             .expect("Empty vec encryption failed");
         assert_eq!(encrypted.len(), 0);
+    }
+
+    #[test]
+    fn test_encrypt_for_role_reader_gets_empty_signing_key() {
+        let (private_key, public_key) = create_test_keys();
+
+        let original = DecryptedKeyData {
+            encryption_key: vec![1, 2, 3, 4, 5],
+            signing_private_key: vec![6, 7, 8, 9, 10],
+        };
+
+        let encrypted = original
+            .encrypt_for_role(Role::Reader, &private_key, &public_key, &public_key)
+            .expect("Encryption failed");
+
+        let decrypted =
+            DecryptedKeyData::from_encrypted(&encrypted, &private_key).expect("Decryption failed");
+
+        // Reader should get the encryption key
+        assert_eq!(decrypted.encryption_key, original.encryption_key);
+        // Reader should NOT get the signing key (empty)
+        assert!(decrypted.signing_private_key.is_empty());
+    }
+
+    #[test]
+    fn test_encrypt_for_role_editor_gets_full_key() {
+        let (private_key, public_key) = create_test_keys();
+
+        let original = DecryptedKeyData {
+            encryption_key: vec![1, 2, 3, 4, 5],
+            signing_private_key: vec![6, 7, 8, 9, 10],
+        };
+
+        let encrypted = original
+            .encrypt_for_role(Role::Editor, &private_key, &public_key, &public_key)
+            .expect("Encryption failed");
+
+        let decrypted =
+            DecryptedKeyData::from_encrypted(&encrypted, &private_key).expect("Decryption failed");
+
+        // Editor should get both keys
+        assert_eq!(decrypted.encryption_key, original.encryption_key);
+        assert_eq!(decrypted.signing_private_key, original.signing_private_key);
+    }
+
+    #[test]
+    fn test_encrypt_for_role_owner_gets_full_key() {
+        let (private_key, public_key) = create_test_keys();
+
+        let original = DecryptedKeyData {
+            encryption_key: vec![1, 2, 3, 4, 5],
+            signing_private_key: vec![6, 7, 8, 9, 10],
+        };
+
+        let encrypted = original
+            .encrypt_for_role(Role::Owner, &private_key, &public_key, &public_key)
+            .expect("Encryption failed");
+
+        let decrypted =
+            DecryptedKeyData::from_encrypted(&encrypted, &private_key).expect("Decryption failed");
+
+        // Owner should get both keys
+        assert_eq!(decrypted.encryption_key, original.encryption_key);
+        assert_eq!(decrypted.signing_private_key, original.signing_private_key);
     }
 }

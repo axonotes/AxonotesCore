@@ -1,18 +1,66 @@
+//! # ChaCha20-Poly1305 Authenticated Encryption
+//!
+//! Provides symmetric authenticated encryption using the ChaCha20-Poly1305 AEAD cipher.
+//!
+//! ## Features
+//!
+//! - **256-bit keys**: Cryptographically secure random key generation
+//! - **96-bit nonces**: Randomly generated per encryption (prepended to ciphertext)
+//! - **Authentication**: Poly1305 MAC ensures data integrity and authenticity
+//!
+//! ## Wire Format
+//!
+//! Encrypted data format: `[nonce (12 bytes)][ciphertext][auth tag (16 bytes)]`
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! let key = generate_key();
+//! let ciphertext = encrypt(&key, b"secret data")?;
+//! let plaintext = decrypt(&key, &ciphertext)?;
+//! ```
+
 use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
 use chacha20poly1305::{AeadCore, ChaCha20Poly1305, Key};
 
+/// Generates a cryptographically secure 256-bit (32-byte) encryption key.
+///
+/// Uses the operating system's secure random number generator.
+///
+/// # Returns
+///
+/// A 32-byte vector suitable for use with ChaCha20-Poly1305.
 pub fn generate_key() -> Vec<u8> {
     ChaCha20Poly1305::generate_key(&mut OsRng)
         .as_slice()
         .to_vec()
 }
 
+/// Encrypts data using ChaCha20-Poly1305 authenticated encryption.
+///
+/// A random 96-bit nonce is generated for each encryption and prepended to the ciphertext.
+/// The Poly1305 authentication tag is appended to ensure integrity.
+///
+/// # Arguments
+///
+/// * `key` - A 32-byte encryption key
+/// * `content` - The plaintext data to encrypt
+///
+/// # Returns
+///
+/// A vector containing `[nonce (12 bytes)][ciphertext][auth tag (16 bytes)]`
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The key is not exactly 32 bytes
+/// - Encryption fails (rare, usually indicates system issues)
 pub fn encrypt(key: &[u8], content: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     let enc_content = cipher
         .encrypt(&nonce, content)
-        .map_err(|e| format!("Encryption failed: {:?}", e))?;
+        .map_err(|e| format!("Encryption failed: {e:?}"))?;
 
     let mut encrypted = nonce.as_slice().to_vec();
     encrypted.extend_from_slice(&enc_content);
@@ -20,6 +68,26 @@ pub fn encrypt(key: &[u8], content: &[u8]) -> Result<Vec<u8>, Box<dyn std::error
     Ok(encrypted)
 }
 
+/// Decrypts data encrypted with [`encrypt`].
+///
+/// Extracts the nonce from the first 12 bytes, then decrypts and verifies
+/// the authentication tag.
+///
+/// # Arguments
+///
+/// * `key` - The same 32-byte key used for encryption
+/// * `encrypted` - The ciphertext produced by [`encrypt`]
+///
+/// # Returns
+///
+/// The original plaintext data.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The encrypted data is shorter than 12 bytes (missing nonce)
+/// - The key is incorrect
+/// - The ciphertext has been tampered with (authentication failure)
 pub fn decrypt(key: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     if encrypted.len() < 12 {
         return Err("Encrypted data too short".into());
@@ -30,7 +98,7 @@ pub fn decrypt(key: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, Box<dyn std::err
 
     let plaintext = cipher
         .decrypt(nonce.into(), enc_content)
-        .map_err(|e| format!("Decryption failed: {:?}", e))?;
+        .map_err(|e| format!("Decryption failed: {e:?}"))?;
 
     Ok(plaintext)
 }
@@ -61,9 +129,9 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Hello, World!";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
         let decrypted =
-            decrypt(&key.as_slice(), &encrypted.as_slice()).expect("Decryption should succeed");
+            decrypt(key.as_slice(), encrypted.as_slice()).expect("Decryption should succeed");
 
         assert_eq!(decrypted, plaintext, "Decrypted text should match original");
     }
@@ -73,8 +141,8 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Same message";
 
-        let encrypted1 = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
-        let encrypted2 = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted1 = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted2 = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         assert_ne!(
             encrypted1, encrypted2,
@@ -88,8 +156,8 @@ mod tests {
         let key2 = generate_key();
         let plaintext = b"Secret message";
 
-        let encrypted = encrypt(&key1.as_slice(), plaintext).expect("Encryption should succeed");
-        let result = decrypt(&key2.as_slice(), &encrypted.as_slice());
+        let encrypted = encrypt(key1.as_slice(), plaintext).expect("Encryption should succeed");
+        let result = decrypt(key2.as_slice(), encrypted.as_slice());
 
         assert!(result.is_err(), "Decryption with wrong key should fail");
     }
@@ -99,14 +167,14 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Important data";
 
-        let mut encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let mut encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         // Corrupt the ciphertext (skip nonce, corrupt the actual encrypted data)
         if encrypted.len() > 13 {
             encrypted[13] ^= 0xFF;
         }
 
-        let result = decrypt(&key.as_slice(), &encrypted.as_slice());
+        let result = decrypt(key.as_slice(), encrypted.as_slice());
         assert!(
             result.is_err(),
             "Decryption of corrupted ciphertext should fail"
@@ -118,9 +186,9 @@ mod tests {
         let key = generate_key();
         let plaintext = b"";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Should encrypt empty data");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Should encrypt empty data");
         let decrypted =
-            decrypt(&key.as_slice(), &encrypted.as_slice()).expect("Should decrypt empty data");
+            decrypt(key.as_slice(), encrypted.as_slice()).expect("Should decrypt empty data");
 
         assert_eq!(
             decrypted, plaintext,
@@ -134,9 +202,9 @@ mod tests {
         let plaintext = vec![0u8; 10000]; // 10KB of zeros
 
         let encrypted =
-            encrypt(&key.as_slice(), &plaintext.as_slice()).expect("Should encrypt large data");
+            encrypt(key.as_slice(), plaintext.as_slice()).expect("Should encrypt large data");
         let decrypted =
-            decrypt(&key.as_slice(), &encrypted.as_slice()).expect("Should decrypt large data");
+            decrypt(key.as_slice(), encrypted.as_slice()).expect("Should decrypt large data");
 
         assert_eq!(
             decrypted, plaintext,
@@ -149,7 +217,7 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Test";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         // Encrypted data should be: nonce (12 bytes) + ciphertext + tag (16 bytes)
         // So minimum length should be 12 + plaintext.len() + 16
@@ -164,11 +232,11 @@ mod tests {
         let key = generate_key();
         let plaintext = b"Test message";
 
-        let encrypted = encrypt(&key.as_slice(), plaintext).expect("Encryption should succeed");
+        let encrypted = encrypt(key.as_slice(), plaintext).expect("Encryption should succeed");
 
         // Try to decrypt with truncated data (less than nonce size)
         let truncated = &encrypted[..5];
-        let result = decrypt(&key.as_slice(), truncated);
+        let result = decrypt(key.as_slice(), truncated);
 
         assert!(result.is_err(), "Decryption of truncated data should fail");
     }

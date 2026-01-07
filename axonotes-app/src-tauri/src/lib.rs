@@ -1,16 +1,43 @@
+//! # Axonotes Application Library
+//!
+//! This is the core library for the Axonotes desktop application, built with Tauri.
+//!
+//! ## Architecture Overview
+//!
+//! The application follows a modular architecture with clear separation of concerns:
+//!
+//! - **`batch_handler`**: Manages document batches and block operations (CRDT-like sync)
+//! - **`commands`**: Tauri command handlers exposed to the frontend
+//! - **`crypto`**: Cryptographic primitives (ChaCha20-Poly1305, Ed25519, X25519, Argon2)
+//! - **`database`**: Local SQLite database for offline storage
+//! - **`encryption`**: High-level encryption/decryption for documents, batches, and user data
+//! - **`events`**: Event emission to the frontend via Tauri's event system
+//! - **`share`**: Document sharing and key rotation logic
+//! - **`stdb`**: SpacetimeDB integration for real-time sync
+//! - **`stdb_bindings`**: Generated bindings for SpacetimeDB tables and reducers
+//! - **`utils`**: Common utilities (timestamps, byte array conversions)
+//! - **`workos_auth`**: WorkOS-based authentication
+
 use tauri::Manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 
+mod app_handle;
 mod batch_handler;
 mod commands;
 mod config;
 mod crypto;
-mod database;
 mod encryption;
+mod events;
+mod share;
 mod stdb;
 mod stdb_bindings;
 mod utils;
 mod workos_auth;
+
+// Public modules for integration testing
+pub mod database;
+pub mod storage;
+pub mod storage_bindings;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -47,9 +74,46 @@ pub fn run() {
             commands::document_cmd::delete_document,
             commands::document_cmd::get_document_meta,
             commands::document_cmd::list_documents,
-            commands::document_cmd::update_document_metadata
+            commands::document_cmd::update_document_metadata,
+            commands::live_lock_cmd::request_lock,
+            commands::live_lock_cmd::release_lock_focused,
+            commands::live_lock_cmd::release_lock_blur,
+            commands::live_lock_cmd::get_document_locks,
+            commands::live_lock_cmd::update_live_block,
+            commands::block_cmd::create_block,
+            commands::block_cmd::get_blocks,
+            commands::block_cmd::update_block,
+            commands::block_cmd::delete_block,
+            commands::share_cmd::create_share,
+            commands::share_cmd::join_share,
+            commands::share_cmd::close_share,
+            commands::share_cmd::leave_share,
+            commands::share_cmd::update_user_role,
+            commands::share_cmd::transfer_ownership,
+            commands::share_cmd::remove_user,
+            commands::share_cmd::get_document_collaborators,
+            commands::version_tag_cmd::create_version_tag,
+            commands::version_tag_cmd::delete_version_tag,
+            commands::version_tag_cmd::list_version_tags,
+            commands::storage_cmd::storage_init,
+            commands::storage_cmd::storage_shutdown,
+            commands::storage_cmd::storage_is_initialized,
+            commands::storage_cmd::upload_blob_from_path,
+            commands::storage_cmd::upload_blob_from_bytes,
+            commands::storage_cmd::get_blob_url,
+            commands::storage_cmd::prefetch_blob,
+            commands::storage_cmd::is_blob_cached,
+            commands::storage_cmd::get_storage_quota,
+            commands::storage_cmd::clear_blob_cache,
+            commands::storage_cmd::get_blob_cache_info,
+            commands::storage_cmd::delete_cached_blob,
+            commands::storage_cmd::delete_cached_blobs_for_document,
+            commands::storage_cmd::get_media_type_from_extension,
+            commands::storage_cmd::get_mime_type,
         ])
         .setup(|app| {
+            app_handle::init(app.handle().clone());
+
             let main_window = app.get_webview_window("main").unwrap();
             main_window.create_overlay_titlebar().unwrap();
 
@@ -62,7 +126,12 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir).expect("Failed to create app_data_dir.");
 
             database::init_paths(app_data_dir)
-                .map_err(|e| format!("Failed to initialize database paths: {}", e))?;
+                .map_err(|e| format!("Failed to initialize database paths: {e}"))?;
+
+            // Start background token refresh task
+            tauri::async_runtime::spawn(async {
+                workos_auth::start_token_refresh_task().await;
+            });
 
             Ok(())
         })

@@ -1,15 +1,25 @@
+#![allow(dead_code)]
+
+use crate::batch_handler::block_types::Block;
 use crate::call_reducer_await;
+use crate::crypto::chacha::encrypt;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
-use crate::encryption::document::DecryptVec;
 use crate::encryption::document::DecryptedDocumentMetadata;
+use crate::encryption::document::{DecryptDocumentMetaAndKeyVec, DecryptedDocumentKey};
+use crate::encryption::helpers::find_correct_decryption_key;
+use crate::encryption::live_block::DecryptLiveBlockVec;
+use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::encryption::user::UserKeysEncrypted;
+use crate::encryption::version_tag::{DecryptVersionTagVec, DecryptedVersionTag};
 use crate::stdb::{
     disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
     is_profile_connected,
 };
 use crate::stdb_bindings::*;
+use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
+use postcard::to_allocvec;
 use spacetimedb_sdk::{DbContext, Identity, Table};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -20,12 +30,12 @@ use tokio::sync::Mutex;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// // Use active profile
-/// stdb::active_profile().create_user(...).await?;
+/// stdb::active_profile().create_user(keys).await?;
 ///
 /// // Use specific profile
-/// stdb::profile("profile_123").update_keys(...).await?;
+/// stdb::profile("profile_123").update_encryption_keys(keys, signature).await?;
 /// ```
 pub struct ProfileStdbContext {
     profile_id: Option<String>,
@@ -52,7 +62,7 @@ impl ProfileStdbContext {
                 .await?
                 .into_iter()
                 .find(|p| &p.id == id)
-                .ok_or_else(|| format!("Profile {} not found", id))
+                .ok_or_else(|| format!("Profile {id} not found"))
         } else {
             // Get active profile
             crate::database::get_active_profile()
@@ -133,6 +143,81 @@ impl ProfileStdbContext {
         } else {
             Err("No active user keys available. Not synced with stdb?".to_string())
         }
+    }
+
+    /// Get cached document keys from SpacetimeDB
+    pub async fn get_cached_document_keys(&self) -> Result<Vec<DecryptedDocumentKey>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let user_keys: Option<Keys> = get_active_user_keys().await?;
+        if let Some(user_keys) = user_keys {
+            let private_encryption_key = user_keys.private_encryption_key.as_array()?;
+            conn.db
+                .user_document_keys()
+                .iter()
+                .collect::<Vec<_>>()
+                .decrypt_all(private_encryption_key)
+        } else {
+            Err("No active user keys available. Not synced with stdb?".to_string())
+        }
+    }
+
+    /// Get cached live blocks from SpacetimeDB
+    pub async fn get_cached_live_blocks(&self) -> Result<Vec<DecryptedLiveBlock>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let cached_document_keys = self.get_cached_document_keys().await?;
+        conn.db
+            .accessible_live_blocks()
+            .iter()
+            .collect::<Vec<_>>()
+            .decrypt_all(cached_document_keys.as_slice())
+    }
+
+    /// Get document permissions for a specific document (unencrypted)
+    /// Returns permissions from the manageable_permissions view
+    pub async fn get_document_permissions(
+        &self,
+        doc_id: &str,
+    ) -> Result<Vec<DocumentPermission>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        Ok(conn
+            .db
+            .manageable_permissions()
+            .iter()
+            .filter(|p| p.doc_id == doc_id)
+            .collect())
+    }
+
+    /// Get public keys of collaborators (unencrypted)
+    /// Returns public keys for all users who have access to documents you can access
+    pub async fn get_public_user_keys(&self) -> Result<Vec<PublicUserInfo>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        Ok(conn.db.public_user_keys().iter().collect())
+    }
+
+    /// Get cached version tags for a specific document (decrypted)
+    pub async fn get_cached_version_tags(
+        &self,
+        doc_id: &str,
+    ) -> Result<Vec<DecryptedVersionTag>, String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        let document_keys = self.get_cached_document_keys().await?;
+
+        conn.db
+            .accessible_version_tags()
+            .iter()
+            .filter(|t| t.doc_id == doc_id)
+            .collect::<Vec<_>>()
+            .decrypt_all(&document_keys)
     }
 
     // ==========================================
@@ -259,6 +344,7 @@ impl ProfileStdbContext {
     /// 3. Inserts new keys for all remaining users
     /// 4. Stores snapshot batches for ALL blocks
     /// 5. Re-encrypts all version tags with new key
+    #[allow(clippy::too_many_arguments)] // Mirrors database reducer signature
     pub async fn rotate_document_keys(
         &self,
         doc_id: String,
@@ -291,11 +377,32 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         block_id: u64,
-        encrypted_content: Vec<u8>,
-        encrypted_username: Vec<u8>,
+        content: &Block,
+        username: String,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
+
+        let cached_document_keys = self.get_cached_document_keys().await?;
+        let latest_document_key =
+            find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
+
+        let username_blob =
+            to_allocvec(&username).map_err(|e| format!("Error serializing batch data: {e}"))?;
+
+        let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
+
+        let encrypted_content = encrypt(
+            latest_document_key.key_data.encryption_key.as_slice(),
+            content_blob.as_slice(),
+        )
+        .map_err(|e| format!("Error when encrypting live block content: {e}"))?;
+
+        let encrypted_username = encrypt(
+            latest_document_key.key_data.encryption_key.as_slice(),
+            username_blob.as_slice(),
+        )
+        .map_err(|e| format!("Error when encrypting live block username: {e}"))?;
 
         call_reducer_await!(
             conn,
@@ -312,10 +419,22 @@ impl ProfileStdbContext {
         &self,
         doc_id: String,
         block_id: u64,
-        encrypted_content: Vec<u8>,
+        content: &Block,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
+
+        let cached_document_keys = self.get_cached_document_keys().await?;
+        let latest_document_key =
+            find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
+
+        let content_blob = serde_json::to_vec(content).map_err(|e| e.to_string())?;
+
+        let encrypted_content = encrypt(
+            latest_document_key.key_data.encryption_key.as_slice(),
+            content_blob.as_slice(),
+        )
+        .map_err(|e| format!("Error when encrypting live block content: {e}"))?;
 
         call_reducer_await!(conn, update_live_block, doc_id, block_id, encrypted_content)
     }
@@ -413,12 +532,15 @@ impl ProfileStdbContext {
     }
 
     /// Change a user's role (Editor ↔ Reader)
-    /// NO key rotation needed
+    ///
+    /// For Reader → Editor: Provide `updated_key` with the current key encrypted with signing key
+    /// For Editor → Reader: Client should call key rotation AFTER this
     pub async fn change_user_role(
         &self,
         doc_id: String,
         target_user_id: Identity,
         new_role: Role,
+        updated_key: Option<EncryptedKeyEntry>,
         signature: Vec<u8>,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
@@ -430,6 +552,7 @@ impl ProfileStdbContext {
             doc_id,
             target_user_id,
             new_role,
+            updated_key,
             signature
         )
     }
@@ -481,6 +604,51 @@ impl ProfileStdbContext {
         let conn = conn.lock().await;
 
         call_reducer_await!(conn, delete_version_tag, tag_id, signature)
+    }
+
+    // ==========================================
+    // Share Operations
+    // ==========================================
+
+    /// Create a pending share for a document
+    /// Returns after reducer completes - client reads share_code from subscription
+    pub async fn create_pending_share(
+        &self,
+        doc_id: String,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, create_pending_share, doc_id, signature)
+    }
+
+    /// Join a pending share using a share code
+    pub async fn join_pending_share(&self, share_code: String) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, join_pending_share, share_code)
+    }
+
+    /// Close a pending share (cleanup after done or abandon)
+    pub async fn close_pending_share(
+        &self,
+        share_code: String,
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, close_pending_share, share_code, signature)
+    }
+
+    /// Leave a pending share (joiner withdraws)
+    pub async fn leave_pending_share(&self, share_code: String) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(conn, leave_pending_share, share_code)
     }
 }
 

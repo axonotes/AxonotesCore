@@ -2,6 +2,8 @@
 // Template: templates/config.rs.njk
 // Generated at: {{ _meta.generated_at if _meta else 'build time' }}
 
+#![allow(dead_code)]
+
 /// OAuth configuration constants
 pub struct OAuthConfig {
     pub client_id: &'static str,
@@ -109,6 +111,27 @@ impl Default for StdbConfig {
 }
 {% endif %}
 
+{% if storage -%}
+/// Storage API configuration
+pub struct StorageConfig {
+    pub base_url: &'static str,
+}
+
+impl StorageConfig {
+    pub fn new() -> Self {
+        Self {
+            base_url: "{{ storage.base_url }}",
+        }
+    }
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+{% endif %}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,6 +158,14 @@ mod tests {
         let config = StdbConfig::new();
         assert!(!config.default_host_uri.is_empty());
         assert!(!config.default_module_name.is_empty());
+    }
+    {% endif %}
+
+    {% if storage -%}
+    #[test]
+    fn test_storage_config() {
+        let config = StorageConfig::new();
+        assert!(!config.base_url.is_empty());
     }
     {% endif %}
 }
