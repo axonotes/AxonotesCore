@@ -13,6 +13,7 @@
 //! - **`profile_cmd`**: User profile management (switch, refresh token)
 //! - **`share_cmd`**: Document sharing (create share, join, permissions)
 //! - **`version_tag_cmd`**: Version tagging (create, delete, list tags)
+//! - **`workspace_cmd`**: UI workspace configurations (Dockview layouts)
 //!
 //! ## Error Handling
 //!
@@ -34,3 +35,4 @@ pub(crate) mod profile_cmd;
 pub(crate) mod share_cmd;
 pub(crate) mod storage_cmd;
 pub(crate) mod version_tag_cmd;
+pub(crate) mod workspace_cmd;

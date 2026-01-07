@@ -46,6 +46,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::auth_cmd::start_login,
             commands::auth_cmd::logout,
@@ -110,6 +111,11 @@ pub fn run() {
             commands::storage_cmd::delete_cached_blobs_for_document,
             commands::storage_cmd::get_media_type_from_extension,
             commands::storage_cmd::get_mime_type,
+            commands::workspace_cmd::create_workspace,
+            commands::workspace_cmd::get_workspace,
+            commands::workspace_cmd::list_workspaces,
+            commands::workspace_cmd::update_workspace,
+            commands::workspace_cmd::delete_workspace,
         ])
         .setup(|app| {
             app_handle::init(app.handle().clone());

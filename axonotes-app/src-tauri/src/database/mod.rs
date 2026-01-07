@@ -16,6 +16,7 @@
 //! - **`profiles`**: User profile and authentication data
 //! - **`schema`**: Database schema initialization and migrations
 //! - **`snapshots`**: Document state snapshots for version history
+//! - **`workspaces`**: UI workspace configurations (Dockview layouts)
 //!
 //! ## Security Model
 //!
@@ -50,10 +51,12 @@ pub(crate) mod keys;
 pub(crate) mod profiles;
 pub(crate) mod schema;
 pub(crate) mod snapshots;
+pub(crate) mod workspaces;
 
 use crate::batch_handler::block_getter::{invalidate_block_cache, invalidate_doc_cache};
 use crate::crypto;
 use crate::database::keys::Keys;
+pub use crate::database::workspaces::Workspace;
 use crate::encryption::batch::DecryptedBatch;
 use crate::workos_auth::Profile;
 use once_cell::sync::OnceCell;
@@ -784,6 +787,55 @@ pub async fn count_snapshots_by_doc(doc_id: String) -> Result<u64, String> {
     tokio::task::spawn_blocking(move || {
         let conn = get_conn()?;
         snapshots::count_by_doc(&conn, doc_id.as_str()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ========================================
+// Workspace Operations
+// ========================================
+
+pub async fn create_workspace(id: String, config: String) -> Result<Workspace, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        workspaces::create(&conn, &id, &config).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn get_workspace(id: String) -> Result<Option<Workspace>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        workspaces::get_by_id(&conn, &id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn list_workspaces() -> Result<Vec<Workspace>, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        workspaces::get_all(&conn).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn update_workspace(id: String, config: String) -> Result<Workspace, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        workspaces::update(&conn, &id, &config).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn delete_workspace(id: String) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        workspaces::delete(&conn, &id).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

@@ -27,7 +27,7 @@ src-tauri/
 │   ├── lib.rs                 # Tauri command registration
 │   ├── main.rs                # Application entry point
 │   ├── config.rs              # Generated app configuration
-│   ├── commands/              # Tauri IPC commands (43 total)
+│   ├── commands/              # Tauri IPC commands (48 total)
 │   │   ├── auth_cmd.rs        # Login/logout
 │   │   ├── profile_cmd.rs     # Profile management
 │   │   ├── database_cmd.rs    # Database lock/unlock
@@ -37,7 +37,8 @@ src-tauri/
 │   │   ├── collab_cmd.rs      # Real-time collaboration
 │   │   ├── share_cmd.rs       # Document sharing
 │   │   ├── version_cmd.rs     # Version tags
-│   │   └── storage_cmd.rs     # Blob operations
+│   │   ├── storage_cmd.rs     # Blob operations
+│   │   └── workspace_cmd.rs   # UI workspace layouts
 │   ├── crypto/                # Cryptographic primitives
 │   │   ├── argon2.rs          # Password hashing
 │   │   ├── bip39.rs           # Mnemonic phrases
@@ -51,7 +52,8 @@ src-tauri/
 │   │   └── live_block.rs      # Live block encryption
 │   ├── database/              # SQLCipher storage
 │   │   ├── mod.rs             # Connection management
-│   │   └── schema.rs          # Table definitions
+│   │   ├── schema.rs          # Table definitions
+│   │   └── workspaces.rs      # UI workspace storage
 │   ├── stdb/                  # SpaceTimeDB integration
 │   │   ├── context.rs         # Profile-scoped operations
 │   │   └── callbacks/         # Subscription handlers
@@ -136,6 +138,16 @@ src-tauri/
 | `prefetch_blob`         | Download blob to cache       |
 | `get_storage_quota`     | Get quota info               |
 
+### Workspaces
+
+| Command            | Description                      |
+| ------------------ | -------------------------------- |
+| `create_workspace` | Create new workspace with config |
+| `get_workspace`    | Get workspace config by ID       |
+| `list_workspaces`  | List all workspaces              |
+| `update_workspace` | Update workspace config          |
+| `delete_workspace` | Delete workspace by ID           |
+
 ## Encryption Architecture
 
 ```
@@ -166,6 +178,7 @@ Document Content (batches, metadata, live blocks)
 | `batches`    | Document patches (pending sync) |
 | `snapshots`  | Key rotation snapshots          |
 | `blob_cache` | Cached blob metadata            |
+| `workspaces` | UI workspace layouts (Dockview) |
 
 ## Events Emitted
 
@@ -214,3 +227,7 @@ axogen run fmt
   - `blake3` - Hashing
 - **Async:** Tokio runtime
 - **Caching:** Moka, DashMap
+- **Tauri Plugins:**
+  - `tauri-plugin-window-state` - Persistent window position/size
+  - `tauri-plugin-store` - Key-value storage
+  - `tauri-plugin-decorum` - Custom titlebar
