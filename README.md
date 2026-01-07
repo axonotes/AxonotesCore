@@ -9,7 +9,7 @@
 <p align="center">
   <strong>Core monorepo for the Axonotes Desktop application (Tauri/SvelteKit) and its SpaceTimeDB Rust backend.</strong>
   <br />
-  <em>Currently in early planning and development.</em>
+  <em>Currently in Beta-1.</em>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
   <a href="#license-overview">License Overview</a>
 </p>
 
-[![Status](https://img.shields.io/badge/status-early%20development-orange)](https://github.com/axonotes/AxonotesCore)
+[![Status](https://img.shields.io/badge/status-beta--1-blue)](https://github.com/axonotes/AxonotesCore)
 
 ---
 
@@ -49,24 +49,38 @@ We're building an all-in-one academic suite focused on:
 
 This `AxonotesCore` repository is a monorepo that houses the foundational code for Axonotes:
 
-- **`/axonotes-app`**:
+- **[`/axonotes-app`](./axonotes-app)**:
   - The Axonotes desktop application.
   - Built with **[Tauri](https://tauri.app/)** (using **[SvelteKit](https://kit.svelte.dev/)** for the frontend).
-  - Provides the cross-platform user interface (Windows, macOS, Linux) and client-side logic.
-  - Handles offline-first capabilities and synchronization with the backend.
+  - Provides the cross-platform user interface (Windows, macOS, Linux).
+  - **[`/axonotes-app/src-tauri`](./axonotes-app/src-tauri)**: Rust backend with end-to-end encryption, offline-first SQLCipher database, and SpaceTimeDB synchronization.
 
-- **`/server`**:
-  - The backend logic and data modules running on **[SpaceTimeDB](https://spacetimedb.com/)**.
-  - Written in **Rust**.
-  - Manages real-time collaboration, data persistence, and the detailed version history system.
+- **[`/axonotes-stdb`](./axonotes-stdb)**:
+  - The real-time backend module running on **[SpaceTimeDB](https://spacetimedb.com/)**.
+  - Written in **Rust**, compiles to WebAssembly.
+  - Manages real-time collaboration, access control, key distribution, and version history.
+  - All data encrypted client-side; server never sees plaintext content.
 
-> **Note:** Directory names are placeholders and may evolve.
+- **[`/axonotes-storage`](./axonotes-storage)**:
+  - Blob storage microservice for files and media.
+  - Built with **[Axum](https://github.com/tokio-rs/axum)** and **S3-compatible storage** (MinIO).
+  - Features streaming uploads, Ed25519 signature verification, and dynamic quota management.
+
+- **[`/axogen`](./axogen)**:
+  - Build automation and code generation configuration using **[Axogen](https://axonotes.github.io/axogen/)**.
+  - Generates Rust configuration files and Docker Compose manifests from templates.
+  - Provides unified CLI commands for development, testing, and service orchestration.
 
 ## ⏳ Current Stage
 
-Axonotes and this `AxonotesCore` repository are currently in the **early planning and development phase**. The code here
-represents foundational work and is subject to significant changes as we iterate and refine our vision based on
-community feedback.
+Axonotes and this `AxonotesCore` repository are currently in **Beta-1**.
+
+| Component                                      | Status           | Notes                                                                   |
+| ---------------------------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| **Rust Backend** (Tauri, SpaceTimeDB, Storage) | ~90%             | Core features implemented. Some nice-to-haves and improvements pending. |
+| **SvelteKit Frontend**                         | Work in Progress | Needs to integrate most backend APIs.                                   |
+
+We're actively developing the frontend and refining the user experience based on community feedback.
 
 ## ⭐ Star History
 
@@ -74,32 +88,94 @@ community feedback.
 
 ## 🛠️ Tech Stack
 
-- **Client-side (Desktop App):**
-  - Framework: [Tauri](https://tauri.app/)
-  - UI: [SvelteKit](https://kit.svelte.dev/)
-  - Language: TypeScript, HTML, CSS
-- **Backend & Real-time Database:**
-  - Platform: [SpaceTimeDB](https://spacetimedb.com/)
-  - Language: Rust
-- **Key Features Powered by this Stack:**
-  - Cross-platform native-like experience
-  - Real-time collaboration
-  - Robust offline-first capabilities
-  - Incredibly detailed version history
+- **Desktop Application ([`/axonotes-app`](./axonotes-app)):**
+  - Framework: [Tauri](https://tauri.app/) 2.x
+  - Frontend: [SvelteKit](https://kit.svelte.dev/) with TypeScript
+  - Backend: Rust with [SpaceTimeDB SDK](https://spacetimedb.com/)
+  - Database: SQLCipher (encrypted SQLite)
+  - Authentication: WorkOS OAuth 2.0 + PKCE
+
+- **Real-time Backend ([`/axonotes-stdb`](./axonotes-stdb)):**
+  - Platform: [SpaceTimeDB](https://spacetimedb.com/) 1.11+
+  - Language: Rust (compiles to WebAssembly)
+
+- **Storage Service ([`/axonotes-storage`](./axonotes-storage)):**
+  - Framework: [Axum](https://github.com/tokio-rs/axum)
+  - Storage: S3-compatible (MinIO / AWS S3)
+  - Database: SQLite
+
+- **Cryptography:**
+  - Symmetric: ChaCha20-Poly1305
+  - Asymmetric: X25519 (key exchange), Ed25519 (signatures)
+  - Hashing: BLAKE3, Argon2id (password derivation)
+  - Recovery: BIP-39 mnemonic phrases
+
+- **Build Tools ([`/axogen`](./axogen)):**
+  - [Axogen](https://axonotes.github.io/axogen/) - Configuration and task management
+  - [Bun](https://bun.sh/) - JavaScript runtime
+  - Docker Compose - Service orchestration
 
 ## 🚀 Getting Started
 
-As we are in the early stages, detailed setup and contribution guidelines for developers are still being formulated.
+### Prerequisites
 
-However, to work with this repository, you will generally need:
+- **Rust Toolchain:** For Tauri, SpaceTimeDB modules, and storage service
+- **Bun:** JavaScript runtime and package manager ([bun.sh](https://bun.sh/))
+- **SpaceTime CLI:** For SpaceTimeDB development (`spacetime`)
+- **Docker:** For running the storage service with MinIO
+- **Tauri Prerequisites:** Follow the [Tauri setup guide](https://tauri.app/start/prerequisites/) for your OS
 
-- **Rust Toolchain:** For the SpaceTimeDB modules.
-- **Node.js & bun:** For the SvelteKit frontend and Tauri.
-- **Tauri Prerequisites:** Follow the [Tauri setup guide](https://tauri.app/v1/guides/getting-started/prerequisites) for
-  your operating system.
+### Quick Start
 
-More specific instructions for building, running, and developing will be added to the respective subdirectories (`/axonotes-app`,
-`/server`) as they mature.
+```bash
+# Install dependencies
+axogen run install
+
+# Start SpaceTimeDB server (in separate terminal)
+axogen run stdb dev
+
+# Start storage service (in separate terminal)
+axogen run storage dev
+
+# Start the Tauri development server
+axogen run dev
+```
+
+### Configuration
+
+Copy and configure the settings in `config.toml`:
+
+```toml
+[app]
+name = "AxonotesApp"
+version = "0.0.1"
+environment = "development"
+
+[oauth]
+client_id = "your-workos-client-id"
+# ... see config.toml for full options
+
+[stdb]
+default_host_uri = "http://localhost:3000"
+default_module_name = "axonotes"
+
+[storage]
+base_url = "http://localhost:8081"
+```
+
+### Common Commands
+
+| Command                  | Description                    |
+| ------------------------ | ------------------------------ |
+| `axogen run install`     | Install all dependencies       |
+| `axogen run dev`         | Start Tauri development server |
+| `axogen run fmt`         | Format all code                |
+| `axogen run test`        | Run all tests                  |
+| `axogen run stdb dev`    | Start SpaceTimeDB server       |
+| `axogen run storage dev` | Start storage service          |
+| `axogen generate`        | Regenerate configuration files |
+
+See the [axogen README](./axogen/README.md) for more commands.
 
 ## 🤝 Contributing
 

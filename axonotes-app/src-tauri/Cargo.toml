@@ -1,12 +1,11 @@
 [package]
 name = "axonotes-app"
 version = "0.1.0"
-# TODO: Update this ->
-description = "A Tauri App"
-authors = ["you"]
+description = "Tauri desktop application with end-to-end encryption, offline-first storage, and real-time collaboration"
+authors = ["Oliver Seifert <oliver@axonotes.ch>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license-file = "../../LICENSE"
+repository = "https://github.com/axonotes/AxonotesCore"
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
