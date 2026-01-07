@@ -1,14 +1,44 @@
 <script lang="ts">
-  import {Menu, Sun, Moon, LockKeyhole, Settings} from "@lucide/svelte";
+  import {
+    Menu,
+    Sun,
+    Moon,
+    LockKeyhole,
+    Settings,
+    FilePlus,
+  } from "@lucide/svelte";
   import {Button} from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {PANELS, addPanel, type PanelDefinition} from "$lib/stores/panels";
   import {toggleMode, mode} from "mode-watcher";
   import {app, databaseMode} from "$lib/stores/app";
+  import {createDocument} from "$lib/stores/documents";
   import * as m from "$lib/paraglide/messages.js";
 
-  // Filter out settings from main panels list (shown separately)
-  const contentPanels = PANELS.filter((p) => p.id !== "settings");
+  // Filter out settings and editor from main panels list
+  // Editor is opened via "Create Document" or sidebar, not directly
+  const contentPanels = PANELS.filter(
+    (p) => p.id !== "settings" && p.id !== "editor"
+  );
+
+  let creating = $state(false);
+
+  async function handleCreateDocument() {
+    if (creating) return;
+    creating = true;
+    try {
+      const docId = await createDocument();
+      addPanel("editor", {
+        id: `editor-${docId}`,
+        params: {docId, fileName: "Default.doc"},
+        title: "Default.doc",
+      });
+    } catch (error) {
+      console.error("[ViewMenu] Failed to create document:", error);
+    } finally {
+      creating = false;
+    }
+  }
 
   function handleAddPanel(panel: PanelDefinition) {
     addPanel(panel.id);
@@ -40,6 +70,11 @@
   <DropdownMenu.Content align="start" class="w-48">
     <DropdownMenu.Label>Panels</DropdownMenu.Label>
     <DropdownMenu.Separator />
+    <DropdownMenu.Item onclick={handleCreateDocument} disabled={creating}>
+      <FilePlus class="mr-2 h-4 w-4" />
+      Create Document
+    </DropdownMenu.Item>
+
     {#each contentPanels as panel (panel.id)}
       {@const Icon = panel.icon}
       <DropdownMenu.Item onclick={() => handleAddPanel(panel)}>

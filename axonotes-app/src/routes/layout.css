@@ -123,3 +123,18 @@
 body {
   overflow: hidden;
 }
+
+/* Dockview tab styling - make tabs rectangular with borders */
+.dv-tabs-container .dv-tab {
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  margin-right: -1px; /* Collapse adjacent borders */
+}
+
+.dv-tabs-container .dv-tab:first-child {
+  margin-left: 0;
+}
+
+.dv-tabs-container .dv-tab:last-child {
+  margin-right: 0;
+}

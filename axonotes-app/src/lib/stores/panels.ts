@@ -44,7 +44,7 @@ export interface PanelDefinition {
 export const PANELS: PanelDefinition[] = [
   {
     id: "sidebar",
-    name: "Sidebar",
+    name: "Explorer",
     icon: Sidebar,
     component: SidebarPanel,
     singleton: true,
@@ -109,7 +109,7 @@ export const dockviewApi = {
  */
 export function addPanel(
   panelType: string,
-  options?: {id?: string; params?: Parameters}
+  options?: {id?: string; params?: Parameters; title?: string}
 ): void {
   const api = get(dockviewApiStore);
 
@@ -126,6 +126,17 @@ export function addPanel(
 
   const id = options?.id ?? `${panelType}-${Date.now()}`;
   const params = options?.params ?? {};
+  const title = options?.title ?? panelDef.name;
+
+  // Check if panel with this exact ID already exists
+  if (options?.id) {
+    const existingById = api.getPanel(options.id);
+    if (existingById) {
+      // Focus existing panel instead of creating new one
+      existingById.api.setActive();
+      return;
+    }
+  }
 
   // Check singleton constraint
   if (panelDef.singleton) {
@@ -142,7 +153,50 @@ export function addPanel(
     }
   }
 
-  // Map defaultPosition to dockview directions
+  // For center panels (editors, settings, welcome), try to add to existing center group
+  // or to the right of the sidebar if no center panel exists
+  if (panelDef.defaultPosition === "center") {
+    // Find an existing center panel (non-sidebar) to add as a tab
+    const centerPanel = api.panels.find((p) => {
+      const componentType = (
+        p as unknown as {view?: {contentComponent?: string}}
+      ).view?.contentComponent;
+      return componentType !== "sidebar";
+    });
+
+    if (centerPanel) {
+      // Add to the same group as the existing center panel
+      api.addPanel({
+        id,
+        component: panelType,
+        title,
+        params,
+        position: {referencePanel: centerPanel.id},
+      });
+      return;
+    }
+
+    // No center panel exists, add to the right of sidebar
+    const sidebarPanel = api.panels.find((p) => {
+      const componentType = (
+        p as unknown as {view?: {contentComponent?: string}}
+      ).view?.contentComponent;
+      return componentType === "sidebar";
+    });
+
+    if (sidebarPanel) {
+      api.addPanel({
+        id,
+        component: panelType,
+        title,
+        params,
+        position: {referencePanel: sidebarPanel.id, direction: "right"},
+      });
+      return;
+    }
+  }
+
+  // Map defaultPosition to dockview directions for non-center panels
   let direction: "left" | "right" | "above" | "below" | undefined;
   if (panelDef.defaultPosition === "left") direction = "left";
   else if (panelDef.defaultPosition === "right") direction = "right";
@@ -151,7 +205,7 @@ export function addPanel(
   api.addPanel({
     id,
     component: panelType,
-    title: panelDef.name,
+    title,
     params,
     ...(direction && {position: {direction}}),
   });

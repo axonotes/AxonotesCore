@@ -35,6 +35,7 @@ use uuid::Uuid;
 /// # Arguments
 ///
 /// * `title` - Optional document title (defaults to "Default")
+/// * `folder_path` - Optional folder path (defaults to "/")
 ///
 /// # Returns
 ///
@@ -42,13 +43,16 @@ use uuid::Uuid;
 ///
 /// # Process
 ///
-/// 1. Generates unique path (deduplicating if needed)
+/// 1. Generates unique path within folder (deduplicating if needed)
 /// 2. Creates Ed25519 signing keypair for the document
 /// 3. Creates ChaCha20 encryption key
 /// 4. Encrypts keys for the creating user
 /// 5. Creates initial metadata block with title
 #[tauri::command]
-pub async fn create_document(title: Option<String>) -> Result<String, String> {
+pub async fn create_document(
+    title: Option<String>,
+    folder_path: Option<String>,
+) -> Result<String, String> {
     let user_keys: Option<Keys> = get_active_user_keys().await?;
     if let Some(user_keys) = user_keys {
         let private_encryption_key = user_keys.private_encryption_key.as_array()?;
@@ -64,14 +68,28 @@ pub async fn create_document(title: Option<String>) -> Result<String, String> {
             "Default".to_string()
         };
 
-        // Generate unique path
+        // Normalize folder path
+        let folder = folder_path.unwrap_or_else(|| "/".to_string());
+        let folder = if folder.is_empty() || folder == "/" {
+            "".to_string()
+        } else {
+            // Ensure folder starts with / and doesn't end with /
+            let f = if folder.starts_with('/') {
+                folder.clone()
+            } else {
+                format!("/{folder}")
+            };
+            f.trim_end_matches('/').to_string()
+        };
+
+        // Generate unique path within the folder
         let base_filename = format!("{document_title}.doc");
-        let mut path = format!("/{base_filename}");
+        let mut path = format!("{folder}/{base_filename}");
         let mut counter = 1;
 
-        // Check if path already exists and increment counter if needed
+        // Check if path already exists in the same folder and increment counter if needed
         while document_metadata.iter().any(|m| m.metadata.path == path) {
-            path = format!("/{document_title} ({counter}).doc");
+            path = format!("{folder}/{document_title} ({counter}).doc");
             counter += 1;
         }
 
