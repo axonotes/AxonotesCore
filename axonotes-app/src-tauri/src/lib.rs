@@ -143,11 +143,6 @@ pub fn run() {
             database::init_paths(app_data_dir)
                 .map_err(|e| format!("Failed to initialize database paths: {e}"))?;
 
-            // Start background token refresh task
-            tauri::async_runtime::spawn(async {
-                workos_auth::start_token_refresh_task().await;
-            });
-
             Ok(())
         })
         .run(tauri::generate_context!())

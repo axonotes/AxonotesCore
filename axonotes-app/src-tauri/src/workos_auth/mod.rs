@@ -420,11 +420,12 @@ pub async fn start_token_refresh_task() {
         eprintln!("[token-refresh] Background task started");
 
         loop {
-            sleep(Duration::from_secs(REFRESH_CHECK_INTERVAL_SECS)).await;
-
+            // Check immediately on first run, then after each interval
             if let Err(e) = check_and_refresh_token().await {
                 eprintln!("[token-refresh] Check failed: {e}");
             }
+
+            sleep(Duration::from_secs(REFRESH_CHECK_INTERVAL_SECS)).await;
         }
     });
 

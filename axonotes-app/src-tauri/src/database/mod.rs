@@ -58,6 +58,7 @@ use crate::crypto;
 use crate::database::keys::Keys;
 pub use crate::database::workspaces::Workspace;
 use crate::encryption::batch::DecryptedBatch;
+use crate::workos_auth;
 use crate::workos_auth::Profile;
 use once_cell::sync::OnceCell;
 use r2d2::{Pool, PooledConnection};
@@ -234,6 +235,9 @@ pub async fn unlock_db(password: String) -> Result<(), String> {
         let mut pool_guard = DB_POOL.write().map_err(|e| e.to_string())?;
         *pool_guard = Some(pool);
     }
+
+    // Start background token refresh task now that DB is unlocked
+    workos_auth::start_token_refresh_task().await;
 
     Ok(())
 }
