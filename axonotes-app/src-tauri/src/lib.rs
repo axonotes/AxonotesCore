@@ -32,6 +32,7 @@ mod events;
 mod share;
 mod stdb;
 mod stdb_bindings;
+mod storage_bindings;
 mod utils;
 mod workos_auth;
 
