@@ -481,5 +481,14 @@ async fn check_and_refresh_token() -> Result<(), String> {
 
     eprintln!("[token-refresh] SpacetimeDB reconnected with new token");
 
+    // Update storage JWT if initialized
+    if crate::storage::is_initialized().await {
+        if let Err(e) = crate::storage::set_jwt(&result.access_token).await {
+            eprintln!("[token-refresh] Failed to update storage JWT: {e}");
+        } else {
+            eprintln!("[token-refresh] Storage JWT updated");
+        }
+    }
+
     Ok(())
 }

@@ -54,10 +54,12 @@ pub(crate) mod snapshots;
 pub(crate) mod workspaces;
 
 use crate::batch_handler::block_getter::{invalidate_block_cache, invalidate_doc_cache};
+use crate::config::StorageConfig;
 use crate::crypto;
 use crate::database::keys::Keys;
 pub use crate::database::workspaces::Workspace;
 use crate::encryption::batch::DecryptedBatch;
+use crate::storage;
 use crate::workos_auth;
 use crate::workos_auth::Profile;
 use once_cell::sync::OnceCell;
@@ -239,11 +241,25 @@ pub async fn unlock_db(password: String) -> Result<(), String> {
     // Start background token refresh task now that DB is unlocked
     workos_auth::start_token_refresh_task().await;
 
+    // Initialize storage if there's an active profile
+    if let Ok(Some(profile)) = get_active_profile().await {
+        let config = StorageConfig::new();
+        if let Err(e) = storage::init(config.base_url, &profile.access_token).await {
+            eprintln!("[database] Failed to initialize storage: {e}");
+            // Don't fail unlock_db, storage can be initialized later
+        } else {
+            eprintln!("[database] Storage initialized");
+        }
+    }
+
     Ok(())
 }
 
 /// Lock the database (clear the pool)
 pub async fn lock_db() -> Result<(), String> {
+    // Shutdown storage first
+    storage::shutdown().await;
+
     {
         let mut pool_guard = DB_POOL.write().map_err(|e| e.to_string())?;
         *pool_guard = None;
@@ -397,12 +413,27 @@ pub async fn get_all_profiles() -> Result<Vec<Profile>, String> {
 }
 
 pub async fn save_profile(profile: Profile, set_active: bool) -> Result<(), String> {
+    let access_token = profile.access_token.clone();
+
     tokio::task::spawn_blocking(move || {
         let conn = get_conn()?;
         profiles::save(&conn, &profile, set_active).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+
+    // Initialize storage if this profile is being set as active and storage isn't initialized
+    if set_active && !storage::is_initialized().await {
+        let config = StorageConfig::new();
+        if let Err(e) = storage::init(config.base_url, &access_token).await {
+            eprintln!("[database] Failed to initialize storage on profile save: {e}");
+            // Don't fail profile save, storage can be initialized later
+        } else {
+            eprintln!("[database] Storage initialized on profile save");
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn set_active_profile(profile_id: String) -> Result<(), String> {
@@ -411,7 +442,22 @@ pub async fn set_active_profile(profile_id: String) -> Result<(), String> {
         profiles::set_active(&conn, profile_id.as_str()).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+
+    // Reinitialize storage with the new profile's token
+    if let Ok(Some(profile)) = get_active_profile().await {
+        // Shutdown existing storage first
+        storage::shutdown().await;
+
+        let config = StorageConfig::new();
+        if let Err(e) = storage::init(config.base_url, &profile.access_token).await {
+            eprintln!("[database] Failed to reinitialize storage on profile switch: {e}");
+        } else {
+            eprintln!("[database] Storage reinitialized for new profile");
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn delete_profile(profile_id: String) -> Result<(), String> {

@@ -10,13 +10,14 @@
 
 import type {Component} from "svelte";
 import {writable, get} from "svelte/store";
-import {Sidebar, FileText, Home} from "@lucide/svelte";
+import {Sidebar, FileText, Home, Settings} from "@lucide/svelte";
 import type {DockviewApi, Parameters} from "dockview-core";
 
 // Import panel components
 import SidebarPanel from "$lib/components/workspace/panels/SidebarPanel.svelte";
 import EditorPanel from "$lib/components/workspace/panels/EditorPanel.svelte";
 import WelcomePanel from "$lib/components/workspace/panels/WelcomePanel.svelte";
+import SettingsPanel from "$lib/components/workspace/panels/SettingsPanel.svelte";
 
 /**
  * Panel definition for the registry
@@ -61,6 +62,14 @@ export const PANELS: PanelDefinition[] = [
     name: "Welcome",
     icon: Home,
     component: WelcomePanel,
+    singleton: true,
+    defaultPosition: "center",
+  },
+  {
+    id: "settings",
+    name: "Settings",
+    icon: Settings,
+    component: SettingsPanel,
     singleton: true,
     defaultPosition: "center",
   },

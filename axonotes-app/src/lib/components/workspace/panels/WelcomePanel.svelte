@@ -1,5 +1,6 @@
 <script lang="ts">
   import {Layers, GripVertical, Menu, Plus, LayoutGrid} from "@lucide/svelte";
+  import * as m from "$lib/paraglide/messages.js";
 
   interface Props {
     panelId?: string;
@@ -14,10 +15,10 @@
     <!-- Header -->
     <div class="space-y-4 text-center">
       <h1 class="text-3xl leading-tight font-semibold tracking-tight">
-        Welcome to Axonotes
+        {m.welcome_title()}
       </h1>
       <p class="text-muted-foreground text-sm leading-normal">
-        Your workspace is ready. Here's how to get started:
+        {m.welcome_description()}
       </p>
     </div>
 
@@ -30,9 +31,9 @@
           <Menu class="h-4 w-4" />
         </div>
         <div class="space-y-1">
-          <p class="text-sm font-medium">Open panels</p>
+          <p class="text-sm font-medium">{m.welcome_panels_title()}</p>
           <p class="text-muted-foreground text-sm leading-normal">
-            Use the menu in the top-left corner to add new panels
+            {m.welcome_panels_description()}
           </p>
         </div>
       </div>
@@ -44,9 +45,9 @@
           <GripVertical class="h-4 w-4" />
         </div>
         <div class="space-y-1">
-          <p class="text-sm font-medium">Resize panels</p>
+          <p class="text-sm font-medium">{m.welcome_resize_title()}</p>
           <p class="text-muted-foreground text-sm leading-normal">
-            Drag the borders between panels to resize them
+            {m.welcome_resize_description()}
           </p>
         </div>
       </div>
@@ -58,9 +59,9 @@
           <Layers class="h-4 w-4" />
         </div>
         <div class="space-y-1">
-          <p class="text-sm font-medium">Arrange your workspace</p>
+          <p class="text-sm font-medium">{m.welcome_arrange_title()}</p>
           <p class="text-muted-foreground text-sm leading-normal">
-            Drag tabs to rearrange or split into new groups
+            {m.welcome_arrange_description()}
           </p>
         </div>
       </div>
@@ -72,10 +73,9 @@
           <LayoutGrid class="h-4 w-4" />
         </div>
         <div class="space-y-1">
-          <p class="text-sm font-medium">Workspaces</p>
+          <p class="text-sm font-medium">{m.welcome_workspaces_title()}</p>
           <p class="text-muted-foreground text-sm leading-normal">
-            Each workspace has its own panel layout. Use the workspace bar at
-            the bottom to switch between them or create new ones.
+            {m.welcome_workspaces_description()}
           </p>
         </div>
       </div>
@@ -87,10 +87,9 @@
           <Plus class="h-4 w-4" />
         </div>
         <div class="space-y-1">
-          <p class="text-sm font-medium">Create workspace</p>
+          <p class="text-sm font-medium">{m.welcome_create_title()}</p>
           <p class="text-muted-foreground text-sm leading-normal">
-            Click the + button in the workspace bar to add a new workspace.
-            Right-click a workspace tab to rename or delete it.
+            {m.welcome_create_description()}
           </p>
         </div>
       </div>
@@ -98,7 +97,7 @@
 
     <!-- Footer -->
     <p class="text-muted-foreground text-center text-xs">
-      Your layout saves automatically per workspace
+      {m.welcome_footer()}
     </p>
   </div>
 </div>

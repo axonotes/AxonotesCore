@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {Menu, Sun, Moon, LockKeyhole} from "@lucide/svelte";
+  import {Menu, Sun, Moon, LockKeyhole, Settings} from "@lucide/svelte";
   import {Button} from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {PANELS, addPanel, type PanelDefinition} from "$lib/stores/panels";
@@ -7,8 +7,15 @@
   import {app, databaseMode} from "$lib/stores/app";
   import * as m from "$lib/paraglide/messages.js";
 
+  // Filter out settings from main panels list (shown separately)
+  const contentPanels = PANELS.filter((p) => p.id !== "settings");
+
   function handleAddPanel(panel: PanelDefinition) {
     addPanel(panel.id);
+  }
+
+  function openSettings() {
+    addPanel("settings");
   }
 
   // Only show lock option if database has encryption enabled
@@ -33,7 +40,7 @@
   <DropdownMenu.Content align="start" class="w-48">
     <DropdownMenu.Label>Panels</DropdownMenu.Label>
     <DropdownMenu.Separator />
-    {#each PANELS as panel (panel.id)}
+    {#each contentPanels as panel (panel.id)}
       {@const Icon = panel.icon}
       <DropdownMenu.Item onclick={() => handleAddPanel(panel)}>
         <Icon class="mr-2 h-4 w-4" />
@@ -42,6 +49,11 @@
     {/each}
 
     <DropdownMenu.Separator />
+
+    <DropdownMenu.Item onclick={openSettings}>
+      <Settings class="mr-2 h-4 w-4" />
+      {m.settings_title()}
+    </DropdownMenu.Item>
 
     <DropdownMenu.Item onclick={toggleMode}>
       {#if mode.current === "dark"}

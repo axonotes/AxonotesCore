@@ -13,7 +13,7 @@ provider="authkit"
 scopes=["profile", "email"]
 
 [stdb]
-default_host_uri="https://maincloud.spacetimedb.com"
+default_host_uri="http://localhost:3000"
 default_module_name="axonotes"
 
 [storage]

@@ -110,6 +110,30 @@
   }
 
   /**
+   * Handle middle-click on tabs to close panels.
+   */
+  function handleMiddleClick(event: MouseEvent) {
+    // Middle mouse button is button 1
+    if (event.button !== 1) return;
+
+    // Find if we clicked on a tab
+    const target = event.target as HTMLElement;
+    const tab = target.closest(".dv-tab") as HTMLElement | null;
+    if (!tab || !dockviewApi) return;
+
+    // Get panel ID from the tab's data attribute
+    const panelId = tab.getAttribute("data-panel-id");
+    if (!panelId) return;
+
+    // Close the panel
+    const panel = dockviewApi.getPanel(panelId);
+    if (panel) {
+      event.preventDefault();
+      panel.api.close();
+    }
+  }
+
+  /**
    * Initialize dockview with the given configuration.
    */
   function initializeDockview() {
@@ -135,6 +159,9 @@
     });
 
     dockviewApi = dockview.api;
+
+    // Add middle-click to close tabs
+    containerEl.addEventListener("auxclick", handleMiddleClick);
 
     // Load initial layout or create default
     if (initialConfig) {
@@ -250,6 +277,9 @@
    * Cleanup dockview instance.
    */
   function cleanup() {
+    if (containerEl) {
+      containerEl.removeEventListener("auxclick", handleMiddleClick);
+    }
     if (dockview) {
       dockview.dispose();
       dockview = null;
