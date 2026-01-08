@@ -12,6 +12,9 @@
 //! | `snapshots` | Point-in-time block snapshots for key rotation |
 //! | `blob_cache` | Cached encrypted media blobs metadata |
 //! | `workspaces` | UI workspace configurations (Dockview layouts) |
+//! | `document_keys` | Document encryption keys (synced from STDB, stored decrypted) |
+//! | `permissions` | Document permissions (synced from STDB) |
+//! | `documents` | Document metadata (synced from STDB) |
 //!
 //! ## Index Strategy
 //!
@@ -177,6 +180,83 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )",
+        [],
+    )?;
+
+    // ========================================
+    // STDB Sync Tables (for offline support)
+    // ========================================
+
+    // Document keys table (synced from STDB, stored DECRYPTED)
+    // identity_id = which user account this data belongs to (for multi-account support)
+    // Keys are decrypted during sync and stored in plaintext (SQLCipher encrypts the entire DB)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS document_keys (
+            key_id TEXT PRIMARY KEY,
+            identity_id BLOB NOT NULL,
+            doc_id TEXT NOT NULL,
+            user_id BLOB NOT NULL,
+            key_timestamp BLOB NOT NULL,
+            encryption_key BLOB NOT NULL,
+            signing_private_key BLOB NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_document_keys_identity ON document_keys(identity_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_document_keys_doc_id ON document_keys(identity_id, doc_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_document_keys_doc_ts ON document_keys(identity_id, doc_id, key_timestamp DESC)",
+        [],
+    )?;
+
+    // Permissions table (synced from STDB)
+    // identity_id = which user account this data belongs to
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS permissions (
+            permission_id TEXT PRIMARY KEY,
+            identity_id BLOB NOT NULL,
+            doc_id TEXT NOT NULL,
+            user_id BLOB NOT NULL,
+            role TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_permissions_identity ON permissions(identity_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_permissions_doc_id ON permissions(identity_id, doc_id)",
+        [],
+    )?;
+
+    // Documents table (synced from STDB)
+    // identity_id = which user account this data belongs to
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS documents (
+            doc_id TEXT NOT NULL,
+            identity_id BLOB NOT NULL,
+            owner_id BLOB NOT NULL,
+            current_public_signing_key BLOB NOT NULL,
+            key_timestamp BLOB NOT NULL,
+            PRIMARY KEY (doc_id, identity_id)
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_documents_identity ON documents(identity_id)",
         [],
     )?;
 

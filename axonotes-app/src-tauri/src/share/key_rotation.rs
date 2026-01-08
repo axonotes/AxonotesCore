@@ -144,11 +144,9 @@ pub async fn rotate_keys_for_share(doc_id: &str) -> Result<KeyRotationResult, St
     })
 }
 
-/// Get document permissions from the manageable_permissions view
+/// Get document permissions from the local database
 async fn get_document_permissions(doc_id: &str) -> Result<Vec<DocumentPermission>, String> {
-    stdb::active_profile()
-        .get_document_permissions(doc_id)
-        .await
+    crate::database::get_permissions_for_document(doc_id.to_string()).await
 }
 
 /// Get public keys of all collaborators

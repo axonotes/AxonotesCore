@@ -4,17 +4,16 @@
 //! needed for blob operations.
 
 use crate::encryption::document::DecryptedKeyData;
-use crate::stdb;
 
 /// Get the decrypted keys for a specific document.
 ///
-/// Fetches document keys from the cached stdb data and returns
+/// Fetches document keys from the local database and returns
 /// the decrypted key data for the specified document.
 ///
 /// Returns `None` if the document is not found or user doesn't have access.
 pub async fn get_document_keys(doc_id: &str) -> Result<Option<DecryptedKeyData>, String> {
-    // Get all cached document keys
-    let keys = stdb::active_profile().get_cached_document_keys().await?;
+    // Get all document keys from local database
+    let keys = crate::database::get_document_keys_for_active_user().await?;
 
     // Find the key for the requested document
     // Note: There might be multiple keys for a document due to key rotation,

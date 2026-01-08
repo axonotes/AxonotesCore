@@ -145,8 +145,8 @@ async fn process_full_history_share(
     my_public_key: &[u8; 32],
     joiner_public_key: &[u8; 32],
 ) -> Result<Vec<EncryptedKeyEntry>, String> {
-    // Get document keys
-    let document_keys = stdb::active_profile().get_cached_document_keys().await?;
+    // Get document keys from local database
+    let document_keys = crate::database::get_document_keys_for_active_user().await?;
 
     // Filter keys for this document
     let doc_keys: Vec<&DecryptedDocumentKey> = document_keys

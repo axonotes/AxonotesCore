@@ -67,7 +67,7 @@ pub async fn create_version_tag(
     let private_signing_key = user_keys.private_signing_key.as_array()?;
 
     // Get document key for encryption
-    let document_keys = stdb::active_profile().get_cached_document_keys().await?;
+    let document_keys = crate::database::get_document_keys_for_active_user().await?;
     let doc_key = document_keys
         .iter()
         .filter(|k| k.doc_id == doc_id)

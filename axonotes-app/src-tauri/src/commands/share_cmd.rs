@@ -201,9 +201,7 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
     let public_encryption_key = user_keys.public_encryption_key.as_array()?;
 
     // Get target user's current role to determine transition type
-    let permissions = stdb::active_profile()
-        .get_document_permissions(&doc_id)
-        .await?;
+    let permissions = crate::database::get_permissions_for_document(doc_id.clone()).await?;
     let target_perm = permissions
         .iter()
         .find(|p| p.user_id == user_identity)
@@ -228,7 +226,7 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
                 .map_err(|_| "Target public key must be 32 bytes")?;
 
             // Get current document key (most recent one)
-            let document_keys = stdb::active_profile().get_cached_document_keys().await?;
+            let document_keys = crate::database::get_document_keys_for_active_user().await?;
             let current_key = document_keys
                 .iter()
                 .filter(|k| k.doc_id == doc_id)
@@ -411,9 +409,7 @@ pub async fn remove_user(doc_id: String, user_id: String) -> Result<(), String> 
 /// * `doc_id` - The document ID
 #[tauri::command]
 pub async fn get_document_collaborators(doc_id: String) -> Result<Vec<Collaborator>, String> {
-    let permissions = stdb::active_profile()
-        .get_document_permissions(&doc_id)
-        .await?;
+    let permissions = crate::database::get_permissions_for_document(doc_id).await?;
 
     let collaborators = permissions
         .into_iter()

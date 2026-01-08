@@ -23,6 +23,7 @@
 //! automatically when SpacetimeDB pushes row changes via WebSocket.
 
 use super::*;
+use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
 use crate::events::{
     emit_block_lock_expired, emit_block_locked, emit_block_unlocked, emit_document_access_granted,
     emit_document_access_revoked,
@@ -222,8 +223,91 @@ async fn check_expired_locks() -> Result<(), String> {
 // Subscription Callbacks
 // ==========================================
 
-pub fn on_subscription_applied(_ctx: &SubscriptionEventContext) {
+/// Sync all STDB cached data to local SQLite for the current user identity.
+/// Called only on subscription applied.
+fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
+    // Get the current user's identity
+    let Some(identity) = ctx.try_identity() else {
+        eprintln!("[sync] No identity available for sync");
+        return;
+    };
+
+    // Pull all data from STDB's in-memory cache
+    let keys: Vec<_> = ctx.db.user_document_keys().iter().collect();
+    let permissions: Vec<_> = ctx.db.manageable_permissions().iter().collect();
+    let documents: Vec<_> = ctx.db.accessible_documents().iter().collect();
+
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                eprintln!("[sync] Failed to create tokio runtime: {e}");
+                return;
+            }
+        };
+
+        rt.block_on(async {
+            // Get user's private key for decrypting document keys
+            let user_keys = match crate::database::get_active_user_keys().await {
+                Ok(Some(keys)) => keys,
+                Ok(None) => {
+                    eprintln!("[sync] No user keys available for decryption");
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("[sync] Failed to get user keys: {e}");
+                    return;
+                }
+            };
+
+            // Decrypt document keys before storing
+            let private_key = match user_keys.private_encryption_key.as_slice().try_into() {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("[sync] Failed to convert private key: {e:?}");
+                    return;
+                }
+            };
+            let private_key: &[u8; 32] = private_key;
+
+            let decrypted_keys = match keys.decrypt_all(private_key) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("[sync] Failed to decrypt document keys: {e}");
+                    return;
+                }
+            };
+
+            // Overwrite local SQLite for THIS identity only
+            if let Err(e) = crate::database::sync_document_keys(identity, decrypted_keys).await {
+                eprintln!("[sync] Failed to sync document keys: {e}");
+            } else {
+                log::debug!("[sync] Document keys synced");
+            }
+
+            if let Err(e) = crate::database::sync_permissions(identity, permissions).await {
+                eprintln!("[sync] Failed to sync permissions: {e}");
+            } else {
+                log::debug!("[sync] Permissions synced");
+            }
+
+            if let Err(e) = crate::database::sync_documents(identity, documents).await {
+                eprintln!("[sync] Failed to sync documents: {e}");
+            } else {
+                log::debug!("[sync] Documents synced");
+            }
+
+            log::info!("[sync] ✓ STDB data synced to local SQLite");
+        });
+    });
+}
+
+pub fn on_subscription_applied(ctx: &SubscriptionEventContext) {
     log::info!("✓ Subscriptions applied");
+
+    // Sync all STDB data to local SQLite
+    sync_stdb_to_local_db(ctx);
+
     // Signal that initial subscriptions are ready (first callback wins)
     signal_subscription_ready();
 }

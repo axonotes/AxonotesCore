@@ -123,7 +123,7 @@ pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
     let is_connected = stdb::active_profile().is_connected().await.unwrap_or(false);
 
     if is_connected {
-        let document_keys = stdb::active_profile().get_cached_document_keys().await?;
+        let document_keys = crate::database::get_document_keys_for_active_user().await?;
 
         match upload_batch(&batch, &document_keys).await {
             Ok(_) => {
@@ -171,7 +171,7 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
             emit_sync_started(doc_id.clone(), batch_count);
         }
 
-        let document_keys = match stdb::active_profile().get_cached_document_keys().await {
+        let document_keys = match crate::database::get_document_keys_for_active_user().await {
             Ok(keys) => keys,
             Err(e) => {
                 for doc_id in &doc_ids {
@@ -261,7 +261,7 @@ async fn sync_single_batch(server_batch: DecryptedBatch) -> Result<Option<Confli
 ///
 /// Called after processing incoming batches to sync local changes.
 async fn upload_pending_batches() -> Result<(), String> {
-    let document_keys = stdb::active_profile().get_cached_document_keys().await?;
+    let document_keys = crate::database::get_document_keys_for_active_user().await?;
     let pending = database::get_all_pending_batches().await?;
 
     for batch in pending {

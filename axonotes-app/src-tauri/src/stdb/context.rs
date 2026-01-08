@@ -6,7 +6,7 @@ use crate::crypto::chacha::encrypt;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::DecryptedDocumentMetadata;
-use crate::encryption::document::{DecryptDocumentMetaAndKeyVec, DecryptedDocumentKey};
+use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
 use crate::encryption::helpers::find_correct_decryption_key;
 use crate::encryption::live_block::DecryptLiveBlockVec;
 use crate::encryption::live_block::DecryptedLiveBlock;
@@ -146,29 +146,15 @@ impl ProfileStdbContext {
         }
     }
 
-    /// Get cached document keys from SpacetimeDB
-    pub async fn get_cached_document_keys(&self) -> Result<Vec<DecryptedDocumentKey>, String> {
-        let conn = self.get_connection().await?;
-        let conn = conn.lock().await;
-
-        let user_keys: Option<Keys> = get_active_user_keys().await?;
-        if let Some(user_keys) = user_keys {
-            let private_encryption_key = user_keys.private_encryption_key.as_array()?;
-            conn.db
-                .user_document_keys()
-                .iter()
-                .collect::<Vec<_>>()
-                .decrypt_all(private_encryption_key)
-        } else {
-            Err("No active user keys available. Not synced with stdb?".to_string())
-        }
-    }
-
     /// Get cached live blocks from SpacetimeDB
     pub async fn get_cached_live_blocks(&self) -> Result<Vec<DecryptedLiveBlock>, String> {
-        // Get document keys BEFORE acquiring connection lock to avoid deadlock
-        // (get_cached_document_keys also acquires the connection lock)
-        let cached_document_keys = self.get_cached_document_keys().await?;
+        // Get identity and document keys from local database
+        let identity = self
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+        let cached_document_keys =
+            crate::database::get_document_keys_for_identity(identity).await?;
 
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
@@ -178,23 +164,6 @@ impl ProfileStdbContext {
             .iter()
             .collect::<Vec<_>>()
             .decrypt_all(cached_document_keys.as_slice())
-    }
-
-    /// Get document permissions for a specific document (unencrypted)
-    /// Returns permissions from the manageable_permissions view
-    pub async fn get_document_permissions(
-        &self,
-        doc_id: &str,
-    ) -> Result<Vec<DocumentPermission>, String> {
-        let conn = self.get_connection().await?;
-        let conn = conn.lock().await;
-
-        Ok(conn
-            .db
-            .manageable_permissions()
-            .iter()
-            .filter(|p| p.doc_id == doc_id)
-            .collect())
     }
 
     /// Get public keys of collaborators (unencrypted)
@@ -211,8 +180,12 @@ impl ProfileStdbContext {
         &self,
         doc_id: &str,
     ) -> Result<Vec<DecryptedVersionTag>, String> {
-        // Get document keys BEFORE acquiring connection lock to avoid deadlock
-        let document_keys = self.get_cached_document_keys().await?;
+        // Get identity and document keys from local database
+        let identity = self
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+        let document_keys = crate::database::get_document_keys_for_identity(identity).await?;
 
         let conn = self.get_connection().await?;
         let conn = conn.lock().await;
@@ -396,8 +369,13 @@ impl ProfileStdbContext {
         content: &Block,
         username: String,
     ) -> Result<(), String> {
-        // Get document keys BEFORE acquiring connection lock to avoid deadlock
-        let cached_document_keys = self.get_cached_document_keys().await?;
+        // Get identity and document keys from local database
+        let identity = self
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+        let cached_document_keys =
+            crate::database::get_document_keys_for_identity(identity).await?;
         let latest_document_key =
             find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
 
@@ -438,8 +416,13 @@ impl ProfileStdbContext {
         block_id: u64,
         content: &Block,
     ) -> Result<(), String> {
-        // Get document keys BEFORE acquiring connection lock to avoid deadlock
-        let cached_document_keys = self.get_cached_document_keys().await?;
+        // Get identity and document keys from local database
+        let identity = self
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+        let cached_document_keys =
+            crate::database::get_document_keys_for_identity(identity).await?;
         let latest_document_key =
             find_correct_decryption_key(&doc_id, timestamp(), cached_document_keys.as_slice())?;
 

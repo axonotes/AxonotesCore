@@ -46,8 +46,11 @@
 #![allow(clippy::needless_pass_by_value)] // API design: database functions often take ownership for simplicity
 
 pub(crate) mod batches;
+pub(crate) mod document_keys;
+pub(crate) mod documents;
 mod helpers;
 pub(crate) mod keys;
+pub(crate) mod permissions;
 pub(crate) mod profiles;
 pub(crate) mod schema;
 pub(crate) mod snapshots;
@@ -1087,6 +1090,157 @@ pub async fn list_blob_cache_entries() -> Result<Vec<BlobCacheEntry>, String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// ========================================
+// STDB Sync Operations (Document Keys, Permissions, Documents)
+// ========================================
+
+use crate::encryption::document::DecryptedDocumentKey;
+use crate::stdb_bindings::{Document, DocumentPermission};
+use spacetimedb_sdk::Identity;
+
+/// Sync document keys for a specific identity - clear and replace all.
+/// Keys should be pre-decrypted before calling this function.
+pub async fn sync_document_keys(
+    identity: Identity,
+    keys: Vec<DecryptedDocumentKey>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        document_keys::sync(&conn, &identity, &keys).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Sync permissions for a specific identity - clear and replace all.
+pub async fn sync_permissions(
+    identity: Identity,
+    perms: Vec<DocumentPermission>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        permissions::sync(&conn, &identity, &perms).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Sync documents for a specific identity - clear and replace all.
+pub async fn sync_documents(identity: Identity, docs: Vec<Document>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        documents::sync(&conn, &identity, &docs).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all document keys for a specific identity (already decrypted).
+pub async fn get_document_keys_for_identity(
+    identity: Identity,
+) -> Result<Vec<DecryptedDocumentKey>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        document_keys::get_all_for_identity(&conn, &identity).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get document keys for a specific document and identity.
+pub async fn get_document_keys_for_doc(
+    identity: Identity,
+    doc_id: String,
+) -> Result<Vec<DecryptedDocumentKey>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        document_keys::get_by_doc_id(&conn, &identity, &doc_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all permissions for a specific identity.
+pub async fn get_permissions_for_identity(
+    identity: Identity,
+) -> Result<Vec<DocumentPermission>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        permissions::get_all_for_identity(&conn, &identity).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get permissions for a specific document and identity.
+pub async fn get_permissions_for_doc(
+    identity: Identity,
+    doc_id: String,
+) -> Result<Vec<DocumentPermission>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        permissions::get_by_doc_id(&conn, &identity, &doc_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all documents for a specific identity.
+pub async fn get_documents_for_identity(identity: Identity) -> Result<Vec<Document>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        documents::get_all_for_identity(&conn, &identity).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get a specific document by ID and identity.
+pub async fn get_document_by_id(
+    identity: Identity,
+    doc_id: String,
+) -> Result<Option<Document>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        documents::get_by_id(&conn, &identity, &doc_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all document keys for the active user (convenience function).
+/// Gets identity from active STDB connection, reads from local SQLite.
+pub async fn get_document_keys_for_active_user() -> Result<Vec<DecryptedDocumentKey>, String> {
+    let identity = crate::stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
+
+    get_document_keys_for_identity(identity).await
+}
+
+/// Get document permissions for a specific document (convenience function).
+/// Gets identity from active STDB connection.
+pub async fn get_permissions_for_document(doc_id: String) -> Result<Vec<DocumentPermission>, String> {
+    let identity = crate::stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
+
+    get_permissions_for_doc(identity, doc_id).await
+}
+
+/// Get all documents for the active user (convenience function).
+/// Gets identity from active STDB connection.
+pub async fn get_documents_for_active_user() -> Result<Vec<Document>, String> {
+    let identity = crate::stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
+
+    get_documents_for_identity(identity).await
 }
 
 // ========================================
