@@ -5,8 +5,8 @@ use crate::call_reducer_await;
 use crate::crypto::chacha::encrypt;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
-use crate::encryption::document::DecryptedDocumentMetadata;
 use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
+use crate::encryption::document::DecryptedDocumentMetadata;
 use crate::encryption::helpers::find_correct_decryption_key;
 use crate::encryption::live_block::DecryptLiveBlockVec;
 use crate::encryption::live_block::DecryptedLiveBlock;
@@ -149,10 +149,7 @@ impl ProfileStdbContext {
     /// Get cached live blocks from SpacetimeDB
     pub async fn get_cached_live_blocks(&self) -> Result<Vec<DecryptedLiveBlock>, String> {
         // Get identity and document keys from local database
-        let identity = self
-            .get_identity()
-            .await?
-            .ok_or("No identity available")?;
+        let identity = self.get_identity().await?.ok_or("No identity available")?;
         let cached_document_keys =
             crate::database::get_document_keys_for_identity(identity).await?;
 
@@ -181,10 +178,7 @@ impl ProfileStdbContext {
         doc_id: &str,
     ) -> Result<Vec<DecryptedVersionTag>, String> {
         // Get identity and document keys from local database
-        let identity = self
-            .get_identity()
-            .await?
-            .ok_or("No identity available")?;
+        let identity = self.get_identity().await?.ok_or("No identity available")?;
         let document_keys = crate::database::get_document_keys_for_identity(identity).await?;
 
         let conn = self.get_connection().await?;
@@ -370,10 +364,7 @@ impl ProfileStdbContext {
         username: String,
     ) -> Result<(), String> {
         // Get identity and document keys from local database
-        let identity = self
-            .get_identity()
-            .await?
-            .ok_or("No identity available")?;
+        let identity = self.get_identity().await?.ok_or("No identity available")?;
         let cached_document_keys =
             crate::database::get_document_keys_for_identity(identity).await?;
         let latest_document_key =
@@ -417,10 +408,7 @@ impl ProfileStdbContext {
         content: &Block,
     ) -> Result<(), String> {
         // Get identity and document keys from local database
-        let identity = self
-            .get_identity()
-            .await?
-            .ok_or("No identity available")?;
+        let identity = self.get_identity().await?.ok_or("No identity available")?;
         let cached_document_keys =
             crate::database::get_document_keys_for_identity(identity).await?;
         let latest_document_key =

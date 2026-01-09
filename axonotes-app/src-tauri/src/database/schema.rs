@@ -260,5 +260,31 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         [],
     )?;
 
+    // Document metadata table (synced from STDB, stored DECRYPTED)
+    // identity_id = which user account this data belongs to (for multi-account support)
+    // Metadata is decrypted during sync and stored in plaintext (SQLCipher encrypts the entire DB)
+    // Uses merge sync strategy: tags are merged (union), path uses server-wins
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS document_metadata (
+            meta_id TEXT PRIMARY KEY,
+            identity_id BLOB NOT NULL,
+            doc_id TEXT NOT NULL,
+            path TEXT NOT NULL,
+            tags TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_document_metadata_identity ON document_metadata(identity_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_document_metadata_doc_id ON document_metadata(identity_id, doc_id)",
+        [],
+    )?;
+
     Ok(())
 }

@@ -76,9 +76,9 @@ pub fn get_all_for_identity(
 
     let rows = stmt.query_map(params![identity_id.to_byte_array().as_slice()], |row| {
         let user_id_bytes: Vec<u8> = row.get(2)?;
-        let user_id_arr: [u8; 32] = user_id_bytes
-            .try_into()
-            .map_err(|_| rusqlite::Error::InvalidColumnType(2, "user_id".into(), rusqlite::types::Type::Blob))?;
+        let user_id_arr: [u8; 32] = user_id_bytes.try_into().map_err(|_| {
+            rusqlite::Error::InvalidColumnType(2, "user_id".into(), rusqlite::types::Type::Blob)
+        })?;
 
         let key_timestamp: SqlU128 = row.get(3)?;
 
@@ -114,9 +114,9 @@ pub fn get_by_doc_id(
         params![identity_id.to_byte_array().as_slice(), doc_id],
         |row| {
             let user_id_bytes: Vec<u8> = row.get(2)?;
-            let user_id_arr: [u8; 32] = user_id_bytes
-                .try_into()
-                .map_err(|_| rusqlite::Error::InvalidColumnType(2, "user_id".into(), rusqlite::types::Type::Blob))?;
+            let user_id_arr: [u8; 32] = user_id_bytes.try_into().map_err(|_| {
+                rusqlite::Error::InvalidColumnType(2, "user_id".into(), rusqlite::types::Type::Blob)
+            })?;
 
             let key_timestamp: SqlU128 = row.get(3)?;
 

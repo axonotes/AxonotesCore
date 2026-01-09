@@ -50,6 +50,7 @@ pub(crate) mod document_keys;
 pub(crate) mod documents;
 mod helpers;
 pub(crate) mod keys;
+pub(crate) mod metadata;
 pub(crate) mod permissions;
 pub(crate) mod profiles;
 pub(crate) mod schema;
@@ -1223,7 +1224,9 @@ pub async fn get_document_keys_for_active_user() -> Result<Vec<DecryptedDocument
 
 /// Get document permissions for a specific document (convenience function).
 /// Gets identity from active STDB connection.
-pub async fn get_permissions_for_document(doc_id: String) -> Result<Vec<DocumentPermission>, String> {
+pub async fn get_permissions_for_document(
+    doc_id: String,
+) -> Result<Vec<DocumentPermission>, String> {
     let identity = crate::stdb::active_profile()
         .get_identity()
         .await?
@@ -1241,6 +1244,86 @@ pub async fn get_documents_for_active_user() -> Result<Vec<Document>, String> {
         .ok_or("No identity available")?;
 
     get_documents_for_identity(identity).await
+}
+
+// ========================================
+// Metadata Sync Operations
+// ========================================
+
+use crate::encryption::document::DecryptedDocumentMetadata;
+
+/// Sync metadata with merge logic for a specific identity.
+/// Returns list of (doc_id, old_path, new_path) for path changes.
+pub async fn sync_metadata_with_merge(
+    identity: Identity,
+    server_metadata: Vec<DecryptedDocumentMetadata>,
+) -> Result<Vec<(String, String, String)>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        metadata::sync_with_merge(&conn, &identity, &server_metadata).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Save a single metadata entry.
+pub async fn save_metadata(
+    identity: Identity,
+    meta: DecryptedDocumentMetadata,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        metadata::save(&conn, &identity, &meta).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all metadata for a specific identity.
+pub async fn get_metadata_for_identity(
+    identity: Identity,
+) -> Result<Vec<DecryptedDocumentMetadata>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        metadata::get_all_for_identity(&conn, &identity).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get metadata for a specific document.
+pub async fn get_metadata_for_doc(
+    identity: Identity,
+    doc_id: String,
+) -> Result<Option<DecryptedDocumentMetadata>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        metadata::get_by_doc_id(&conn, &identity, &doc_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all metadata for the active user.
+pub async fn get_metadata_for_active_user() -> Result<Vec<DecryptedDocumentMetadata>, String> {
+    let identity = crate::stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
+
+    get_metadata_for_identity(identity).await
+}
+
+/// Delete metadata for a specific document.
+pub async fn delete_metadata_for_doc(identity: Identity, doc_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        metadata::delete_by_doc_id(&conn, &identity, &doc_id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ========================================

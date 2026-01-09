@@ -48,6 +48,7 @@ use uuid::Uuid;
 /// 3. Creates ChaCha20 encryption key
 /// 4. Encrypts keys for the creating user
 /// 5. Creates initial metadata block with title
+/// 6. Saves initial metadata to local SQLite for offline access
 #[tauri::command]
 pub async fn create_document(
     title: Option<String>,
@@ -58,8 +59,11 @@ pub async fn create_document(
         let private_encryption_key = user_keys.private_encryption_key.as_array()?;
         let public_encryption_key = user_keys.public_encryption_key.as_array()?;
 
+        // Get metadata from local DB for path deduplication
         let document_metadata: Vec<DecryptedDocumentMetadata> =
-            stdb::active_profile().get_cached_metadata().await?;
+            crate::database::get_metadata_for_active_user()
+                .await
+                .unwrap_or_default();
 
         let doc_id = Uuid::new_v4().to_string();
         let document_title = if let Some(title) = title {
@@ -124,9 +128,27 @@ pub async fn create_document(
                 public_doc_signing_key.to_vec(),
                 key_timestamp,
                 encrypted_key_data,
-                encrypted_meta_blob,
+                encrypted_meta_blob.clone(),
             )
             .await?;
+
+        // Save initial metadata to local SQLite for offline access
+        let user_identity_for_meta = stdb::active_profile()
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+        let initial_metadata = DecryptedDocumentMetadata {
+            // Generate temporary meta_id; will be overwritten by server sync
+            meta_id: format!("{}_{}", user_identity_for_meta.to_hex(), doc_id),
+            user_id: user_identity_for_meta,
+            doc_id: doc_id.clone(),
+            metadata: meta_data.clone(),
+        };
+        if let Err(e) =
+            crate::database::save_metadata(user_identity_for_meta, initial_metadata).await
+        {
+            log::warn!("Warning: Failed to save initial metadata locally: {e}");
+        }
 
         // Register document with storage API (if storage is initialized)
         // This is non-blocking - storage registration can fail without affecting document creation
@@ -196,6 +218,15 @@ pub async fn delete_document(doc_id: String) -> Result<(), String> {
             }
         }
 
+        // Delete local metadata
+        let identity = stdb::active_profile()
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+        if let Err(e) = crate::database::delete_metadata_for_doc(identity, doc_id.clone()).await {
+            log::warn!("Warning: Failed to delete local metadata: {e}");
+        }
+
         emit_document_deleted(doc_id);
 
         Ok(())
@@ -205,23 +236,30 @@ pub async fn delete_document(doc_id: String) -> Result<(), String> {
 }
 
 /// Gets metadata for a specific document.
+/// Reads from local SQLite for offline support.
 #[tauri::command]
 pub async fn get_document_meta(
     doc_id: String,
 ) -> Result<Option<DecryptedDocumentMetadata>, String> {
-    let document_metadata: Vec<DecryptedDocumentMetadata> =
-        stdb::active_profile().get_cached_metadata().await?;
+    let identity = stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
 
-    Ok(document_metadata.into_iter().find(|p| p.doc_id == doc_id))
+    crate::database::get_metadata_for_doc(identity, doc_id).await
 }
 
 /// Lists all documents accessible to the current user.
+/// Reads from local SQLite for offline support.
 #[tauri::command]
 pub async fn list_documents() -> Result<Vec<DecryptedDocumentMetadata>, String> {
-    stdb::active_profile().get_cached_metadata().await
+    crate::database::get_metadata_for_active_user().await
 }
 
 /// Updates document metadata (path and tags).
+///
+/// Updates local SQLite first for immediate UI response,
+/// then attempts to push to server (fails silently if offline).
 ///
 /// Metadata is encrypted to the user's own public key, allowing each
 /// user to have their own organizational structure for shared documents.
@@ -235,17 +273,52 @@ pub async fn update_document_metadata(
         let private_encryption_key = user_keys.private_encryption_key.as_array()?;
         let public_encryption_key = user_keys.public_encryption_key.as_array()?;
 
+        let identity = stdb::active_profile()
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+
+        // Get current metadata to preserve meta_id
+        let current = crate::database::get_metadata_for_doc(identity, doc_id.clone())
+            .await?
+            .ok_or("Document metadata not found")?;
+
+        // Create updated metadata record
+        let updated = DecryptedDocumentMetadata {
+            meta_id: current.meta_id,
+            user_id: current.user_id,
+            doc_id: doc_id.clone(),
+            metadata: metadata.clone(),
+        };
+
+        // Update local SQLite immediately
+        crate::database::save_metadata(identity, updated).await?;
+
+        // Emit event for UI update
+        emit_document_metadata_updated(
+            doc_id.clone(),
+            metadata.path.clone(),
+            metadata.tags.clone(),
+        );
+
+        // Try to push to server (non-blocking, fails silently if offline)
         let encrypted_blob = metadata.encrypt(
             private_encryption_key,
             public_encryption_key,
             public_encryption_key,
         )?;
 
-        stdb::active_profile()
-            .update_document_metadata(doc_id.clone(), encrypted_blob)
-            .await?;
-
-        emit_document_metadata_updated(doc_id, metadata.path, metadata.tags);
+        // Spawn background task for server update
+        let doc_id_for_server = doc_id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = stdb::active_profile()
+                .update_document_metadata(doc_id_for_server, encrypted_blob)
+                .await
+            {
+                // Log but don't fail - local update succeeded
+                log::warn!("[update_metadata] Server update failed (offline?): {e}");
+            }
+        });
 
         Ok(())
     } else {

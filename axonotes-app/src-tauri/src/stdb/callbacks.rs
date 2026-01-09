@@ -26,7 +26,7 @@ use super::*;
 use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
 use crate::events::{
     emit_block_lock_expired, emit_block_locked, emit_block_unlocked, emit_document_access_granted,
-    emit_document_access_revoked,
+    emit_document_access_revoked, emit_document_path_changed_by_sync,
 };
 use crate::stdb;
 use crate::utils::timestamp::timestamp;
@@ -236,6 +236,7 @@ fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
     let keys: Vec<_> = ctx.db.user_document_keys().iter().collect();
     let permissions: Vec<_> = ctx.db.manageable_permissions().iter().collect();
     let documents: Vec<_> = ctx.db.accessible_documents().iter().collect();
+    let metadata: Vec<_> = ctx.db.user_metadata().iter().collect();
 
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
@@ -247,7 +248,7 @@ fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
         };
 
         rt.block_on(async {
-            // Get user's private key for decrypting document keys
+            // Get user's private key for decrypting document keys and metadata
             let user_keys = match crate::database::get_active_user_keys().await {
                 Ok(Some(keys)) => keys,
                 Ok(None) => {
@@ -295,6 +296,28 @@ fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
                 eprintln!("[sync] Failed to sync documents: {e}");
             } else {
                 log::debug!("[sync] Documents synced");
+            }
+
+            // Decrypt and sync metadata with merge logic
+            let decrypted_metadata = match metadata.decrypt_all(private_key) {
+                Ok(m) => m,
+                Err(e) => {
+                    eprintln!("[sync] Failed to decrypt metadata: {e}");
+                    return;
+                }
+            };
+
+            match crate::database::sync_metadata_with_merge(identity, decrypted_metadata).await {
+                Ok(path_changes) => {
+                    log::debug!("[sync] Metadata synced");
+                    // Emit events for path changes so frontend can notify user
+                    for (doc_id, old_path, new_path) in path_changes {
+                        emit_document_path_changed_by_sync(doc_id, old_path, new_path);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[sync] Failed to sync metadata: {e}");
+                }
             }
 
             log::info!("[sync] ✓ STDB data synced to local SQLite");
