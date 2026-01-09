@@ -31,6 +31,7 @@
 //! | `version_tag` | Version tag create/delete |
 //! | `sync` | Batch sync progress and completion |
 //! | `key_rotation` | Document key rotation for security |
+//! | `error` | Critical errors and bug reports |
 //!
 //! ## Usage
 //!
@@ -49,6 +50,7 @@
 mod collaborator;
 mod connection;
 mod document;
+mod error;
 mod key_rotation;
 mod lock;
 mod share;
@@ -58,6 +60,7 @@ mod version_tag;
 pub use collaborator::*;
 pub use connection::*;
 pub use document::*;
+pub use error::*;
 pub use key_rotation::*;
 pub use lock::*;
 pub use share::*;

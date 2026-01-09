@@ -35,3 +35,6 @@ secrets.*
 node_modules
 .svelte-kit
 .axogen/backup
+
+# --- Cargo ---
+target

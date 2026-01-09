@@ -8,6 +8,7 @@
 //! - **`chacha`**: ChaCha20-Poly1305 authenticated encryption for symmetric encryption
 //! - **`ed25519`**: Ed25519 digital signatures for authentication and integrity
 //! - **`hash`**: Argon2id password hashing and key derivation
+//! - **`identity`**: SpacetimeDB identity derivation from JWT claims
 //! - **`x25519`**: X25519 Diffie-Hellman key exchange for asymmetric encryption
 //!
 //! ## Security Model
@@ -22,4 +23,5 @@ pub(crate) mod bip39;
 pub(crate) mod chacha;
 pub(crate) mod ed25519;
 pub(crate) mod hash;
+pub(crate) mod identity;
 pub(crate) mod x25519;

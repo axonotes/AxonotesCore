@@ -3,6 +3,7 @@
 use crate::batch_handler::block_types::Block;
 use crate::call_reducer_await;
 use crate::crypto::chacha::encrypt;
+use crate::crypto::identity::derive_identity_from_jwt;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
@@ -12,6 +13,7 @@ use crate::encryption::live_block::DecryptLiveBlockVec;
 use crate::encryption::live_block::DecryptedLiveBlock;
 use crate::encryption::user::UserKeysEncrypted;
 use crate::encryption::version_tag::{DecryptVersionTagVec, DecryptedVersionTag};
+use crate::events::{codes, emit_critical_error};
 use crate::stdb::{
     disconnect_profile, ensure_connection_for_profile, get_connection_for_profile,
     is_profile_connected,
@@ -107,11 +109,55 @@ impl ProfileStdbContext {
         Ok(is_profile_connected(&profile_id).await)
     }
 
-    /// Get the SpacetimeDB identity for this profile
+    /// Get the SpacetimeDB identity for this profile.
+    ///
+    /// When online: returns identity from STDB connection and verifies it matches JWT-derived identity.
+    /// When offline: derives identity from JWT token stored locally.
     pub async fn get_identity(&self) -> Result<Option<Identity>, String> {
-        let conn = self.get_connection().await?;
-        let conn = conn.lock().await;
-        Ok(conn.try_identity())
+        let profile = self.resolve_profile().await?;
+
+        // Always derive identity from JWT (works offline)
+        let jwt_identity = derive_identity_from_jwt(&profile.access_token).map_err(|e| {
+            emit_critical_error(
+                codes::IDENTITY_DERIVATION_FAILED,
+                "Failed to derive identity from JWT",
+                Some(&e),
+                Some("Please re-login to refresh your authentication token"),
+            );
+            e
+        })?;
+
+        // If connected, verify the derived identity matches STDB's identity
+        if is_profile_connected(&profile.id).await {
+            if let Ok(conn) = get_connection_for_profile(&profile.id).await {
+                let conn = conn.lock().await;
+                if let Some(stdb_identity) = conn.try_identity() {
+                    if stdb_identity != jwt_identity {
+                        emit_critical_error(
+                            codes::IDENTITY_MISMATCH,
+                            "Identity mismatch detected",
+                            Some(&format!(
+                                "JWT-derived: {}, STDB: {}",
+                                jwt_identity.to_hex(),
+                                stdb_identity.to_hex()
+                            )),
+                            Some("This is a critical security issue. Please report this bug."),
+                        );
+                        return Err("Identity mismatch between JWT and STDB".to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(Some(jwt_identity))
+    }
+
+    /// Get identity derived from JWT token (always works offline).
+    ///
+    /// This does not verify against STDB identity - use `get_identity()` for verified identity.
+    pub async fn get_identity_offline(&self) -> Result<Identity, String> {
+        let profile = self.resolve_profile().await?;
+        derive_identity_from_jwt(&profile.access_token)
     }
 
     // ==========================================
