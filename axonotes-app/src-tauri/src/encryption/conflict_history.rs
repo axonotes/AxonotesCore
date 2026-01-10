@@ -7,11 +7,11 @@
 //! Conflict history records batches that were lost during sync due to conflicts
 //! with server-side batches. This allows recovery and future branch visualization.
 //!
-//! ## Two-Timestamp Pattern
+//! ## Key Index Pattern
 //!
-//! This module uses two timestamps:
+//! This module uses key_index for decryption key selection:
 //! - `timestamp`: First lost batch timestamp (for ordering/display)
-//! - `key_timestamp`: Encryption key timestamp (for decryption key selection)
+//! - `key_index`: Varint-encoded key index (for decryption key selection)
 //!
 //! This pattern ensures correct key selection for batches that were created
 //! offline and encrypted later after a key rotation.
@@ -26,7 +26,7 @@
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::batch::DecryptedBatch;
 use crate::encryption::document::DecryptedDocumentKey;
-use crate::encryption::helpers::find_correct_decryption_key;
+use crate::encryption::helpers::find_key_by_index;
 use crate::stdb_bindings::UserSyncConflictHistory;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
@@ -79,14 +79,16 @@ impl ConflictHistoryData {
 
 impl UserSyncConflictHistory {
     /// Decrypt this conflict history entry using document keys
-    /// Uses key_timestamp to find the correct decryption key
+    /// Uses key_index to find the correct decryption key
     pub fn decrypt(
         &self,
         document_keys: &[DecryptedDocumentKey],
     ) -> Result<DecryptedConflictHistory, String> {
-        // Find decryption key by key_timestamp (NOT timestamp)
-        let decryption_key =
-            find_correct_decryption_key(&self.doc_id, self.key_timestamp, document_keys)?;
+        // Decode key_index from varint
+        let key_index = crate::utils::varint::decode(&self.key_index)?;
+
+        // Find decryption key by key_index
+        let decryption_key = find_key_by_index(&self.doc_id, key_index, document_keys)?;
 
         // Decrypt blob
         let data = ConflictHistoryData::from_encrypted(
@@ -136,7 +138,7 @@ impl DecryptedConflictHistory {
     }
 
     /// Encrypt for upload to STDB
-    /// key_timestamp is set from the encryption key used
+    /// key_index is encoded as varint from the encryption key used
     pub fn encrypt(
         &self,
         latest_key: &DecryptedDocumentKey,
@@ -154,7 +156,7 @@ impl DecryptedConflictHistory {
             doc_id: self.doc_id.clone(),
             encrypted_blob,
             timestamp: self.timestamp, // First lost batch timestamp (ordering)
-            key_timestamp: latest_key.key_timestamp, // Key used for encryption
+            key_index: crate::utils::varint::encode(latest_key.key_index), // Key index for decryption
         })
     }
 }

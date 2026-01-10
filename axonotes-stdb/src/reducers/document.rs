@@ -37,12 +37,13 @@ pub fn create_document(
         key_timestamp,
     });
 
-    // Insert owner's document keys
+    // Insert owner's document keys (initial key has key_index = 0)
     ctx.db.private_document_key().insert(DocumentKey {
         key_id: generate_uuid(ctx).to_string(),
         doc_id: doc_id.clone(),
         user_id: ctx.sender,
         key_timestamp,
+        key_index: crate::varint::encode(0),
         encrypted_data: encrypted_key_data,
     });
 

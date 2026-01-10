@@ -316,6 +316,7 @@ impl ProfileStdbContext {
         batch_id: String,
         doc_id: String,
         timestamp: u128,
+        key_index: Vec<u8>,
         encrypted_data: Vec<u8>,
         signature: Vec<u8>,
     ) -> Result<(), String> {
@@ -328,6 +329,7 @@ impl ProfileStdbContext {
             batch_id,
             doc_id,
             timestamp,
+            key_index,
             encrypted_data,
             signature
         )
@@ -649,8 +651,8 @@ impl ProfileStdbContext {
         history_id: String,
         doc_id: String,
         encrypted_blob: Vec<u8>,
-        timestamp: u128,     // First lost batch timestamp (for ordering)
-        key_timestamp: u128, // Encryption key timestamp (for decryption)
+        timestamp: u128,    // First lost batch timestamp (for ordering)
+        key_index: Vec<u8>, // Varint-encoded key index (for decryption)
         signature: Vec<u8>,
     ) -> Result<(), String> {
         let conn = self.get_connection().await?;
@@ -663,7 +665,7 @@ impl ProfileStdbContext {
             doc_id,
             encrypted_blob,
             timestamp,
-            key_timestamp,
+            key_index,
             signature
         )
     }

@@ -12,10 +12,12 @@ pub fn upload_conflict_history(
     history_id: String,
     doc_id: String,
     encrypted_blob: Vec<u8>,
-    timestamp: u128,     // First lost batch timestamp (for ordering)
-    key_timestamp: u128, // Encryption key timestamp (for decryption)
+    timestamp: u128,    // First lost batch timestamp (for ordering)
+    key_index: Vec<u8>, // Varint-encoded key index (for decryption)
     signature: Vec<u8>,
 ) -> Result<(), String> {
+    // Validate key_index is a valid varint
+    crate::varint::decode(&key_index)?;
     // Check user permission
     let permission = ctx
         .db
@@ -70,7 +72,7 @@ pub fn upload_conflict_history(
             doc_id,
             encrypted_blob,
             timestamp,
-            key_timestamp,
+            key_index,
         });
 
     Ok(())

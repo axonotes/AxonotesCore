@@ -185,6 +185,7 @@ mod tests {
             doc_id: doc_id.to_string(),
             user_id: create_test_identity(),
             key_timestamp,
+            key_index: 0,
             key_data: DecryptedKeyData {
                 encryption_key: vec![0u8; 32],
                 signing_private_key: vec![0u8; 32],

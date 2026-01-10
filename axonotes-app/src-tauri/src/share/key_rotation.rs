@@ -49,6 +49,7 @@ use uuid::Uuid;
 /// Result of key rotation containing all necessary data for add_user_to_document
 pub struct KeyRotationResult {
     pub new_key_timestamp: u128,
+    pub new_key_index: u32,
     pub new_key_data: DecryptedKeyData,
     #[allow(dead_code)] // Included for completeness; signing key already sent to server
     pub new_public_signing_key: Vec<u8>,
@@ -81,6 +82,16 @@ pub async fn rotate_keys_for_share(doc_id: &str) -> Result<KeyRotationResult, St
         signing_private_key: new_private_signing_key.to_vec(),
     };
 
+    // Calculate the next key_index from local document keys
+    let document_keys = database::get_document_keys_for_active_user().await?;
+    let max_key_index = document_keys
+        .iter()
+        .filter(|k| k.doc_id == doc_id)
+        .map(|k| k.key_index)
+        .max()
+        .unwrap_or(0);
+    let new_key_index = max_key_index + 1;
+
     // Get all existing permissions for this document (existing users)
     let permissions = get_document_permissions(doc_id).await?;
     let public_keys = get_collaborator_public_keys().await?;
@@ -96,7 +107,7 @@ pub async fn rotate_keys_for_share(doc_id: &str) -> Result<KeyRotationResult, St
 
     // Create snapshot batches for all blocks
     let snapshot_batches =
-        create_snapshot_batches(doc_id, &new_key_data, new_key_timestamp).await?;
+        create_snapshot_batches(doc_id, &new_key_data, new_key_timestamp, new_key_index).await?;
 
     // Re-encrypt version tags (if any)
     let re_encrypted_tags = re_encrypt_version_tags(doc_id, &new_key_data).await?;
@@ -139,6 +150,7 @@ pub async fn rotate_keys_for_share(doc_id: &str) -> Result<KeyRotationResult, St
 
     Ok(KeyRotationResult {
         new_key_timestamp,
+        new_key_index,
         new_key_data,
         new_public_signing_key: new_public_signing_key.to_vec(),
     })
@@ -201,6 +213,7 @@ async fn create_snapshot_batches(
     doc_id: &str,
     new_key_data: &DecryptedKeyData,
     new_key_timestamp: u128,
+    new_key_index: u32,
 ) -> Result<Vec<SnapshotBatch>, String> {
     // Get all unique block IDs from local database
     let block_ids = get_all_block_ids(doc_id).await?;
@@ -215,8 +228,13 @@ async fn create_snapshot_batches(
     let mut snapshots = Vec::new();
 
     for block_data in document_data.blocks {
-        let snapshot =
-            create_snapshot_for_block(doc_id, &block_data, new_key_data, new_key_timestamp)?;
+        let snapshot = create_snapshot_for_block(
+            doc_id,
+            &block_data,
+            new_key_data,
+            new_key_timestamp,
+            new_key_index,
+        )?;
         snapshots.push(snapshot);
     }
 
@@ -238,6 +256,7 @@ fn create_snapshot_for_block(
     block_data: &BlockData,
     new_key_data: &DecryptedKeyData,
     new_key_timestamp: u128,
+    new_key_index: u32,
 ) -> Result<SnapshotBatch, String> {
     // Encode current block state as initial patch
     let initial_patch = encode_initial_patch(0, 0, &block_data.block)?;
@@ -266,6 +285,7 @@ fn create_snapshot_for_block(
         doc_id: doc_id.to_string(),
         user_id: Identity::from_byte_array([0u8; 32]),
         key_timestamp: new_key_timestamp,
+        key_index: new_key_index,
         key_data: new_key_data.clone(),
     };
 
@@ -355,6 +375,7 @@ fn sign_rotation_message(
 pub fn encrypt_key_for_user(
     key_data: &DecryptedKeyData,
     key_timestamp: u128,
+    key_index: u32,
     role: Role,
     my_private_key: &[u8; 32],
     my_public_key: &[u8; 32],
@@ -365,6 +386,7 @@ pub fn encrypt_key_for_user(
 
     Ok(EncryptedKeyEntry {
         key_timestamp,
+        key_index: crate::utils::varint::encode(key_index),
         encrypted_data,
     })
 }

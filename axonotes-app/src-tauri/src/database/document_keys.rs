@@ -18,14 +18,15 @@ use spacetimedb_sdk::Identity;
 pub fn save(conn: &Connection, identity_id: &Identity, key: &DecryptedDocumentKey) -> Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO document_keys
-        (key_id, identity_id, doc_id, user_id, key_timestamp, encryption_key, signing_private_key)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (key_id, identity_id, doc_id, user_id, key_timestamp, key_index, encryption_key, signing_private_key)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             key.key_id,
             identity_id.to_byte_array().as_slice(),
             key.doc_id,
             key.user_id.to_byte_array().as_slice(),
             SqlU128(key.key_timestamp),
+            key.key_index as i64,
             key.key_data.encryption_key,
             key.key_data.signing_private_key,
         ],
@@ -68,7 +69,7 @@ pub fn get_all_for_identity(
     identity_id: &Identity,
 ) -> Result<Vec<DecryptedDocumentKey>> {
     let mut stmt = conn.prepare(
-        "SELECT key_id, doc_id, user_id, key_timestamp, encryption_key, signing_private_key
+        "SELECT key_id, doc_id, user_id, key_timestamp, key_index, encryption_key, signing_private_key
          FROM document_keys
          WHERE identity_id = ?1
          ORDER BY key_timestamp DESC",
@@ -81,15 +82,17 @@ pub fn get_all_for_identity(
         })?;
 
         let key_timestamp: SqlU128 = row.get(3)?;
+        let key_index: i64 = row.get(4)?;
 
         Ok(DecryptedDocumentKey {
             key_id: row.get(0)?,
             doc_id: row.get(1)?,
             user_id: Identity::from_byte_array(user_id_arr),
             key_timestamp: key_timestamp.0,
+            key_index: key_index as u32,
             key_data: DecryptedKeyData {
-                encryption_key: row.get(4)?,
-                signing_private_key: row.get(5)?,
+                encryption_key: row.get(5)?,
+                signing_private_key: row.get(6)?,
             },
         })
     })?;
@@ -104,7 +107,7 @@ pub fn get_by_doc_id(
     doc_id: &str,
 ) -> Result<Vec<DecryptedDocumentKey>> {
     let mut stmt = conn.prepare(
-        "SELECT key_id, doc_id, user_id, key_timestamp, encryption_key, signing_private_key
+        "SELECT key_id, doc_id, user_id, key_timestamp, key_index, encryption_key, signing_private_key
          FROM document_keys
          WHERE identity_id = ?1 AND doc_id = ?2
          ORDER BY key_timestamp DESC",
@@ -119,15 +122,17 @@ pub fn get_by_doc_id(
             })?;
 
             let key_timestamp: SqlU128 = row.get(3)?;
+            let key_index: i64 = row.get(4)?;
 
             Ok(DecryptedDocumentKey {
                 key_id: row.get(0)?,
                 doc_id: row.get(1)?,
                 user_id: Identity::from_byte_array(user_id_arr),
                 key_timestamp: key_timestamp.0,
+                key_index: key_index as u32,
                 key_data: DecryptedKeyData {
-                    encryption_key: row.get(4)?,
-                    signing_private_key: row.get(5)?,
+                    encryption_key: row.get(5)?,
+                    signing_private_key: row.get(6)?,
                 },
             })
         },

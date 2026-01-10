@@ -13,9 +13,12 @@ pub fn upload_batch(
     batch_id: String,
     doc_id: String,
     timestamp: u128,
+    key_index: Vec<u8>,      // Varint-encoded key index for decryption
     encrypted_data: Vec<u8>, // Contains block_id + patches (encrypted & signed)
     signature: Vec<u8>,      // Ed25519 signature (verified then discarded)
 ) -> Result<(), String> {
+    // Validate key_index is a valid varint
+    crate::varint::decode(&key_index)?;
     // Check if batch already exists
     if ctx
         .db
@@ -74,6 +77,7 @@ pub fn upload_batch(
         batch_id,
         doc_id,
         timestamp,
+        key_index,
         encrypted_data,
     });
 

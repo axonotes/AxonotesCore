@@ -242,6 +242,7 @@ pub async fn update_user_role(doc_id: String, user_id: String, role: String) -> 
 
             Some(EncryptedKeyEntry {
                 key_timestamp: current_key.key_timestamp,
+                key_index: crate::utils::varint::encode(current_key.key_index),
                 encrypted_data,
             })
         } else {

@@ -200,6 +200,7 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             doc_id TEXT NOT NULL,
             user_id BLOB NOT NULL,
             key_timestamp BLOB NOT NULL,
+            key_index INTEGER NOT NULL,
             encryption_key BLOB NOT NULL,
             signing_private_key BLOB NOT NULL
         )",

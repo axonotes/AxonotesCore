@@ -412,7 +412,7 @@ async fn upload_conflict_history_to_stdb(
             encrypted_history.doc_id,
             encrypted_history.encrypted_blob,
             encrypted_history.timestamp,
-            encrypted_history.key_timestamp,
+            encrypted_history.key_index,
             signature,
         )
         .await
@@ -510,6 +510,7 @@ async fn upload_batch(
             encrypted.batch_id,
             encrypted.doc_id,
             encrypted.timestamp,
+            encrypted.key_index,
             encrypted.encrypted_data,
             signature.to_vec(),
         )

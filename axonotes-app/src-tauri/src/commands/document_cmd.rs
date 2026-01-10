@@ -21,13 +21,14 @@ use crate::crypto::chacha::generate_key;
 use crate::crypto::ed25519::{generate_ed25519_keys, sign_message};
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
-use crate::encryption::document::{DecryptedDocumentMetadata, DecryptedKeyData, DecryptedMetadata};
+use crate::encryption::document::{
+    DecryptedDocumentKey, DecryptedDocumentMetadata, DecryptedKeyData, DecryptedMetadata,
+};
 use crate::events::{emit_document_created, emit_document_deleted, emit_document_metadata_updated};
 use crate::stdb;
 use crate::storage;
 use crate::utils::timestamp::timestamp;
 use crate::utils::vec_array::ByteArrayConversion;
-use spacetimedb_sdk::Identity;
 use uuid::Uuid;
 
 /// Creates a new document with encryption keys and metadata.
@@ -122,6 +123,12 @@ pub async fn create_document(
             public_encryption_key,
         )?;
 
+        // Get user identity first - we need it for saving both key and metadata
+        let user_identity = stdb::active_profile()
+            .get_identity()
+            .await?
+            .ok_or("No identity available")?;
+
         stdb::active_profile()
             .create_document(
                 doc_id.to_string(),
@@ -132,11 +139,23 @@ pub async fn create_document(
             )
             .await?;
 
+        // Save document key to local SQLite immediately so batch uploads don't fail
+        // The key will be overwritten later by the sync callback, but this ensures
+        // the key is available locally before update_block creates a batch
+        let local_key = DecryptedDocumentKey {
+            key_id: format!("{}_{}", doc_id, key_timestamp),
+            doc_id: doc_id.clone(),
+            user_id: user_identity,
+            key_timestamp,
+            key_index: 0, // First key for this document
+            key_data: key_data.clone(),
+        };
+        if let Err(e) = crate::database::save_document_key(user_identity, local_key).await {
+            log::warn!("Warning: Failed to save document key locally: {e}");
+        }
+
         // Save initial metadata to local SQLite for offline access
-        let user_identity_for_meta = stdb::active_profile()
-            .get_identity()
-            .await?
-            .ok_or("No identity available")?;
+        let user_identity_for_meta = user_identity;
         let initial_metadata = DecryptedDocumentMetadata {
             // Generate temporary meta_id; will be overwritten by server sync
             meta_id: format!("{}_{}", user_identity_for_meta.to_hex(), doc_id),
@@ -161,8 +180,6 @@ pub async fn create_document(
             }
         }
 
-        let user_identity: Option<Identity> = stdb::active_profile().get_identity().await?;
-        let user_identity: Identity = user_identity.expect("User identity should be set by now");
         update_block(
             doc_id.clone(),
             None,

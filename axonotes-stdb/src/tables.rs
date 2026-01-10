@@ -38,6 +38,7 @@ pub struct DocumentBatch {
     pub batch_id: String, // Random UUID
     pub doc_id: String,          // Document identifier
     pub timestamp: u128,         // When the batch got created
+    pub key_index: Vec<u8>,      // Varint-encoded key index for decryption key selection
     pub encrypted_data: Vec<u8>, // block_id + patches (ChaCha20-Poly1305)
 }
 
@@ -54,6 +55,7 @@ pub struct DocumentKey {
     pub user_id: Identity, // Who the key belongs to
     #[index(btree)]
     pub key_timestamp: u128, // Which key version
+    pub key_index: Vec<u8>, // Varint-encoded sequential index (0, 1, 2...)
     pub encrypted_data: Vec<u8>, // Encrypted signing and encryption key with user's public key
 }
 
@@ -189,6 +191,6 @@ pub struct UserSyncConflictHistory {
     /// First lost batch timestamp (for ordering/display)
     pub timestamp: u128,
 
-    /// Encryption key timestamp (for decryption key selection)
-    pub key_timestamp: u128,
+    /// Varint-encoded key index (for decryption key selection)
+    pub key_index: Vec<u8>,
 }

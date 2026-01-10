@@ -4,7 +4,37 @@
 
 use crate::encryption::document::DecryptedDocumentKey;
 
+/// Finds the correct decryption key by key_index.
+///
+/// This is the primary method for finding decryption keys. Each batch stores
+/// a `key_index` that directly maps to the key used for encryption.
+///
+/// # Arguments
+///
+/// * `doc_id` - The document ID to find keys for
+/// * `key_index` - The key index stored in the batch
+/// * `document_keys` - Available decrypted keys for the user
+///
+/// # Errors
+///
+/// Returns an error if no key with the specified index exists.
+pub fn find_key_by_index<'a>(
+    doc_id: &str,
+    key_index: u32,
+    document_keys: &'a [DecryptedDocumentKey],
+) -> Result<&'a DecryptedDocumentKey, String> {
+    document_keys
+        .iter()
+        .find(|key| key.doc_id == doc_id && key.key_index == key_index)
+        .ok_or_else(|| format!("No key found for doc_id: {doc_id} with key_index: {key_index}"))
+}
+
 /// Finds the correct decryption key for a given timestamp.
+///
+/// **Note**: This function is deprecated for batch decryption. Use `find_key_by_index`
+/// instead, which uses the explicit `key_index` stored in batches.
+///
+/// This function is still used for legacy operations or when key_index is not available.
 ///
 /// When documents have multiple keys due to key rotation, this function
 /// selects the appropriate key based on temporal ordering:

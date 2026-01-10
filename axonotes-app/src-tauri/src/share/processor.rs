@@ -184,6 +184,7 @@ async fn process_no_history_share(
     let encrypted_key = encrypt_key_for_user(
         &rotation_result.new_key_data,
         rotation_result.new_key_timestamp,
+        rotation_result.new_key_index,
         role,
         my_private_key,
         my_public_key,
@@ -217,6 +218,7 @@ fn encrypt_keys_for_user(
 
             Ok(EncryptedKeyEntry {
                 key_timestamp: key.key_timestamp,
+                key_index: crate::utils::varint::encode(key.key_index),
                 encrypted_data,
             })
         })

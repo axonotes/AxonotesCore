@@ -184,6 +184,8 @@ pub struct DecryptedDocumentKey {
     pub user_id: Identity,
     /// Timestamp when this key was created (for key rotation ordering)
     pub key_timestamp: u128,
+    /// Sequential per-document key index (0, 1, 2...) for decryption key selection
+    pub key_index: u32,
     /// The decrypted key material
     pub key_data: DecryptedKeyData,
 }
@@ -242,11 +244,15 @@ impl DocumentKey {
         let key_data =
             DecryptedKeyData::from_encrypted(self.encrypted_data.as_slice(), private_key)?;
 
+        // Decode key_index from varint
+        let key_index = crate::utils::varint::decode(&self.key_index)?;
+
         Ok(DecryptedDocumentKey {
             key_id: self.key_id,
             doc_id: self.doc_id,
             user_id: self.user_id,
             key_timestamp: self.key_timestamp,
+            key_index,
             key_data,
         })
     }
@@ -279,6 +285,7 @@ impl DecryptedDocumentKey {
             doc_id: self.doc_id,
             user_id: self.user_id,
             key_timestamp: self.key_timestamp,
+            key_index: crate::utils::varint::encode(self.key_index),
             encrypted_data,
         })
     }
@@ -436,6 +443,7 @@ mod tests {
             doc_id: "doc456".to_string(),
             user_id: identity,
             key_timestamp: 1234567890,
+            key_index: 0,
             key_data: DecryptedKeyData {
                 encryption_key: vec![1, 2, 3],
                 signing_private_key: vec![4, 5, 6],
@@ -465,6 +473,7 @@ mod tests {
                 doc_id: "doc1".to_string(),
                 user_id: identity,
                 key_timestamp: 100,
+                key_index: 0,
                 key_data: DecryptedKeyData {
                     encryption_key: vec![1],
                     signing_private_key: vec![2],
@@ -475,6 +484,7 @@ mod tests {
                 doc_id: "doc2".to_string(),
                 user_id: identity,
                 key_timestamp: 200,
+                key_index: 0,
                 key_data: DecryptedKeyData {
                     encryption_key: vec![3],
                     signing_private_key: vec![4],

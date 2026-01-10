@@ -1116,6 +1116,20 @@ pub async fn sync_document_keys(
     .map_err(|e| e.to_string())?
 }
 
+/// Save a single document key for a specific identity.
+/// Uses INSERT OR REPLACE to handle both new and existing keys.
+pub async fn save_document_key(
+    identity: Identity,
+    key: DecryptedDocumentKey,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        document_keys::save(&conn, &identity, &key).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Sync permissions for a specific identity - clear and replace all.
 pub async fn sync_permissions(
     identity: Identity,
