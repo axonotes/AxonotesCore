@@ -883,6 +883,63 @@ Bad:  "You entered an invalid password. Passwords must contain..."
 - Use pagination or infinite scroll for large datasets
 - Don't show more than 7 ungrouped items at once
 
+### 8.8 Subtle Delight [3/5]
+
+Playful design works when it **enhances** the experience without **distracting** from the task. Delight is the "icing on the cake" - it comes after functional, reliable, and usable.
+
+**The Principle:**
+
+For a productivity app, the core experience should be **invisible** - users should enter a flow state and forget they're using software. Save playfulness for the **edges** of the experience.
+
+**Where subtle delight works:**
+
+| Context                  | Example                                            |
+| ------------------------ | -------------------------------------------------- |
+| **Transitions**          | Overshoot easing on position changes (feels alive) |
+| **Success moments**      | Subtle animation on save/complete                  |
+| **Empty states**         | Friendly illustration + encouraging text           |
+| **Loading states**       | Skeleton shimmer instead of spinners               |
+| **Drag & drop**          | Physics-based, smooth movement                     |
+| **Workspace management** | Playful but functional interactions                |
+
+**Where to avoid playfulness:**
+
+| Context                       | Why                                 |
+| ----------------------------- | ----------------------------------- |
+| **Error states**              | Keep serious, clear, actionable     |
+| **Destructive confirmations** | Not the time for whimsy             |
+| **Core editing/writing**      | Should be invisible (flow state)    |
+| **Frequent repeated actions** | Novelty wears off, becomes annoying |
+
+**Rules for subtle delight:**
+
+- **Under 500ms** - anything longer drags and interrupts
+- **Purposeful** - every animation has a reason to exist
+- **Skippable** - power users shouldn't be slowed down
+- **Contextual** - match the emotional moment (don't celebrate errors)
+- **Rare enough to stay fresh** - overuse kills the magic
+
+**Organic motion:**
+
+Make animations feel alive with physics-inspired behavior:
+
+```css
+/* Overshoot easing - element goes past target, settles back */
+transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+```
+
+- Use overshoot for spatial movement (feels natural)
+- Use acceleration/deceleration (not linear)
+- Small scale bounces on completion (1.05 → 1.0)
+
+**What NOT to do:**
+
+- Confetti/particles for routine actions
+- Sound effects (unless explicitly enabled)
+- Animations that block user input
+- Forced waiting for animations to complete
+- Cutesy copy in serious contexts
+
 ---
 
 ## 9. Interaction
