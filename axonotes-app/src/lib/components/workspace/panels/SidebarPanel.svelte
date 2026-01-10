@@ -13,6 +13,7 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import FileTreeNode from "./FileTreeNode.svelte";
+  import * as m from "$lib/paraglide/messages.js";
   import {
     documents,
     documentsLoading,
@@ -535,7 +536,7 @@
           </div>
         {:else if tree.length === 0 && !newFolderState.active}
           <p class="text-muted-foreground py-4 text-center text-xs">
-            No documents yet. Click + or right-click to create.
+            {m.sidebar_empty_state()}
           </p>
         {:else}
           <ul>
@@ -591,12 +592,12 @@
     <ContextMenu.Content class="w-48">
       <ContextMenu.Item onclick={() => handleCreateDocument("/")}>
         <FilePlus class="mr-2 h-4 w-4" />
-        New Document
+        {m.sidebar_new_document()}
       </ContextMenu.Item>
 
       <ContextMenu.Item onclick={() => startNewFolder("/")}>
         <FolderPlus class="mr-2 h-4 w-4" />
-        New Folder
+        {m.sidebar_new_folder()}
       </ContextMenu.Item>
     </ContextMenu.Content>
   </ContextMenu.Root>
@@ -606,18 +607,20 @@
 <Dialog.Root bind:open={deleteConfirm.open}>
   <Dialog.Content class="sm:max-w-md" onkeydown={handleDeleteModalKeydown}>
     <Dialog.Header>
-      <Dialog.Title
-        >Delete {deleteConfirm.paths.length} item{deleteConfirm.paths.length > 1
-          ? "s"
-          : ""}?</Dialog.Title
-      >
+      <Dialog.Title>
+        {#if deleteConfirm.paths.length === 1}
+          {m.sidebar_delete_title_single()}
+        {:else}
+          {m.sidebar_delete_title_multi({count: deleteConfirm.paths.length})}
+        {/if}
+      </Dialog.Title>
       <Dialog.Description>
         {#if deleteConfirm.paths.length === 1}
-          Are you sure you want to delete "{deleteConfirm.paths[0]
-            .split("/")
-            .pop()}"?
+          {m.sidebar_delete_confirm_single({
+            name: deleteConfirm.paths[0].split("/").pop() ?? "",
+          })}
         {:else}
-          Are you sure you want to delete these {deleteConfirm.paths.length} items?
+          {m.sidebar_delete_confirm_multi({count: deleteConfirm.paths.length})}
         {/if}
       </Dialog.Description>
     </Dialog.Header>
@@ -634,9 +637,9 @@
       >
         <FolderInput class="text-muted-foreground h-5 w-5" />
         <div>
-          <div class="font-medium">Move to Trash</div>
+          <div class="font-medium">{m.sidebar_move_to_trash()}</div>
           <div class="text-muted-foreground text-sm">
-            Items can be restored from the .trash folder
+            {m.sidebar_move_to_trash_desc()}
           </div>
         </div>
       </button>
@@ -652,21 +655,25 @@
       >
         <Trash2 class="text-destructive h-5 w-5" />
         <div>
-          <div class="font-medium">Delete Permanently</div>
+          <div class="font-medium">{m.sidebar_delete_permanently()}</div>
           <div class="text-muted-foreground text-sm">
-            This action cannot be undone
+            {m.sidebar_delete_permanently_desc()}
           </div>
         </div>
       </button>
     </div>
 
     <Dialog.Footer>
-      <Button variant="outline" onclick={cancelDelete}>Cancel</Button>
+      <Button variant="outline" onclick={cancelDelete}
+        >{m.common_button_cancel()}</Button
+      >
       <Button
         variant={deleteConfirm.moveToTrash ? "default" : "destructive"}
         onclick={confirmDelete}
       >
-        {deleteConfirm.moveToTrash ? "Move to Trash" : "Delete Permanently"}
+        {deleteConfirm.moveToTrash
+          ? m.sidebar_move_to_trash()
+          : m.sidebar_delete_permanently()}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>

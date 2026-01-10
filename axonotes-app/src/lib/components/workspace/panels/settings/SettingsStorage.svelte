@@ -116,7 +116,9 @@
               <Progress value={usagePercent} class="h-2" />
             </div>
           {:else}
-            <p class="text-muted-foreground text-xs">Storage not initialized</p>
+            <p class="text-muted-foreground text-xs">
+              {m.settings_storage_not_initialized()}
+            </p>
           {/if}
         </div>
       </section>
@@ -153,7 +155,7 @@
                   {m.settings_storage_cache_size({size: cache.sizeFormatted})}
                 </p>
                 <p class="text-muted-foreground text-xs">
-                  {cache.fileCount} files
+                  {m.settings_storage_files_count({count: cache.fileCount})}
                 </p>
               </div>
               <Button
@@ -177,7 +179,9 @@
               </p>
             {/if}
           {:else}
-            <p class="text-muted-foreground text-xs">Cache not available</p>
+            <p class="text-muted-foreground text-xs">
+              {m.settings_storage_cache_unavailable()}
+            </p>
           {/if}
         </div>
       </section>

@@ -97,7 +97,7 @@
             {m.auth_setup_step({current: 3, total: 3})}
           </p>
         {/if}
-        <h1 class="text-xl font-semibold tracking-tight">
+        <h1 class="text-3xl font-semibold tracking-tight">
           {m.auth_setup_pin_title()}
         </h1>
         <p class="text-muted-foreground text-sm">

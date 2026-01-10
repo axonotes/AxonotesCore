@@ -9,6 +9,8 @@
     Trash2,
   } from "@lucide/svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as m from "$lib/paraglide/messages.js";
+  import FileTreeNode from "./FileTreeNode.svelte";
   import {
     expandedFolders,
     toggleFolderExpanded,
@@ -213,6 +215,9 @@
 <li>
   <div
     class="pb-0.5"
+    role="treeitem"
+    aria-selected={isSelected}
+    tabindex="-1"
     ondragover={handleDragOver}
     ondragleave={handleDragLeave}
     ondrop={handleDropEvent}
@@ -291,19 +296,19 @@
         <ContextMenu.Content class="w-48">
           <ContextMenu.Item onclick={() => onCreateDocument(getTargetFolder())}>
             <FilePlus class="mr-2 h-4 w-4" />
-            New Document
+            {m.sidebar_new_document()}
           </ContextMenu.Item>
 
           <ContextMenu.Item onclick={() => onCreateFolder(getTargetFolder())}>
             <FolderPlus class="mr-2 h-4 w-4" />
-            New Folder
+            {m.sidebar_new_folder()}
           </ContextMenu.Item>
 
           <ContextMenu.Separator />
 
           <ContextMenu.Item onclick={() => onRename(node)}>
             <Pencil class="mr-2 h-4 w-4" />
-            Rename
+            {m.sidebar_rename()}
           </ContextMenu.Item>
 
           <ContextMenu.Item
@@ -311,7 +316,9 @@
             onclick={() => onDelete(node)}
           >
             <Trash2 class="mr-2 h-4 w-4" />
-            {node.type === "folder" ? "Delete Folder" : "Delete"}
+            {node.type === "folder"
+              ? m.sidebar_delete_folder()
+              : m.sidebar_delete()}
           </ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
@@ -344,7 +351,7 @@
         </li>
       {/if}
       {#each node.children as child (child.path)}
-        <svelte:self
+        <FileTreeNode
           node={child}
           depth={depth + 1}
           {onFileClick}

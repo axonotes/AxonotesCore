@@ -54,7 +54,7 @@
         <Download class="text-muted-foreground h-5 w-5" />
       </div>
       <div class="space-y-2">
-        <h1 class="text-xl font-semibold tracking-tight">
+        <h1 class="text-3xl font-semibold tracking-tight">
           {m.auth_sync_title()}
         </h1>
         <p class="text-muted-foreground text-sm">

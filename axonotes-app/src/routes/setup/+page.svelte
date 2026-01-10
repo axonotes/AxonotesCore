@@ -3,6 +3,7 @@
   import {goto} from "$app/navigation";
   import {resolve} from "$app/paths";
   import {setupStore} from "$lib/stores/setup";
+  import {Spinner} from "$lib/components/ui/spinner";
 
   onMount(() => {
     // Reset setup state and redirect to step 1
@@ -12,7 +13,5 @@
 </script>
 
 <div class="bg-background flex min-h-full w-full items-center justify-center">
-  <div
-    class="border-primary h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
-  ></div>
+  <Spinner size="lg" />
 </div>

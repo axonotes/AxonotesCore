@@ -1,4 +1,6 @@
 <script lang="ts">
+  import * as m from "$lib/paraglide/messages.js";
+
   interface Props {
     panelId?: string;
     params?: Record<string, unknown>;
@@ -14,7 +16,7 @@
 <div class="flex h-full flex-col">
   <div class="flex-1 overflow-auto p-4">
     <p class="text-muted-foreground text-center text-sm">
-      Editor content for document will appear here.
+      {m.editor_placeholder()}
     </p>
     {#if docId}
       <p class="text-muted-foreground mt-2 text-center font-mono text-xs">

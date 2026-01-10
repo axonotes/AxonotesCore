@@ -251,5 +251,43 @@
   "welcome_workspaces_description": "Each workspace has its own panel layout. Use the workspace bar at the bottom to switch between them or create new ones.",
   "welcome_create_title": "Create workspace",
   "welcome_create_description": "Click the + button in the workspace bar to add a new workspace. Right-click a workspace tab to rename or delete it.",
-  "welcome_footer": "Your layout saves automatically per workspace"
+  "welcome_footer": "Your layout saves automatically per workspace",
+
+  "view_menu_panels": "Panels",
+  "view_menu_create_document": "Create Document",
+  "view_menu_light_mode": "Light mode",
+  "view_menu_dark_mode": "Dark mode",
+
+  "panel_explorer": "Explorer",
+  "panel_editor": "Editor",
+  "panel_welcome": "Welcome",
+  "panel_settings": "Settings",
+
+  "sidebar_empty_state": "No documents yet. Click + or right-click to create.",
+  "sidebar_new_document": "New Document",
+  "sidebar_new_folder": "New Folder",
+  "sidebar_rename": "Rename",
+  "sidebar_delete": "Delete",
+  "sidebar_delete_folder": "Delete Folder",
+  "sidebar_delete_title_single": "Delete 1 item?",
+  "sidebar_delete_title_multi": "Delete {count} items?",
+  "sidebar_delete_confirm_single": "Are you sure you want to delete \"{name}\"?",
+  "sidebar_delete_confirm_multi": "Are you sure you want to delete these {count} items?",
+  "sidebar_move_to_trash": "Move to Trash",
+  "sidebar_move_to_trash_desc": "Items can be restored from the .trash folder",
+  "sidebar_delete_permanently": "Delete Permanently",
+  "sidebar_delete_permanently_desc": "This action cannot be undone",
+
+  "editor_placeholder": "Editor content for document will appear here.",
+
+  "settings_storage_not_initialized": "Storage not initialized",
+  "settings_storage_cache_unavailable": "Cache not available",
+  "settings_storage_files_count": "{count} files",
+
+  "common_password_show": "Show password",
+  "common_password_hide": "Hide password",
+  "common_pin_show": "Show PIN",
+  "common_pin_hide": "Hide PIN",
+
+  "app_no_workspace": "No workspace found"
 }
