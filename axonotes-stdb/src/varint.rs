@@ -33,7 +33,11 @@ pub fn decode(bytes: &[u8]) -> Result<u32, String> {
     let mut result: u32 = 0;
     let mut shift = 0;
     for (i, &byte) in bytes.iter().enumerate() {
-        if shift >= 32 {
+        if shift == 28 && (byte & 0x70) != 0 {
+            // At shift 28, only lower 4 bits (0x0F) are valid for u32
+            return Err("Varint too large for u32".to_string());
+        }
+        if shift > 28 {
             return Err("Varint too large for u32".to_string());
         }
         result |= ((byte & 0x7F) as u32) << shift;
