@@ -1,4 +1,5 @@
 mod batch;
+mod conflict_history;
 mod document;
 mod key;
 mod lifecycle;
@@ -10,6 +11,7 @@ mod user;
 mod version_tag;
 
 pub use batch::*;
+pub use conflict_history::*;
 pub use document::*;
 pub use key::*;
 pub use lifecycle::*;

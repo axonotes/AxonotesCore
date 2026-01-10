@@ -2,6 +2,7 @@ mod crypto;
 mod reducers;
 mod tables;
 mod utils;
+pub mod varint;
 mod views;
 
 // Re-export for SpacetimeDB

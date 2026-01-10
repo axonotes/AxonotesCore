@@ -316,6 +316,7 @@ impl ProfileStdbContext {
         batch_id: String,
         doc_id: String,
         timestamp: u128,
+        key_index: Vec<u8>,
         encrypted_data: Vec<u8>,
         signature: Vec<u8>,
     ) -> Result<(), String> {
@@ -328,6 +329,7 @@ impl ProfileStdbContext {
             batch_id,
             doc_id,
             timestamp,
+            key_index,
             encrypted_data,
             signature
         )
@@ -639,6 +641,33 @@ impl ProfileStdbContext {
         let conn = conn.lock().await;
 
         call_reducer_await!(conn, delete_version_tag, tag_id, signature)
+    }
+
+    /// Upload conflict history to STDB
+    /// Only Owner or Editor can upload (Readers cannot)
+    /// This is called async/best-effort after a sync conflict is detected
+    pub async fn upload_conflict_history(
+        &self,
+        history_id: String,
+        doc_id: String,
+        encrypted_blob: Vec<u8>,
+        timestamp: u128,    // First lost batch timestamp (for ordering)
+        key_index: Vec<u8>, // Varint-encoded key index (for decryption)
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            upload_conflict_history,
+            history_id,
+            doc_id,
+            encrypted_blob,
+            timestamp,
+            key_index,
+            signature
+        )
     }
 
     // ==========================================

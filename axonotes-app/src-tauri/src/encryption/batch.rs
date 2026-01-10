@@ -14,7 +14,7 @@
 
 use crate::crypto::chacha::{decrypt, encrypt};
 use crate::encryption::document::DecryptedDocumentKey;
-use crate::encryption::helpers::find_correct_decryption_key;
+use crate::encryption::helpers::find_key_by_index;
 use crate::stdb_bindings::DocumentBatch;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
@@ -78,10 +78,12 @@ impl DocumentBatch {
         &self,
         document_keys: &[DecryptedDocumentKey],
     ) -> Result<DecryptedBatch, String> {
-        let batch_timestamp = self.timestamp;
+        // Decode key_index from varint
+        let key_index = crate::utils::varint::decode(&self.key_index)?;
 
+        // Use key_index to find the correct decryption key
         let decryption_key: &DecryptedDocumentKey =
-            find_correct_decryption_key(&self.doc_id, batch_timestamp, document_keys)?;
+            find_key_by_index(&self.doc_id, key_index, document_keys)?;
 
         // Decrypt the batch data blob with this key
         let decrypted = decrypt(
@@ -93,7 +95,8 @@ impl DocumentBatch {
         let batch_data: BatchData = from_bytes(decrypted.as_slice())
             .map_err(|e| format!("Error deserializing batch data: {e}"))?;
 
-        let is_initial = batch_timestamp == decryption_key.key_timestamp;
+        // is_initial is still determined by timestamp comparison
+        let is_initial = self.timestamp == decryption_key.key_timestamp;
 
         Ok(DecryptedBatch {
             timestamp: self.timestamp,
@@ -134,6 +137,7 @@ impl DecryptedBatch {
             timestamp: self.timestamp,
             doc_id: self.doc_id.clone(),
             batch_id: self.batch_id.clone(),
+            key_index: crate::utils::varint::encode(latest_document_key.key_index),
             encrypted_data,
         })
     }
@@ -162,6 +166,7 @@ mod tests {
             doc_id: doc_id.to_string(),
             user_id: Identity::from_byte_array([0u8; 32]),
             key_timestamp,
+            key_index: 0,
             key_data: DecryptedKeyData {
                 encryption_key: vec![0u8; 32], // ChaCha20 requires 32-byte key
                 signing_private_key: vec![0u8; 32],
@@ -315,19 +320,21 @@ mod tests {
     }
 
     #[test]
-    fn test_decrypt_selects_correct_key_by_timestamp() {
+    fn test_decrypt_selects_correct_key_by_key_index() {
         let doc_id = "doc_multikey";
 
-        // Two keys for same document with different timestamps and different encryption keys
+        // Two keys for same document with different key_index values and different encryption keys
         let mut key_old = create_test_document_key(doc_id, 50);
+        key_old.key_index = 0;
         key_old.key_data.encryption_key = vec![1u8; 32];
 
         let mut key_new = create_test_document_key(doc_id, 150);
+        key_new.key_index = 1;
         key_new.key_data.encryption_key = vec![2u8; 32];
 
         let document_keys = vec![key_old.clone(), key_new.clone()];
 
-        // Batch at timestamp 100 should decrypt with key_old (timestamp 50 <= 100)
+        // Batch encrypted with key_old (key_index=0) should decrypt with key_old
         let batch_old = DecryptedBatch {
             is_initial: false,
             batch_id: "batch_old".to_string(),
@@ -345,7 +352,7 @@ mod tests {
         assert_eq!(decrypted_old.batch_id, "batch_old");
         assert!(!decrypted_old.is_initial); // timestamp 100 != key_timestamp 50
 
-        // Batch at timestamp 200 should decrypt with key_new (timestamp 150 <= 200)
+        // Batch encrypted with key_new (key_index=1) should decrypt with key_new
         let batch_new = DecryptedBatch {
             is_initial: false,
             batch_id: "batch_new".to_string(),
@@ -421,9 +428,11 @@ mod tests {
         let doc_id = "doc_multi_initial";
 
         let mut key1 = create_test_document_key(doc_id, 100);
+        key1.key_index = 0;
         key1.key_data.encryption_key = vec![1u8; 32];
 
         let mut key2 = create_test_document_key(doc_id, 200);
+        key2.key_index = 1;
         key2.key_data.encryption_key = vec![2u8; 32];
 
         let document_keys = vec![key1.clone(), key2.clone()];

@@ -10,6 +10,7 @@ use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table};
 #[derive(SpacetimeType)]
 pub struct EncryptedKeyEntry {
     pub key_timestamp: u128,
+    pub key_index: Vec<u8>, // Varint-encoded key index
     pub encrypted_data: Vec<u8>,
 }
 
@@ -74,6 +75,7 @@ pub fn add_user_to_document(
     let mut keys_bytes = Vec::new();
     for key in &encrypted_keys {
         keys_bytes.extend_from_slice(&key.key_timestamp.to_le_bytes());
+        keys_bytes.extend_from_slice(&key.key_index);
         keys_bytes.extend_from_slice(&key.encrypted_data);
     }
     let keys_hash = blake3::hash(&keys_bytes);
@@ -114,6 +116,7 @@ pub fn add_user_to_document(
             doc_id: doc_id.clone(),
             user_id: new_user_id,
             key_timestamp: key.key_timestamp,
+            key_index: key.key_index,
             encrypted_data: key.encrypted_data,
         });
     }

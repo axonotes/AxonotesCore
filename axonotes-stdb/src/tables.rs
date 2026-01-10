@@ -38,6 +38,7 @@ pub struct DocumentBatch {
     pub batch_id: String, // Random UUID
     pub doc_id: String,          // Document identifier
     pub timestamp: u128,         // When the batch got created
+    pub key_index: Vec<u8>,      // Varint-encoded key index for decryption key selection
     pub encrypted_data: Vec<u8>, // block_id + patches (ChaCha20-Poly1305)
 }
 
@@ -54,6 +55,7 @@ pub struct DocumentKey {
     pub user_id: Identity, // Who the key belongs to
     #[index(btree)]
     pub key_timestamp: u128, // Which key version
+    pub key_index: Vec<u8>, // Varint-encoded sequential index (0, 1, 2...)
     pub encrypted_data: Vec<u8>, // Encrypted signing and encryption key with user's public key
 }
 
@@ -163,4 +165,32 @@ pub struct ShareRequest {
     pub share_code: String,
     pub user_id: Identity,
     pub public_encryption_key: Vec<u8>, // X25519 public key (32 bytes)
+}
+
+// ==================== USER SYNC CONFLICT HISTORY ====================
+/// Stores encrypted conflict history for recovery and branch visualization.
+/// Insert-only - entries are never updated or deleted.
+#[spacetimedb::table(
+    name = private_user_sync_conflict_history,
+    index(name = by_user, btree(columns = [user_id])),
+    index(name = by_user_and_doc, btree(columns = [user_id, doc_id])),
+)]
+pub struct UserSyncConflictHistory {
+    #[primary_key]
+    pub history_id: String, // Random UUID
+    pub user_id: Identity,
+    pub doc_id: String,
+
+    // Encrypted JSON blob containing:
+    // {
+    //   "block_id": 123,
+    //   "lost_batches": [DecryptedBatch, ...]
+    // }
+    pub encrypted_blob: Vec<u8>,
+
+    /// First lost batch timestamp (for ordering/display)
+    pub timestamp: u128,
+
+    /// Varint-encoded key index (for decryption key selection)
+    pub key_index: Vec<u8>,
 }

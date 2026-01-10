@@ -160,6 +160,7 @@ mod tests {
             doc_id: doc_id.to_string(),
             user_id: Identity::from_byte_array([0u8; 32]),
             key_timestamp,
+            key_index: 0,
             key_data: DecryptedKeyData {
                 encryption_key: vec![0u8; 32], // ChaCha20 requires 32-byte key
                 signing_private_key: vec![0u8; 64],

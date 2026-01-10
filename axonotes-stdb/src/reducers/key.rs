@@ -125,6 +125,17 @@ pub fn rotate_document_keys(
         ..doc
     });
 
+    // Calculate next key_index from existing keys for this document
+    let max_key_index = ctx
+        .db
+        .private_document_key()
+        .by_doc_and_user()
+        .filter(&doc_id)
+        .filter_map(|k| crate::varint::decode(&k.key_index).ok())
+        .max()
+        .unwrap_or(0);
+    let next_key_index = crate::varint::encode(max_key_index + 1);
+
     // Insert new keys for all authorized users
     for user_key in user_keys {
         ctx.db.private_document_key().insert(DocumentKey {
@@ -132,16 +143,18 @@ pub fn rotate_document_keys(
             doc_id: doc_id.clone(),
             user_id: user_key.user_id,
             key_timestamp: new_key_timestamp,
+            key_index: next_key_index.clone(),
             encrypted_data: user_key.encrypted_key_data,
         });
     }
 
-    // Store ALL snapshot batches
+    // Store ALL snapshot batches with the new key_index
     for snapshot in snapshot_batches {
         ctx.db.private_document_batch().insert(DocumentBatch {
             batch_id: snapshot.batch_id,
             doc_id: doc_id.clone(),
             timestamp: new_key_timestamp,
+            key_index: next_key_index.clone(),
             encrypted_data: snapshot.encrypted_data,
         });
     }
