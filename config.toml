@@ -7,8 +7,8 @@ environment="development"
 client_id="client_01JX2EAD13T3F7W9K57M08ZT58"
 authorization_url="https://api.workos.com/user_management/authorize"
 token_url="https://api.workos.com/user_management/authenticate"
-redirect_uri="http://localhost:8080/callback"
-callback_port=8080
+redirect_uri="http://localhost:29660/callback"
+callback_port=29660
 provider="authkit"
 scopes=["profile", "email"]
 
