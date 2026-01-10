@@ -164,3 +164,31 @@ pub struct ShareRequest {
     pub user_id: Identity,
     pub public_encryption_key: Vec<u8>, // X25519 public key (32 bytes)
 }
+
+// ==================== USER SYNC CONFLICT HISTORY ====================
+/// Stores encrypted conflict history for recovery and branch visualization.
+/// Insert-only - entries are never updated or deleted.
+#[spacetimedb::table(
+    name = private_user_sync_conflict_history,
+    index(name = by_user, btree(columns = [user_id])),
+    index(name = by_user_and_doc, btree(columns = [user_id, doc_id])),
+)]
+pub struct UserSyncConflictHistory {
+    #[primary_key]
+    pub history_id: String, // Random UUID
+    pub user_id: Identity,
+    pub doc_id: String,
+
+    // Encrypted JSON blob containing:
+    // {
+    //   "block_id": 123,
+    //   "lost_batches": [DecryptedBatch, ...]
+    // }
+    pub encrypted_blob: Vec<u8>,
+
+    /// First lost batch timestamp (for ordering/display)
+    pub timestamp: u128,
+
+    /// Encryption key timestamp (for decryption key selection)
+    pub key_timestamp: u128,
+}

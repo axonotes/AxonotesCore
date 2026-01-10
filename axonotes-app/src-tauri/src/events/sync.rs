@@ -22,6 +22,7 @@
 //! | `sync-progress` | Batch synced | doc_id, synced_count, total_count |
 //! | `sync-completed` | All batches synced | doc_id, batch_count |
 //! | `sync-error` | Sync failed | doc_id, error |
+//! | `batch-conflicts` | Conflict detected | conflict_id, doc_id, block_id, user_state, server_state |
 //!
 //! ## Frontend Handling
 //!
@@ -40,6 +41,7 @@ pub const EVENT_SYNC_STARTED: &str = "sync-started";
 pub const EVENT_SYNC_PROGRESS: &str = "sync-progress";
 pub const EVENT_SYNC_COMPLETED: &str = "sync-completed";
 pub const EVENT_SYNC_ERROR: &str = "sync-error";
+pub const EVENT_BATCH_CONFLICTS: &str = "batch-conflicts";
 
 // ==========================================
 // Payloads
@@ -76,6 +78,25 @@ pub struct SyncCompletedPayload {
 pub struct SyncErrorPayload {
     pub doc_id: String,
     pub error: String,
+}
+
+/// Emitted when a batch conflict is detected during sync.
+/// Contains both user and server states for UI resolution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchConflictPayload {
+    /// Unique conflict identifier
+    pub conflict_id: String,
+    /// Document where conflict occurred
+    pub doc_id: String,
+    /// Block where conflict occurred
+    pub block_id: u64,
+    /// User's block state (JSON serialized Block)
+    pub user_state: String,
+    /// Server's block state (JSON serialized Block)
+    pub server_state: String,
+    /// When the conflict was detected (milliseconds since epoch)
+    pub timestamp: u128,
 }
 
 // ==========================================
@@ -117,5 +138,11 @@ pub fn emit_sync_error(doc_id: String, error: String) {
     let payload = SyncErrorPayload { doc_id, error };
     if let Err(e) = app_handle::emit(EVENT_SYNC_ERROR, &payload) {
         eprintln!("Failed to emit {EVENT_SYNC_ERROR}: {e}");
+    }
+}
+
+pub fn emit_batch_conflict(payload: &BatchConflictPayload) {
+    if let Err(e) = app_handle::emit(EVENT_BATCH_CONFLICTS, payload) {
+        eprintln!("Failed to emit {EVENT_BATCH_CONFLICTS}: {e}");
     }
 }

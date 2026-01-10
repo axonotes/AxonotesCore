@@ -641,6 +641,33 @@ impl ProfileStdbContext {
         call_reducer_await!(conn, delete_version_tag, tag_id, signature)
     }
 
+    /// Upload conflict history to STDB
+    /// Only Owner or Editor can upload (Readers cannot)
+    /// This is called async/best-effort after a sync conflict is detected
+    pub async fn upload_conflict_history(
+        &self,
+        history_id: String,
+        doc_id: String,
+        encrypted_blob: Vec<u8>,
+        timestamp: u128,     // First lost batch timestamp (for ordering)
+        key_timestamp: u128, // Encryption key timestamp (for decryption)
+        signature: Vec<u8>,
+    ) -> Result<(), String> {
+        let conn = self.get_connection().await?;
+        let conn = conn.lock().await;
+
+        call_reducer_await!(
+            conn,
+            upload_conflict_history,
+            history_id,
+            doc_id,
+            encrypted_blob,
+            timestamp,
+            key_timestamp,
+            signature
+        )
+    }
+
     // ==========================================
     // Share Operations
     // ==========================================

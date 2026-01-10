@@ -3,8 +3,9 @@ use crate::{
     private_document__view, private_document_batch__view, private_document_key__view,
     private_document_metadata__view, private_document_permission__view,
     private_document_version_tag__view, private_live_block__view, private_pending_share__view,
-    private_share_request__view, Document, DocumentBatch, DocumentKey, DocumentMetadata,
-    DocumentPermission, DocumentVersionTag, LiveBlock, PendingShare, Role, ShareRequest,
+    private_share_request__view, private_user_sync_conflict_history__view, Document, DocumentBatch,
+    DocumentKey, DocumentMetadata, DocumentPermission, DocumentVersionTag, LiveBlock, PendingShare,
+    Role, ShareRequest, UserSyncConflictHistory,
 };
 use spacetimedb::rt::IntoVec;
 use spacetimedb::{Identity, ViewContext};
@@ -254,6 +255,18 @@ pub fn pending_share_requests_view(ctx: &ViewContext) -> Vec<ShareRequest> {
 pub fn my_share_requests_view(ctx: &ViewContext) -> Vec<ShareRequest> {
     ctx.db
         .private_share_request()
+        .by_user()
+        .filter(&ctx.sender)
+        .collect()
+}
+
+// ==================== CONFLICT HISTORY VIEW ====================
+
+/// Get all sync conflict history for the current user
+#[spacetimedb::view(name = user_conflict_history, public)]
+pub fn user_conflict_history_view(ctx: &ViewContext) -> Vec<UserSyncConflictHistory> {
+    ctx.db
+        .private_user_sync_conflict_history()
         .by_user()
         .filter(&ctx.sender)
         .collect()

@@ -46,6 +46,7 @@
 #![allow(clippy::needless_pass_by_value)] // API design: database functions often take ownership for simplicity
 
 pub(crate) mod batches;
+pub(crate) mod conflicts;
 pub(crate) mod document_keys;
 pub(crate) mod documents;
 mod helpers;
@@ -1321,6 +1322,113 @@ pub async fn delete_metadata_for_doc(identity: Identity, doc_id: String) -> Resu
         metadata::delete_by_doc_id(&conn, &identity, &doc_id)
             .map(|_| ())
             .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ========================================
+// Sync Conflict Operations
+// ========================================
+
+pub use conflicts::{PendingSyncConflict, SyncConflictHistory};
+
+/// Save a pending conflict for user resolution.
+pub async fn save_pending_conflict(conflict: PendingSyncConflict) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::save_pending_conflict(&conn, &conflict).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all pending conflicts for a document.
+pub async fn get_pending_conflicts_by_doc(
+    doc_id: String,
+) -> Result<Vec<PendingSyncConflict>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::get_pending_conflicts_by_doc(&conn, &doc_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all pending conflicts across all documents.
+pub async fn get_all_pending_conflicts() -> Result<Vec<PendingSyncConflict>, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        conflicts::get_all_pending_conflicts(&conn).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get a specific pending conflict by ID.
+pub async fn get_pending_conflict(
+    conflict_id: String,
+) -> Result<Option<PendingSyncConflict>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::get_pending_conflict(&conn, &conflict_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete a pending conflict after user resolves it.
+pub async fn delete_pending_conflict(conflict_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::delete_pending_conflict(&conn, &conflict_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete pending conflict by doc and block (when new conflict supersedes old).
+pub async fn delete_pending_conflict_by_block(doc_id: String, block_id: u64) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::delete_pending_conflict_by_block(&conn, &doc_id, block_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Archive lost batches to conflict history (INSERT ONLY).
+pub async fn save_conflict_history(history: SyncConflictHistory) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::save_conflict_history(&conn, &history).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get conflict history for a specific block.
+pub async fn get_conflict_history_by_block(
+    doc_id: String,
+    block_id: u64,
+) -> Result<Vec<SyncConflictHistory>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::get_conflict_history_by_block(&conn, &doc_id, block_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all conflict history for a document.
+pub async fn get_conflict_history_by_doc(
+    doc_id: String,
+) -> Result<Vec<SyncConflictHistory>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conflicts::get_conflict_history_by_doc(&conn, &doc_id).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

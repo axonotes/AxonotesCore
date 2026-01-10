@@ -16,6 +16,8 @@
 //! - Log warnings for debugging
 //! - Provide "Report Bug" option for bug events
 
+#![allow(dead_code)] // Event types and emitters for future frontend integration
+
 use crate::app_handle;
 use serde::{Deserialize, Serialize};
 

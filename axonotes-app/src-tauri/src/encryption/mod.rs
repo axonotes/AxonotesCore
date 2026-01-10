@@ -32,6 +32,7 @@
 //! 3. The new key is encrypted to remaining users only
 
 pub(crate) mod batch;
+pub(crate) mod conflict_history;
 pub(crate) mod document;
 pub(crate) mod helpers;
 pub(crate) mod key_data;

@@ -15,6 +15,9 @@
 //! | `document_keys` | Document encryption keys (synced from STDB, stored decrypted) |
 //! | `permissions` | Document permissions (synced from STDB) |
 //! | `documents` | Document metadata (synced from STDB) |
+//! | `document_metadata` | Document path/tags (synced from STDB, merge strategy) |
+//! | `pending_sync_conflicts` | Active conflicts awaiting UI resolution |
+//! | `sync_conflict_history` | Insert-only archive of lost batches |
 //!
 //! ## Index Strategy
 //!
@@ -283,6 +286,49 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_document_metadata_doc_id ON document_metadata(identity_id, doc_id)",
+        [],
+    )?;
+
+    // ========================================
+    // Sync Conflict Tables
+    // ========================================
+
+    // Pending conflicts awaiting user resolution
+    // Stores user and server block states for UI conflict resolution
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pending_sync_conflicts (
+            conflict_id TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            block_id INTEGER NOT NULL,
+            user_state TEXT NOT NULL,
+            server_state TEXT NOT NULL,
+            timestamp BLOB NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pending_conflicts_doc_block
+         ON pending_sync_conflicts(doc_id, block_id)",
+        [],
+    )?;
+
+    // Insert-only archive of lost batches (for recovery and branch visualization)
+    // Never updated or deleted - preserves complete conflict history
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_conflict_history (
+            history_id TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            block_id INTEGER NOT NULL,
+            lost_batches BLOB NOT NULL,
+            timestamp BLOB NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conflict_history_doc_block
+         ON sync_conflict_history(doc_id, block_id)",
         [],
     )?;
 
