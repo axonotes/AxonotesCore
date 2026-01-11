@@ -166,6 +166,12 @@ pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
 // Sync Logic
 // ==========================================
 
+/// Maximum retries when waiting for document keys during batch sync.
+/// Keys may arrive slightly after batches due to callback ordering.
+const KEY_WAIT_MAX_RETRIES: u32 = 10;
+/// Delay between retries when waiting for keys (100ms)
+const KEY_WAIT_DELAY_MS: u64 = 100;
+
 /// Syncs a single batch received via real-time subscription (on_insert).
 ///
 /// Unlike `sync_batches_with_data`, this does NOT filter by timestamp.
@@ -174,18 +180,29 @@ pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
 ///
 /// This function:
 /// 1. Acquires the sync lock to serialize with other batch operations
-/// 2. Decrypts and saves the batch (if not a duplicate)
-/// 3. Invalidates block cache so next read gets fresh data
-/// 4. Emits sync events for frontend notification
+/// 2. Waits for document keys if not yet available (handles join race condition)
+/// 3. Decrypts and saves the batch (if not a duplicate)
+/// 4. Invalidates block cache so next read gets fresh data
+/// 5. Emits sync events for frontend notification
 async fn sync_realtime_batch(stdb_batch: DocumentBatch) -> Result<(), String> {
     let last_sync_lock = get_last_sync();
     let _last_sync = last_sync_lock.lock().await;
 
     let doc_id = stdb_batch.doc_id.clone();
     let batch_id = stdb_batch.batch_id.clone();
+    let key_index = crate::utils::varint::decode(&stdb_batch.key_index)?;
 
-    // Get document keys for decryption
-    let document_keys = crate::database::get_document_keys_for_active_user().await?;
+    // Get document keys for decryption, with retry for race condition
+    // When joining a share, batches and keys arrive via separate callbacks.
+    // Keys may not be synced to local DB yet when batch callback fires.
+    let document_keys = match wait_for_document_key(&doc_id, key_index).await? {
+        KeyWaitResult::Found(keys) => keys,
+        KeyWaitResult::SkipNoHistory => {
+            // User joined a no-history share and doesn't have the old key
+            // Skip this batch silently - they'll get the snapshot batches instead
+            return Ok(());
+        }
+    };
 
     // Decrypt the batch
     let decrypted = vec![stdb_batch]
@@ -218,6 +235,70 @@ async fn sync_realtime_batch(stdb_batch: DocumentBatch) -> Result<(), String> {
     emit_sync_completed(doc_id, 1);
 
     Ok(())
+}
+
+/// Result of waiting for a document key
+enum KeyWaitResult {
+    /// Key found, proceed with decryption
+    Found(Vec<DecryptedDocumentKey>),
+    /// Key not found but user has a newer key - skip this batch (no-history share)
+    SkipNoHistory,
+}
+
+/// Waits for a document key to become available in local storage.
+///
+/// When joining a share, document keys and batches arrive via separate SpacetimeDB
+/// callbacks that run in parallel. The key sync may not have completed when the
+/// batch callback fires. This function retries fetching keys until the required
+/// key is available or max retries is exceeded.
+///
+/// If the user has a NEWER key but not the requested one, this indicates a
+/// no-history share where the user shouldn't see old content. In this case,
+/// returns `SkipNoHistory` so the batch can be silently skipped.
+async fn wait_for_document_key(doc_id: &str, key_index: u32) -> Result<KeyWaitResult, String> {
+    for attempt in 0..KEY_WAIT_MAX_RETRIES {
+        let document_keys = crate::database::get_document_keys_for_active_user().await?;
+
+        // Check if we have the required key
+        let has_key = document_keys
+            .iter()
+            .any(|k| k.doc_id == doc_id && k.key_index == key_index);
+
+        if has_key {
+            return Ok(KeyWaitResult::Found(document_keys));
+        }
+
+        // Check if we have a NEWER key for this document (no-history share scenario)
+        // If so, we should skip this batch rather than wait forever
+        let has_newer_key = document_keys
+            .iter()
+            .any(|k| k.doc_id == doc_id && k.key_index > key_index);
+
+        if has_newer_key {
+            log::debug!(
+                "[sync:realtime] Skipping batch for doc {} with key_index {} (no-history share: user has newer key)",
+                doc_id,
+                key_index
+            );
+            return Ok(KeyWaitResult::SkipNoHistory);
+        }
+
+        if attempt < KEY_WAIT_MAX_RETRIES - 1 {
+            log::debug!(
+                "[sync:realtime] Waiting for key (doc: {}, index: {}), attempt {}/{}",
+                doc_id,
+                key_index,
+                attempt + 1,
+                KEY_WAIT_MAX_RETRIES
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(KEY_WAIT_DELAY_MS)).await;
+        }
+    }
+
+    Err(format!(
+        "No key found for doc_id: {} with key_index: {} after {} retries",
+        doc_id, key_index, KEY_WAIT_MAX_RETRIES
+    ))
 }
 
 /// Processes incoming batches from SpacetimeDB subscription.

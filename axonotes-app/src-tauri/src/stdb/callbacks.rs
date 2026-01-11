@@ -301,14 +301,29 @@ pub fn register_callbacks(conn: &DbConnection) {
         });
 
     // Register document insert callback (new document accessible)
+    // For shared documents, this also creates default metadata if none exists
     conn.db.accessible_documents().on_insert(|ctx, document| {
         let document = document.clone();
         let identity = ctx.identity();
+        let doc_id = document.doc_id.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
             rt.block_on(async move {
+                // Save the document
                 if let Err(e) = crate::database::save_document(identity, document).await {
                     eprintln!("[callback] Failed to save document: {e}");
+                    return;
+                }
+
+                // Check if this is a shared document without metadata
+                // (shared documents don't get user_metadata created automatically)
+                if let Err(e) = create_default_metadata_if_missing(&doc_id).await {
+                    // Non-fatal: metadata might already exist or be created later
+                    log::debug!(
+                        "[callback] Could not create default metadata for {}: {}",
+                        doc_id,
+                        e
+                    );
                 }
             });
         });
@@ -655,4 +670,107 @@ pub fn on_subscription_applied(ctx: &SubscriptionEventContext) {
 #[allow(clippy::needless_pass_by_value)] // Signature constrained by SpacetimeDB callback API
 pub fn on_subscription_error(_ctx: &ErrorContext, err: Error) {
     log::error!("✗ Subscription error: {err}");
+}
+
+// ==========================================
+// Default Metadata for Shared Documents
+// ==========================================
+
+/// Creates default metadata for a document if the user doesn't have any yet.
+///
+/// This is used when a user joins a shared document - they get access to the
+/// document and keys, but need to create their own user_metadata entry with
+/// a default path so the document appears in their file tree.
+///
+/// Creates path like "/Shared/Shared Document.doc" with collision handling.
+async fn create_default_metadata_if_missing(doc_id: &str) -> Result<(), String> {
+    use crate::encryption::document::DecryptedMetadata;
+    use crate::utils::vec_array::ByteArrayConversion;
+
+    // Check if we already have metadata for this document in the STDB cache
+    // get_cached_metadata returns already-decrypted metadata entries
+    let existing_metadata = stdb::active_profile()
+        .get_cached_metadata()
+        .await
+        .unwrap_or_default();
+
+    let has_metadata = existing_metadata.iter().any(|m| m.doc_id == doc_id);
+    if has_metadata {
+        log::debug!(
+            "[callback] Document {} already has metadata, skipping default creation",
+            doc_id
+        );
+        return Ok(());
+    }
+
+    // Get user keys for encryption
+    let user_keys = crate::database::get_active_user_keys()
+        .await?
+        .ok_or("No active user keys")?;
+
+    let private_key = user_keys.private_encryption_key.as_array()?;
+    let public_key = user_keys.public_encryption_key.as_array()?;
+
+    // Get existing paths from the already-decrypted metadata
+    let existing_paths: Vec<_> = existing_metadata.iter().map(|m| &m.metadata).collect();
+
+    // Find a unique path in /Shared/ folder
+    let path = find_unique_shared_path(&existing_paths);
+
+    // Create default metadata
+    let default_metadata = DecryptedMetadata {
+        version: 1,
+        path: path.clone(),
+        tags: vec![],
+    };
+
+    // Encrypt for ourselves
+    let encrypted_blob = default_metadata.encrypt(private_key, public_key, public_key)?;
+
+    // Upload to server
+    stdb::active_profile()
+        .create_document_metadata(doc_id.to_string(), encrypted_blob)
+        .await?;
+
+    log::debug!(
+        "[callback] Created default metadata for shared document {} at path {}",
+        doc_id,
+        path
+    );
+
+    Ok(())
+}
+
+/// Finds a unique path for a shared document.
+/// Returns "/Shared/Shared Document.doc" or "/Shared/Shared Document (1).doc" etc.
+fn find_unique_shared_path(
+    existing_metadata: &[&crate::encryption::document::DecryptedMetadata],
+) -> String {
+    let base_name = "Shared Document";
+    let folder = "/Shared";
+    let extension = ".doc";
+
+    // Collect all existing paths in lowercase for case-insensitive comparison
+    let existing_paths: std::collections::HashSet<String> = existing_metadata
+        .iter()
+        .map(|m| m.path.to_lowercase())
+        .collect();
+
+    // Try the base name first
+    let first_path = format!("{}/{}{}", folder, base_name, extension);
+    if !existing_paths.contains(&first_path.to_lowercase()) {
+        return first_path;
+    }
+
+    // Try with incrementing numbers
+    for i in 1..1000 {
+        let path = format!("{}/{} ({}){}", folder, base_name, i, extension);
+        if !existing_paths.contains(&path.to_lowercase()) {
+            return path;
+        }
+    }
+
+    // Fallback with timestamp (should never happen)
+    let ts = crate::utils::timestamp::timestamp();
+    format!("{}/{} ({}){}", folder, base_name, ts, extension)
 }

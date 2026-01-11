@@ -4,6 +4,7 @@
   import {Loader2, AlertCircle} from "@lucide/svelte";
   import {Button} from "$lib/components/ui/button";
   import EditorContent from "$lib/components/editor/EditorContent.svelte";
+  import EditorActionBar from "$lib/components/editor/EditorActionBar.svelte";
   import {createEditorContext} from "$lib/components/editor/editorContext";
 
   interface Props {
@@ -65,6 +66,7 @@
     </div>
   {:else}
     <div class="flex-1 overflow-auto">
+      <EditorActionBar {docId} docName={fileName} />
       <EditorContent />
     </div>
   {/if}

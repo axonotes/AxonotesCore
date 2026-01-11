@@ -97,6 +97,7 @@ pub async fn process_share_joiner(
     let mut keys_bytes = Vec::new();
     for key in &encrypted_keys {
         keys_bytes.extend_from_slice(&key.key_timestamp.to_le_bytes());
+        keys_bytes.extend_from_slice(&key.key_index);
         keys_bytes.extend_from_slice(&key.encrypted_data);
     }
     let keys_hash = blake3::hash(&keys_bytes);

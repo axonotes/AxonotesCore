@@ -7,6 +7,7 @@
     FolderPlus,
     Pencil,
     Trash2,
+    Share2,
   } from "@lucide/svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as m from "$lib/paraglide/messages.js";
@@ -41,6 +42,7 @@
     onCreateFolder: (parentPath: string) => void;
     onRename: (node: TreeNode) => void;
     onDelete: (node: TreeNode) => void;
+    onShare?: (node: TreeNode) => void;
     onDrop: (paths: string[], targetFolderPath: string) => void;
     onSelect: (node: TreeNode, event: MouseEvent) => void;
     onHover: (path: string | null) => void;
@@ -66,6 +68,7 @@
     onCreateFolder,
     onRename,
     onDelete,
+    onShare,
     onDrop,
     onSelect,
     onHover,
@@ -311,6 +314,13 @@
             {m.sidebar_rename()}
           </ContextMenu.Item>
 
+          {#if node.type === "file" && onShare}
+            <ContextMenu.Item onclick={() => onShare(node)}>
+              <Share2 class="mr-2 h-4 w-4" />
+              {m.share_context_menu_share()}
+            </ContextMenu.Item>
+          {/if}
+
           <ContextMenu.Item
             class="text-destructive focus:text-destructive"
             onclick={() => onDelete(node)}
@@ -359,6 +369,7 @@
           {onCreateFolder}
           {onRename}
           {onDelete}
+          {onShare}
           {onDrop}
           {onSelect}
           {onHover}

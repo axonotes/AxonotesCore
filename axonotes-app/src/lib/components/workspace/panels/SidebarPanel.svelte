@@ -8,11 +8,13 @@
     Folder,
     Trash2,
     FolderInput,
+    UserPlus,
   } from "@lucide/svelte";
   import {Button} from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import FileTreeNode from "./FileTreeNode.svelte";
+  import {ShareDialog, JoinShareDialog} from "$lib/components/share";
   import * as m from "$lib/paraglide/messages.js";
   import {
     documents,
@@ -86,6 +88,16 @@
 
   // Current drop target path (folder path that's highlighted, or "/" for root)
   let dropTargetPath = $state<string | null>(null);
+
+  // Share dialog state
+  let shareDialogState = $state<{
+    open: boolean;
+    docId: string;
+    docName: string;
+  }>({open: false, docId: "", docName: ""});
+
+  // Join share dialog state
+  let joinDialogOpen = $state(false);
 
   // Handle hover for arrow key starting point
   function handleHover(path: string | null) {
@@ -442,6 +454,17 @@
     deleteConfirm = {open: true, paths: [node.path], moveToTrash: true};
   }
 
+  // Share handler - opens share dialog for files
+  function handleShare(node: TreeNode) {
+    if (node.type === "file" && node.docId) {
+      shareDialogState = {
+        open: true,
+        docId: node.docId,
+        docName: node.name ?? "",
+      };
+    }
+  }
+
   // Drag and drop handler for multiple paths
   async function handleDrop(paths: string[], targetFolderPath: string) {
     dropTargetPath = null;
@@ -500,20 +523,32 @@
 </script>
 
 <div class="relative flex h-full flex-col">
-  <Button
-    variant="ghost"
-    size="sm"
-    class="absolute top-2 right-2 z-10 h-6 w-6 p-0"
-    onclick={() => handleCreateDocument()}
-    disabled={creating || $documentsLoading}
-    aria-label="Create new document"
-  >
-    {#if creating}
-      <Loader2 class="h-4 w-4 animate-spin" />
-    {:else}
-      <Plus class="h-4 w-4" />
-    {/if}
-  </Button>
+  <div class="absolute top-2 right-2 z-10 flex gap-1">
+    <Button
+      variant="ghost"
+      size="sm"
+      class="h-6 w-6 p-0"
+      onclick={() => (joinDialogOpen = true)}
+      disabled={$documentsLoading}
+      aria-label={m.share_join_title()}
+    >
+      <UserPlus class="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="sm"
+      class="h-6 w-6 p-0"
+      onclick={() => handleCreateDocument()}
+      disabled={creating || $documentsLoading}
+      aria-label="Create new document"
+    >
+      {#if creating}
+        <Loader2 class="h-4 w-4 animate-spin" />
+      {:else}
+        <Plus class="h-4 w-4" />
+      {/if}
+    </Button>
+  </div>
 
   <ContextMenu.Root>
     <ContextMenu.Trigger class="h-full overflow-auto">
@@ -567,6 +602,7 @@
                 onCreateFolder={startNewFolder}
                 onRename={startRename}
                 onDelete={handleDelete}
+                onShare={handleShare}
                 onDrop={handleDrop}
                 onSelect={handleSelect}
                 onHover={handleHover}
@@ -678,3 +714,20 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Share Dialog -->
+{#if shareDialogState.docId}
+  <ShareDialog
+    bind:open={shareDialogState.open}
+    docId={shareDialogState.docId}
+    docName={shareDialogState.docName}
+    onOpenChange={(open) => {
+      if (!open) {
+        shareDialogState = {open: false, docId: "", docName: ""};
+      }
+    }}
+  />
+{/if}
+
+<!-- Join Share Dialog -->
+<JoinShareDialog bind:open={joinDialogOpen} onSuccess={() => loadDocuments()} />
