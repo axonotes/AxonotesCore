@@ -1,7 +1,8 @@
 <script lang="ts">
   import {GripVertical} from "@lucide/svelte";
-  import {getEditorContext, USER_COLORS} from "./editorContext";
+  import {getEditorContext} from "./editorContext";
   import ParagraphBlock from "./blocks/ParagraphBlock.svelte";
+  import {getOwnColor} from "$lib/utils/userColors";
 
   interface Props {
     blockId: number;
@@ -21,8 +22,9 @@
   let isOtherLocked = $derived(liveInfo?.state === "locked" && !isOwnLocked);
   let isOtherFocused = $derived(liveInfo?.state === "focused" && !isOwnFocused);
 
-  let ownColor = USER_COLORS[0];
-  let otherColor = $derived(liveInfo?.color ?? USER_COLORS[1]);
+  // Own color uses primary theme color, other users get assigned colors
+  let ownColor = getOwnColor();
+  let otherColor = $derived(liveInfo?.color ?? "#6B7280");
 
   let showBorder = $derived(
     isOwnFocused || isOwnLocked || isOtherFocused || isOtherLocked

@@ -50,8 +50,8 @@ use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
 use crate::encryption::version_tag::DecryptVersionTagVec;
 use crate::events::{
     emit_block_lock_expired, emit_block_locked, emit_block_unlocked, emit_document_access_granted,
-    emit_document_metadata_updated, emit_document_path_changed_by_sync, emit_version_tag_created,
-    emit_version_tag_deleted,
+    emit_document_metadata_updated, emit_document_path_changed_by_sync, emit_live_block_released,
+    emit_live_block_updated, emit_version_tag_created, emit_version_tag_deleted,
 };
 use crate::stdb;
 use crate::stdb_bindings::{DocumentKey, DocumentPermission, DocumentVersionTag};
@@ -142,7 +142,8 @@ fn signal_subscription_ready() {
 /// Called once during connection setup. Callbacks are triggered
 /// automatically by the SpacetimeDB SDK when subscribed data changes.
 pub fn register_callbacks(conn: &DbConnection) {
-    // Register live block insert callback (block locked)
+    // Register live block insert callback (block locked/updated)
+    // Decrypts the live block content and emits live-block-updated for real-time collaboration
     conn.db
         .accessible_live_blocks()
         .on_insert(|_ctx, live_block| {
@@ -152,25 +153,72 @@ pub fn register_callbacks(conn: &DbConnection) {
                 live_block.block_id,
                 live_block.user_id.to_hex()
             );
-            // Only emit if the block is actually locked (has locked_at)
-            if let Some(locked_at) = live_block.locked_at {
-                emit_block_locked(
-                    live_block.doc_id.clone(),
-                    live_block.block_id,
-                    live_block.user_id.to_hex().to_string(),
-                    locked_at,
-                );
-            }
+
+            // Clone data for async task
+            let live_block = live_block.clone();
+            let lock_id = live_block.live_block_id.clone();
 
             // Remove from expired set if re-locked (sync, runs on STDB thread)
-            let lock_id = live_block.live_block_id.clone();
             let expired_locks = get_expired_locks();
             if let Ok(mut set) = expired_locks.lock() {
                 set.remove(&lock_id);
             };
+
+            // Spawn async task to decrypt and emit live-block-updated
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    // Get document keys for decryption
+                    let document_keys = match crate::database::get_document_keys_for_active_user().await {
+                        Ok(keys) => keys,
+                        Err(e) => {
+                            log::warn!("[callback] Failed to get document keys for live block decryption: {}", e);
+                            // Fall back to just emitting lock event without content
+                            if let Some(locked_at) = live_block.locked_at {
+                                emit_block_locked(
+                                    live_block.doc_id.clone(),
+                                    live_block.block_id,
+                                    live_block.user_id.to_hex().to_string(),
+                                    locked_at,
+                                );
+                            }
+                            return;
+                        }
+                    };
+
+                    // Decrypt the live block
+                    match live_block.decrypt(&document_keys) {
+                        Ok(decrypted) => {
+                            // Emit live-block-updated with decrypted content
+                            emit_live_block_updated(
+                                decrypted.live_block_id,
+                                decrypted.doc_id,
+                                decrypted.block_id,
+                                decrypted.user_id.to_hex().to_string(),
+                                decrypted.username,
+                                decrypted.locked_at,
+                                decrypted.content,
+                            );
+                        }
+                        Err(e) => {
+                            log::warn!("[callback] Failed to decrypt live block: {}", e);
+                            // Fall back to just emitting lock event without content
+                            if let Some(locked_at) = live_block.locked_at {
+                                emit_block_locked(
+                                    live_block.doc_id.clone(),
+                                    live_block.block_id,
+                                    live_block.user_id.to_hex().to_string(),
+                                    locked_at,
+                                );
+                            }
+                        }
+                    }
+                });
+            });
         });
 
-    // Register live block delete callback (block unlocked)
+    // Register live block delete callback (block unlocked/released)
+    // Emits live-block-released for frontend - frontend handles debouncing via sliding window
     conn.db
         .accessible_live_blocks()
         .on_delete(|_ctx, live_block| {
@@ -180,6 +228,12 @@ pub fn register_callbacks(conn: &DbConnection) {
                 live_block.block_id,
                 live_block.user_id.to_hex()
             );
+
+            // Emit live-block-released for the frontend (clears liveInfo on the block)
+            // Frontend uses sliding window to handle DELETE+INSERT update cycles
+            emit_live_block_released(live_block.doc_id.clone(), live_block.block_id);
+
+            // Also emit block-unlocked for backwards compatibility
             emit_block_unlocked(
                 live_block.doc_id.clone(),
                 live_block.block_id,

@@ -13,24 +13,18 @@ import {
   type Block,
   type DecryptedLiveBlock,
 } from "$lib/services/block";
+import {getUserColor, setCurrentUserIdentity} from "$lib/utils/userColors";
 
 // ========== Constants ==========
 
 const EDITOR_CONTEXT_KEY = Symbol("editor-context");
 
-export const USER_COLORS = [
-  "#3B82F6", // Blue
-  "#10B981", // Green
-  "#F59E0B", // Orange
-  "#EF4444", // Red
-  "#8B5CF6", // Purple
-  "#EC4899", // Pink
-  "#14B8A6", // Teal
-  "#F97316", // Amber
-] as const;
-
 const LIVE_UPDATE_THROTTLE = 100;
 const PERSIST_DEBOUNCE = 300;
+// Sliding window for live-block-released events
+// SpacetimeDB emits DELETE+INSERT for updates, so we wait briefly
+// to see if an INSERT arrives before actually clearing liveInfo
+const RELEASE_WINDOW_MS = 50;
 
 // ========== Types ==========
 
@@ -106,7 +100,8 @@ export function createEditorContext(): EditorContext {
   let pendingPersist: {docId: string; blockId: number; block: Block} | null =
     null;
   let pendingLiveUpdateBlockId: number | null = null;
-  const userColorMap = new Map<string, string>();
+  // Map of block_id -> timeout for pending releases (sliding window)
+  const pendingReleases = new Map<number, ReturnType<typeof setTimeout>>();
 
   // Derived stores
   const orderedBlocks = derived([blocks, blockOrder], ([$blocks, $order]) => {
@@ -118,18 +113,6 @@ export function createEditorContext(): EditorContext {
   const hasContent = derived(blockOrder, ($order) => $order.length > 0);
 
   // ========== Helper Functions ==========
-
-  function getUserColor(userId: string): string {
-    if (userColorMap.has(userId)) {
-      return userColorMap.get(userId)!;
-    }
-    const usedColors = new Set(userColorMap.values());
-    const availableColor =
-      USER_COLORS.find((c) => !usedColors.has(c)) ??
-      USER_COLORS[userColorMap.size % USER_COLORS.length];
-    userColorMap.set(userId, availableColor);
-    return availableColor;
-  }
 
   function cancelPendingLiveUpdate(): void {
     if (liveUpdateTimeout) {
@@ -232,6 +215,13 @@ export function createEditorContext(): EditorContext {
           return; // Don't update blocks we're editing
         }
 
+        // Cancel any pending release for this block (sliding window)
+        const pendingRelease = pendingReleases.get(liveBlock.block_id);
+        if (pendingRelease) {
+          clearTimeout(pendingRelease);
+          pendingReleases.delete(liveBlock.block_id);
+        }
+
         blocks.update((b) => {
           const existing = b.get(liveBlock.block_id);
           if (!existing) return b;
@@ -256,13 +246,28 @@ export function createEditorContext(): EditorContext {
       block_id: number;
     }>("live-block-released", (event) => {
       if (event.payload.doc_id !== currentDocId) return;
-      blocks.update((b) => {
-        const existing = b.get(event.payload.block_id);
-        if (!existing) return b;
-        const newBlocks = new Map(b);
-        newBlocks.set(event.payload.block_id, {...existing, liveInfo: null});
-        return newBlocks;
-      });
+      const blockId = event.payload.block_id;
+
+      // Cancel any existing pending release for this block
+      const existingTimeout = pendingReleases.get(blockId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      // Schedule release with sliding window - if an INSERT arrives
+      // before this fires, it will cancel this timeout
+      const timeout = setTimeout(() => {
+        pendingReleases.delete(blockId);
+        blocks.update((b) => {
+          const existing = b.get(blockId);
+          if (!existing) return b;
+          const newBlocks = new Map(b);
+          newBlocks.set(blockId, {...existing, liveInfo: null});
+          return newBlocks;
+        });
+      }, RELEASE_WINDOW_MS);
+
+      pendingReleases.set(blockId, timeout);
     });
 
     // Listen for sync-completed to refresh blocks when remote changes arrive
@@ -352,6 +357,9 @@ export function createEditorContext(): EditorContext {
         BlockService.getDocumentLocks(newDocId),
         getCurrentIdentityHex(),
       ]);
+
+      // Set current user identity for color assignment
+      setCurrentUserIdentity(myIdentityHex);
 
       console.log("[editor] Blocks count:", documentData.blocks?.length ?? 0);
 
@@ -443,6 +451,11 @@ export function createEditorContext(): EditorContext {
       clearTimeout(persistTimeout);
       persistTimeout = null;
     }
+    // Clear all pending release timeouts
+    for (const timeout of pendingReleases.values()) {
+      clearTimeout(timeout);
+    }
+    pendingReleases.clear();
 
     docId.set(null);
     blocks.set(new Map());
@@ -451,7 +464,6 @@ export function createEditorContext(): EditorContext {
     lockedBlockId.set(null);
     loading.set(false);
     error.set(null);
-    userColorMap.clear();
   }
 
   function focusBlock(blockId: number): void {
