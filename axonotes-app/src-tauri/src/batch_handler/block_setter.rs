@@ -128,10 +128,15 @@ impl InProgressBatch {
 // Public API
 // ==========================================
 
-/// Generate a cryptographically random block ID
+/// JavaScript's Number.MAX_SAFE_INTEGER (2^53 - 1)
+/// IDs must stay within this range for JSON serialization to work correctly
+const JS_MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
+/// Generate a cryptographically random block ID within JavaScript's safe integer range
 fn generate_block_id() -> u64 {
     let mut rng = rand::rngs::OsRng;
-    rng.try_next_u64().unwrap()
+    // Mask to 53 bits to stay within JS Number.MAX_SAFE_INTEGER
+    rng.try_next_u64().unwrap() & JS_MAX_SAFE_INTEGER
 }
 
 /// Update a block. Changes are throttled to 500ms and batched automatically.

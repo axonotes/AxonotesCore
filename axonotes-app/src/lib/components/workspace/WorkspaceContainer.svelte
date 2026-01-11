@@ -81,10 +81,15 @@
 
       // Get stored params and merge with init params
       const storedParams = panelParamsMap.get(this._panelId) ?? {};
-      const props = {
+      const mergedParams = {
         ...storedParams,
         ...parameters.params,
+      };
+
+      // Pass params as a nested object (panels expect {panelId, params})
+      const props = {
         panelId: this._panelId,
+        params: mergedParams,
       };
 
       this._component = mount(Component, {

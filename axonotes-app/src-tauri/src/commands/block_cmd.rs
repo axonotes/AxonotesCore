@@ -25,15 +25,17 @@
 use crate::batch_handler::block_getter::{BlockData, DocumentData};
 use crate::batch_handler::block_types::Block;
 use crate::batch_handler::{block_getter, block_setter};
+use crate::database;
 use crate::utils::timestamp::timestamp;
+use std::collections::HashSet;
 
 /// Creates a new block in a document.
 ///
-/// A cryptographically random block ID is automatically generated.
+/// Returns the generated block ID.
 #[tauri::command]
-pub async fn create_block(doc_id: String, block: Block) -> Result<(), String> {
-    block_setter::update_block(doc_id, None, block);
-    Ok(())
+pub async fn create_block(doc_id: String, block: Block) -> Result<u64, String> {
+    let block_id = block_setter::update_block(doc_id, None, block);
+    Ok(block_id)
 }
 
 /// Retrieves blocks at a specific point in document history.
@@ -47,9 +49,23 @@ pub async fn create_block(doc_id: String, block: Block) -> Result<(), String> {
 pub async fn get_blocks(
     doc_id: String,
     block_ids: Vec<u64>,
-    timestamp: u128,
+    timestamp: u64,
 ) -> Result<DocumentData, String> {
-    block_getter::get_blocks(doc_id, block_ids, timestamp).await
+    // If no block IDs specified, get all blocks for this document
+    let ids_to_fetch = if block_ids.is_empty() {
+        get_all_block_ids(&doc_id).await?
+    } else {
+        block_ids
+    };
+
+    block_getter::get_blocks(doc_id, ids_to_fetch, timestamp as u128).await
+}
+
+/// Get all unique block IDs for a document from local database
+async fn get_all_block_ids(doc_id: &str) -> Result<Vec<u64>, String> {
+    let batches = database::get_batches_by_doc(doc_id.to_string()).await?;
+    let block_ids: HashSet<u64> = batches.iter().map(|b| b.batch_data.block_id).collect();
+    Ok(block_ids.into_iter().collect())
 }
 
 /// Updates an existing block's content.

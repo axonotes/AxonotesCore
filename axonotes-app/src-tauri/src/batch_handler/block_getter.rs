@@ -230,7 +230,7 @@ async fn get_single_block(
                     decode_initial_patch(patch)?
                 };
 
-                current_time += u128::from(time_delta * 5);
+                current_time += u128::from(time_delta) * 5;
 
                 if current_time > target_ts {
                     break;

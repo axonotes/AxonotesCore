@@ -17,7 +17,7 @@
 //! - `switch_profile`: Change the active profile
 //! - `refresh_token`: Refresh the active profile's OAuth token
 
-use crate::{database, workos_auth};
+use crate::{database, stdb, workos_auth};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,4 +61,16 @@ pub async fn switch_profile(profile_id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn refresh_token() -> Result<String, String> {
     database::refresh_active_profile_token().await
+}
+
+/// Returns the current user's SpacetimeDB identity as a byte array.
+///
+/// This is used for block authorship and other identity-dependent operations.
+#[tauri::command]
+pub async fn get_current_identity() -> Result<Vec<u8>, String> {
+    let identity = stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
+    Ok(identity.to_byte_array().to_vec())
 }
