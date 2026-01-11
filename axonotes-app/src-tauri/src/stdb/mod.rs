@@ -164,6 +164,9 @@ pub async fn get_connected_profiles() -> Vec<String> {
 
 /// Ensure a connection exists for the given profile
 /// Creates a new connection if needed
+///
+/// Initially only subscribes to the `user` table. Call `apply_document_subscriptions`
+/// after user keys are available to subscribe to document-related tables.
 pub(crate) async fn ensure_connection_for_profile(
     profile_id: &str,
     access_token: &str,
@@ -188,15 +191,80 @@ pub(crate) async fn ensure_connection_for_profile(
     // Register callbacks
     callbacks::register_callbacks(&conn);
 
-    // Subscribe to user view (filtered by identity/JWT)
-    // Subscribe to document metadata view
-    // Subscribe to document keys view
-    // Subscribe to share-related views
+    // Check if user keys already exist locally (returning user on this device)
+    let keys_exist = database::get_active_user_keys()
+        .await
+        .map(|k| k.is_some())
+        .unwrap_or(false);
+
+    if keys_exist {
+        // User has keys - subscribe to everything at once
+        log::info!("User keys found, subscribing to all tables");
+        conn.subscription_builder()
+            .on_applied(callbacks::on_subscription_applied)
+            .on_error(callbacks::on_subscription_error)
+            .subscribe([
+                "SELECT * FROM user",
+                "SELECT * FROM user_metadata",
+                "SELECT * FROM user_document_keys",
+                "SELECT * FROM accessible_live_blocks",
+                "SELECT * FROM manageable_permissions",
+                "SELECT * FROM public_user_keys",
+                "SELECT * FROM accessible_version_tags",
+            ]);
+
+        // Setup batch sync
+        let start_time = database::get_last_active_profile_sync_time().await?;
+        if let Some(start_time) = start_time {
+            setup_batch_sync(&conn, start_time)?;
+        }
+
+        // Setup share sync (for auto-accepting joiners)
+        setup_share_sync(&conn)?;
+    } else {
+        // New device - only subscribe to user table initially
+        // Document subscriptions will be applied after key sync via apply_document_subscriptions()
+        log::info!("No user keys found, subscribing to user table only (phase 1)");
+        conn.subscription_builder()
+            .on_applied(callbacks::on_initial_subscription_applied)
+            .on_error(callbacks::on_subscription_error)
+            .subscribe(["SELECT * FROM user"]);
+    }
+
+    // Run in background thread
+    conn.run_threaded();
+
+    // Store connection (before waiting, so other code can access it)
+    map.insert(profile_id.to_string(), Arc::new(Mutex::new(conn)));
+
+    // Release the map lock before blocking wait
+    drop(map);
+
+    // Wait for initial subscriptions to be applied
+    // This ensures the cache is populated before we return
+    log::debug!("Waiting for initial subscriptions...");
+    callbacks::wait_for_subscriptions()?;
+
+    log::info!("✓ SpacetimeDB connection established for profile {profile_id}");
+    Ok(())
+}
+
+/// Apply document-related subscriptions after user keys are synced.
+/// Call this after `sync_stdb_keys_with_pwd` or `sync_stdb_keys_with_mnemonic`.
+pub async fn apply_document_subscriptions(profile_id: &str) -> Result<(), String> {
+    let conn_arc = get_connection_for_profile(profile_id).await?;
+    let conn = conn_arc.lock().await;
+
+    log::info!("Applying document subscriptions (phase 2) for profile {profile_id}");
+
+    // Reset subscription ready flag before applying new subscriptions
+    callbacks::reset_subscription_ready();
+
+    // Subscribe to document-related tables
     conn.subscription_builder()
         .on_applied(callbacks::on_subscription_applied)
         .on_error(callbacks::on_subscription_error)
         .subscribe([
-            "SELECT * FROM user",
             "SELECT * FROM user_metadata",
             "SELECT * FROM user_document_keys",
             "SELECT * FROM accessible_live_blocks",
@@ -214,21 +282,13 @@ pub(crate) async fn ensure_connection_for_profile(
     // Setup share sync (for auto-accepting joiners)
     setup_share_sync(&conn)?;
 
-    // Run in background thread
-    conn.run_threaded();
+    // Release lock before waiting
+    drop(conn);
 
-    // Store connection (before waiting, so other code can access it)
-    map.insert(profile_id.to_string(), Arc::new(Mutex::new(conn)));
-
-    // Release the map lock before blocking wait
-    drop(map);
-
-    // Wait for initial subscriptions to be applied
-    // This ensures the cache is populated before we return
-    log::debug!("Waiting for initial subscriptions...");
+    // Wait for document subscriptions to be applied
     callbacks::wait_for_subscriptions()?;
 
-    log::info!("✓ SpacetimeDB connection established for profile {profile_id}");
+    log::info!("✓ Document subscriptions applied for profile {profile_id}");
     Ok(())
 }
 

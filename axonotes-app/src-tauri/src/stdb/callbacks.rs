@@ -325,13 +325,24 @@ fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
     });
 }
 
+/// Called when the initial user-only subscription is applied (phase 1).
+/// Does NOT sync documents - just signals that the user table is ready.
+pub fn on_initial_subscription_applied(_ctx: &SubscriptionEventContext) {
+    log::info!("✓ Initial subscription applied (user table only)");
+
+    // Signal that initial subscriptions are ready
+    // Document sync will happen after keys are synced via on_subscription_applied
+    signal_subscription_ready();
+}
+
+/// Called when document subscriptions are applied (phase 2, or all at once if keys exist).
 pub fn on_subscription_applied(ctx: &SubscriptionEventContext) {
     log::info!("✓ Subscriptions applied");
 
     // Sync all STDB data to local SQLite
     sync_stdb_to_local_db(ctx);
 
-    // Signal that initial subscriptions are ready (first callback wins)
+    // Signal that subscriptions are ready
     signal_subscription_ready();
 }
 
