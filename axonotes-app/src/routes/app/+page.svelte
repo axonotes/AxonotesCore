@@ -27,11 +27,29 @@
 
     // Set up keyboard shortcuts for workspace switching
     window.addEventListener("keydown", handleKeydown);
+
+    // Flush pending saves before page unload (reload, close, navigate away)
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Flush pending saves when tab becomes hidden (handles F5 reload better)
+    document.addEventListener("visibilitychange", handleVisibilityChange);
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown);
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
   });
+
+  function handleBeforeUnload() {
+    workspaceStore.flushPendingSave();
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === "hidden") {
+      workspaceStore.flushPendingSave();
+    }
+  }
 
   function handleKeydown(event: KeyboardEvent) {
     // Ctrl/Cmd + number to switch workspaces
