@@ -13,6 +13,7 @@ use super::helpers::SqlU128;
 use crate::encryption::document::{DecryptedDocumentKey, DecryptedKeyData};
 use rusqlite::{params, Connection, Result};
 use spacetimedb_sdk::Identity;
+use std::collections::HashSet;
 
 /// Saves a single decrypted document key, replacing if it already exists.
 pub fn save(conn: &Connection, identity_id: &Identity, key: &DecryptedDocumentKey) -> Result<()> {
@@ -34,25 +35,56 @@ pub fn save(conn: &Connection, identity_id: &Identity, key: &DecryptedDocumentKe
     Ok(())
 }
 
+/// Gets all key IDs for a specific identity (for sync comparison).
+fn get_all_ids_for_identity(conn: &Connection, identity_id: &Identity) -> Result<HashSet<String>> {
+    let mut stmt = conn.prepare("SELECT key_id FROM document_keys WHERE identity_id = ?1")?;
+    let rows = stmt.query_map(params![identity_id.to_byte_array().as_slice()], |row| {
+        row.get::<_, String>(0)
+    })?;
+    rows.collect()
+}
+
 /// Syncs document keys for a specific identity.
-/// Deletes all existing keys for this identity and inserts the new ones.
+///
+/// Strategy to avoid race conditions with real-time callbacks:
+/// 1. Collect local key IDs and server key IDs
+/// 2. Delete keys that are NOT in server set
+/// 3. Upsert all server keys
+///
+/// This preserves keys inserted by real-time callbacks during sync.
 pub fn sync(
     conn: &Connection,
     identity_id: &Identity,
-    keys: &[DecryptedDocumentKey],
+    server_keys: &[DecryptedDocumentKey],
 ) -> Result<()> {
-    // Delete all keys for this identity
-    conn.execute(
-        "DELETE FROM document_keys WHERE identity_id = ?1",
-        params![identity_id.to_byte_array().as_slice()],
-    )?;
+    // Collect IDs
+    let local_ids = get_all_ids_for_identity(conn, identity_id)?;
+    let server_ids: HashSet<String> = server_keys.iter().map(|k| k.key_id.clone()).collect();
 
-    // Insert all new keys
-    for key in keys {
+    // Delete keys that are not on server
+    for local_id in &local_ids {
+        if !server_ids.contains(local_id) {
+            conn.execute(
+                "DELETE FROM document_keys WHERE identity_id = ?1 AND key_id = ?2",
+                params![identity_id.to_byte_array().as_slice(), local_id],
+            )?;
+        }
+    }
+
+    // Upsert all server keys
+    for key in server_keys {
         save(conn, identity_id, key)?;
     }
 
     Ok(())
+}
+
+/// Deletes a specific document key by key_id.
+pub fn delete(conn: &Connection, identity_id: &Identity, key_id: &str) -> Result<usize> {
+    conn.execute(
+        "DELETE FROM document_keys WHERE identity_id = ?1 AND key_id = ?2",
+        params![identity_id.to_byte_array().as_slice(), key_id],
+    )
 }
 
 /// Deletes all document keys for a specific identity.

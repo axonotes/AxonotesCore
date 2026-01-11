@@ -63,13 +63,37 @@ fn get_last_sync() -> Arc<Mutex<u128>> {
 /// Sets up the SpacetimeDB subscription for batch synchronization.
 ///
 /// Subscribes to all batches newer than `start_time` and triggers sync
-/// when new batches arrive.
+/// when new batches arrive. Uses two callbacks:
+/// - `on_applied`: Processes all existing batches on initial subscription
+/// - `on_insert`: Processes new batches as they arrive in real-time
 ///
 /// # Arguments
 ///
 /// * `conn` - Active SpacetimeDB connection
 /// * `start_time` - Only sync batches created after this timestamp
 pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), String> {
+    // Register on_insert callback for real-time batch updates
+    conn.db.accessible_batches().on_insert(|_ctx, batch| {
+        log::debug!(
+            "[callback:realtime] accessible_batches on_insert - doc: {}, batch: {}, timestamp: {}",
+            batch.doc_id,
+            batch.batch_id,
+            batch.timestamp
+        );
+        let batch = batch.clone();
+        // This callback runs on SpacetimeDB's background thread, NOT the Tokio runtime.
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                // Use realtime sync - no timestamp filtering to avoid race conditions
+                if let Err(e) = sync_realtime_batch(batch).await {
+                    eprintln!("Batch sync error (on_insert): {e}");
+                }
+            });
+        });
+    });
+
+    // Subscribe to batches and process initial batch load
     conn.subscription_builder()
         .on_applied(|ctx| {
             let batches: Vec<DocumentBatch> = ctx.db.accessible_batches().iter().collect();
@@ -141,6 +165,60 @@ pub async fn create_batch(batch: DecryptedBatch) -> Result<(), String> {
 // ==========================================
 // Sync Logic
 // ==========================================
+
+/// Syncs a single batch received via real-time subscription (on_insert).
+///
+/// Unlike `sync_batches_with_data`, this does NOT filter by timestamp.
+/// Each on_insert callback fires exactly once per batch, so filtering
+/// would cause race conditions where out-of-order batches get skipped.
+///
+/// This function:
+/// 1. Acquires the sync lock to serialize with other batch operations
+/// 2. Decrypts and saves the batch (if not a duplicate)
+/// 3. Invalidates block cache so next read gets fresh data
+/// 4. Emits sync events for frontend notification
+async fn sync_realtime_batch(stdb_batch: DocumentBatch) -> Result<(), String> {
+    let last_sync_lock = get_last_sync();
+    let _last_sync = last_sync_lock.lock().await;
+
+    let doc_id = stdb_batch.doc_id.clone();
+    let batch_id = stdb_batch.batch_id.clone();
+
+    // Get document keys for decryption
+    let document_keys = crate::database::get_document_keys_for_active_user().await?;
+
+    // Decrypt the batch
+    let decrypted = vec![stdb_batch]
+        .decrypt_all(&document_keys)
+        .map_err(|e| format!("Failed to decrypt batch: {e}"))?;
+
+    let Some(batch) = decrypted.into_iter().next() else {
+        return Ok(()); // No batch to process
+    };
+
+    let block_id = batch.batch_data.block_id;
+
+    // Check if batch already exists (avoid duplicates from initial sync + realtime)
+    let existing = database::get_batch_by_id(batch_id.clone()).await?;
+    if existing.is_some() {
+        log::debug!(
+            "[sync:realtime] Batch {} already exists, skipping",
+            batch_id
+        );
+        return Ok(());
+    }
+
+    // Save the batch
+    database::save_batch(batch).await?;
+
+    // Invalidate cache so next block read gets fresh data
+    invalidate_block_cache(doc_id.clone(), block_id).await;
+
+    // Emit sync completed event for frontend to refresh
+    emit_sync_completed(doc_id, 1);
+
+    Ok(())
+}
 
 /// Processes incoming batches from SpacetimeDB subscription.
 ///

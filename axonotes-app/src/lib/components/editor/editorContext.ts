@@ -100,6 +100,7 @@ export function createEditorContext(): EditorContext {
   // Private state
   let unlistenLiveBlockUpdated: UnlistenFn | null = null;
   let unlistenLiveBlockReleased: UnlistenFn | null = null;
+  let unlistenSyncCompleted: UnlistenFn | null = null;
   let liveUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let persistTimeout: ReturnType<typeof setTimeout> | null = null;
   let pendingPersist: {docId: string; blockId: number; block: Block} | null =
@@ -263,6 +264,71 @@ export function createEditorContext(): EditorContext {
         return newBlocks;
       });
     });
+
+    // Listen for sync-completed to refresh blocks when remote changes arrive
+    unlistenSyncCompleted = await listen<{
+      docId: string;
+      batchCount: number;
+    }>("sync-completed", async (event) => {
+      if (event.payload.docId !== currentDocId) return;
+      if (event.payload.batchCount === 0) return;
+
+      // Skip refresh if we're actively editing (have a locked block)
+      // Our own changes will already be reflected locally
+      const currentLock = get(lockedBlockId);
+      if (currentLock !== null) {
+        console.debug(
+          "[editor] Skipping sync refresh - user is actively editing"
+        );
+        return;
+      }
+
+      console.log(
+        "[editor] Sync completed, refreshing blocks:",
+        event.payload.batchCount,
+        "batches"
+      );
+
+      try {
+        const documentData = await BlockService.getBlocks(currentDocId);
+
+        // Preserve existing liveInfo when updating blocks
+        const currentBlocks = get(blocks);
+        const newBlocksMap = new Map<number, EditorBlock>();
+
+        for (const blockData of documentData.blocks) {
+          if (blockData.block.deleted) continue;
+          if (blockData.block.block_type === "metadata") continue;
+
+          const existingBlock = currentBlocks.get(blockData.block_id);
+          newBlocksMap.set(blockData.block_id, {
+            id: blockData.block_id,
+            content: blockData.block,
+            liveInfo: existingBlock?.liveInfo ?? null,
+          });
+        }
+
+        // Sort by group_id, then group_row
+        const sortedIds = [...newBlocksMap.values()]
+          .sort((a, b) => {
+            const groupA = a.content.group_id ?? "main";
+            const groupB = b.content.group_id ?? "main";
+            if (groupA !== groupB) return groupA.localeCompare(groupB);
+            const rowA = a.content.group_row ?? "0";
+            const rowB = b.content.group_row ?? "0";
+            if (rowA !== rowB) return rowA.localeCompare(rowB);
+            return a.id - b.id;
+          })
+          .map((b) => b.id);
+
+        blocks.set(newBlocksMap);
+        blockOrder.set(sortedIds);
+
+        console.log("[editor] Blocks refreshed after sync");
+      } catch (err) {
+        console.error("[editor] Failed to refresh blocks after sync:", err);
+      }
+    });
   }
 
   // ========== Public API ==========
@@ -364,6 +430,10 @@ export function createEditorContext(): EditorContext {
     if (unlistenLiveBlockReleased) {
       unlistenLiveBlockReleased();
       unlistenLiveBlockReleased = null;
+    }
+    if (unlistenSyncCompleted) {
+      unlistenSyncCompleted();
+      unlistenSyncCompleted = null;
     }
     if (liveUpdateTimeout) {
       clearTimeout(liveUpdateTimeout);

@@ -63,6 +63,23 @@ pub fn save_all(conn: &Connection, batches: &[DecryptedBatch]) -> Result<()> {
     tx.commit()
 }
 
+/// Get a batch by its ID (for duplicate checking)
+pub fn get_by_id(conn: &Connection, batch_id: &str) -> Result<Option<DecryptedBatch>> {
+    let mut stmt = conn.prepare(
+        "SELECT batch_id, doc_id, timestamp, block_id, patches, pending, is_initial
+         FROM batches
+         WHERE batch_id = ?1",
+    )?;
+
+    let mut rows = stmt.query(params![batch_id])?;
+
+    if let Some(row) = rows.next()? {
+        Ok(Some(row_to_batch(row)?))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Get all batches for a document (both pending and synced)
 pub fn get_by_doc_id(conn: &Connection, doc_id: &str) -> Result<Vec<DecryptedBatch>> {
     let mut stmt = conn.prepare(

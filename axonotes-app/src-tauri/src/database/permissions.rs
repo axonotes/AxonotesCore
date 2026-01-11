@@ -11,6 +11,7 @@
 use crate::stdb_bindings::{DocumentPermission, Role};
 use rusqlite::{params, Connection, Result};
 use spacetimedb_sdk::Identity;
+use std::collections::HashSet;
 
 /// Converts a Role enum to its string representation for storage.
 const fn role_to_string(role: Role) -> &'static str {
@@ -56,25 +57,59 @@ pub fn save(
     Ok(())
 }
 
+/// Gets all permission IDs for a specific identity (for sync comparison).
+fn get_all_ids_for_identity(conn: &Connection, identity_id: &Identity) -> Result<HashSet<String>> {
+    let mut stmt = conn.prepare("SELECT permission_id FROM permissions WHERE identity_id = ?1")?;
+    let rows = stmt.query_map(params![identity_id.to_byte_array().as_slice()], |row| {
+        row.get::<_, String>(0)
+    })?;
+    rows.collect()
+}
+
 /// Syncs permissions for a specific identity.
-/// Deletes all existing permissions for this identity and inserts the new ones.
+///
+/// Strategy to avoid race conditions with real-time callbacks:
+/// 1. Collect local permission IDs and server permission IDs
+/// 2. Delete permissions that are NOT in server set
+/// 3. Upsert all server permissions
+///
+/// This preserves permissions inserted by real-time callbacks during sync.
 pub fn sync(
     conn: &Connection,
     identity_id: &Identity,
-    permissions: &[DocumentPermission],
+    server_permissions: &[DocumentPermission],
 ) -> Result<()> {
-    // Delete all permissions for this identity
-    conn.execute(
-        "DELETE FROM permissions WHERE identity_id = ?1",
-        params![identity_id.to_byte_array().as_slice()],
-    )?;
+    // Collect IDs
+    let local_ids = get_all_ids_for_identity(conn, identity_id)?;
+    let server_ids: HashSet<String> = server_permissions
+        .iter()
+        .map(|p| p.permission_id.clone())
+        .collect();
 
-    // Insert all new permissions
-    for permission in permissions {
+    // Delete permissions that are not on server
+    for local_id in &local_ids {
+        if !server_ids.contains(local_id) {
+            conn.execute(
+                "DELETE FROM permissions WHERE identity_id = ?1 AND permission_id = ?2",
+                params![identity_id.to_byte_array().as_slice(), local_id],
+            )?;
+        }
+    }
+
+    // Upsert all server permissions
+    for permission in server_permissions {
         save(conn, identity_id, permission)?;
     }
 
     Ok(())
+}
+
+/// Deletes a specific permission by permission_id.
+pub fn delete(conn: &Connection, identity_id: &Identity, permission_id: &str) -> Result<usize> {
+    conn.execute(
+        "DELETE FROM permissions WHERE identity_id = ?1 AND permission_id = ?2",
+        params![identity_id.to_byte_array().as_slice(), permission_id],
+    )
 }
 
 /// Deletes all permissions for a specific identity.
