@@ -8,11 +8,14 @@
     Folder,
     Trash2,
     FolderInput,
+    UserPlus,
   } from "@lucide/svelte";
   import {Button} from "$lib/components/ui/button";
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import FileTreeNode from "./FileTreeNode.svelte";
+  import {ShareDialog, JoinShareDialog} from "$lib/components/share";
+  import * as m from "$lib/paraglide/messages.js";
   import {
     documents,
     documentsLoading,
@@ -85,6 +88,16 @@
 
   // Current drop target path (folder path that's highlighted, or "/" for root)
   let dropTargetPath = $state<string | null>(null);
+
+  // Share dialog state
+  let shareDialogState = $state<{
+    open: boolean;
+    docId: string;
+    docName: string;
+  }>({open: false, docId: "", docName: ""});
+
+  // Join share dialog state
+  let joinDialogOpen = $state(false);
 
   // Handle hover for arrow key starting point
   function handleHover(path: string | null) {
@@ -441,6 +454,17 @@
     deleteConfirm = {open: true, paths: [node.path], moveToTrash: true};
   }
 
+  // Share handler - opens share dialog for files
+  function handleShare(node: TreeNode) {
+    if (node.type === "file" && node.docId) {
+      shareDialogState = {
+        open: true,
+        docId: node.docId,
+        docName: node.name ?? "",
+      };
+    }
+  }
+
   // Drag and drop handler for multiple paths
   async function handleDrop(paths: string[], targetFolderPath: string) {
     dropTargetPath = null;
@@ -499,20 +523,32 @@
 </script>
 
 <div class="relative flex h-full flex-col">
-  <Button
-    variant="ghost"
-    size="sm"
-    class="absolute top-2 right-2 z-10 h-6 w-6 p-0"
-    onclick={() => handleCreateDocument()}
-    disabled={creating || $documentsLoading}
-    aria-label="Create new document"
-  >
-    {#if creating}
-      <Loader2 class="h-4 w-4 animate-spin" />
-    {:else}
-      <Plus class="h-4 w-4" />
-    {/if}
-  </Button>
+  <div class="absolute top-2 right-2 z-10 flex gap-1">
+    <Button
+      variant="ghost"
+      size="sm"
+      class="h-6 w-6 p-0"
+      onclick={() => (joinDialogOpen = true)}
+      disabled={$documentsLoading}
+      aria-label={m.share_join_title()}
+    >
+      <UserPlus class="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="sm"
+      class="h-6 w-6 p-0"
+      onclick={() => handleCreateDocument()}
+      disabled={creating || $documentsLoading}
+      aria-label="Create new document"
+    >
+      {#if creating}
+        <Loader2 class="h-4 w-4 animate-spin" />
+      {:else}
+        <Plus class="h-4 w-4" />
+      {/if}
+    </Button>
+  </div>
 
   <ContextMenu.Root>
     <ContextMenu.Trigger class="h-full overflow-auto">
@@ -535,7 +571,7 @@
           </div>
         {:else if tree.length === 0 && !newFolderState.active}
           <p class="text-muted-foreground py-4 text-center text-xs">
-            No documents yet. Click + or right-click to create.
+            {m.sidebar_empty_state()}
           </p>
         {:else}
           <ul>
@@ -566,6 +602,7 @@
                 onCreateFolder={startNewFolder}
                 onRename={startRename}
                 onDelete={handleDelete}
+                onShare={handleShare}
                 onDrop={handleDrop}
                 onSelect={handleSelect}
                 onHover={handleHover}
@@ -591,12 +628,12 @@
     <ContextMenu.Content class="w-48">
       <ContextMenu.Item onclick={() => handleCreateDocument("/")}>
         <FilePlus class="mr-2 h-4 w-4" />
-        New Document
+        {m.sidebar_new_document()}
       </ContextMenu.Item>
 
       <ContextMenu.Item onclick={() => startNewFolder("/")}>
         <FolderPlus class="mr-2 h-4 w-4" />
-        New Folder
+        {m.sidebar_new_folder()}
       </ContextMenu.Item>
     </ContextMenu.Content>
   </ContextMenu.Root>
@@ -606,18 +643,20 @@
 <Dialog.Root bind:open={deleteConfirm.open}>
   <Dialog.Content class="sm:max-w-md" onkeydown={handleDeleteModalKeydown}>
     <Dialog.Header>
-      <Dialog.Title
-        >Delete {deleteConfirm.paths.length} item{deleteConfirm.paths.length > 1
-          ? "s"
-          : ""}?</Dialog.Title
-      >
+      <Dialog.Title>
+        {#if deleteConfirm.paths.length === 1}
+          {m.sidebar_delete_title_single()}
+        {:else}
+          {m.sidebar_delete_title_multi({count: deleteConfirm.paths.length})}
+        {/if}
+      </Dialog.Title>
       <Dialog.Description>
         {#if deleteConfirm.paths.length === 1}
-          Are you sure you want to delete "{deleteConfirm.paths[0]
-            .split("/")
-            .pop()}"?
+          {m.sidebar_delete_confirm_single({
+            name: deleteConfirm.paths[0].split("/").pop() ?? "",
+          })}
         {:else}
-          Are you sure you want to delete these {deleteConfirm.paths.length} items?
+          {m.sidebar_delete_confirm_multi({count: deleteConfirm.paths.length})}
         {/if}
       </Dialog.Description>
     </Dialog.Header>
@@ -634,9 +673,9 @@
       >
         <FolderInput class="text-muted-foreground h-5 w-5" />
         <div>
-          <div class="font-medium">Move to Trash</div>
+          <div class="font-medium">{m.sidebar_move_to_trash()}</div>
           <div class="text-muted-foreground text-sm">
-            Items can be restored from the .trash folder
+            {m.sidebar_move_to_trash_desc()}
           </div>
         </div>
       </button>
@@ -652,22 +691,43 @@
       >
         <Trash2 class="text-destructive h-5 w-5" />
         <div>
-          <div class="font-medium">Delete Permanently</div>
+          <div class="font-medium">{m.sidebar_delete_permanently()}</div>
           <div class="text-muted-foreground text-sm">
-            This action cannot be undone
+            {m.sidebar_delete_permanently_desc()}
           </div>
         </div>
       </button>
     </div>
 
     <Dialog.Footer>
-      <Button variant="outline" onclick={cancelDelete}>Cancel</Button>
+      <Button variant="outline" onclick={cancelDelete}
+        >{m.common_button_cancel()}</Button
+      >
       <Button
         variant={deleteConfirm.moveToTrash ? "default" : "destructive"}
         onclick={confirmDelete}
       >
-        {deleteConfirm.moveToTrash ? "Move to Trash" : "Delete Permanently"}
+        {deleteConfirm.moveToTrash
+          ? m.sidebar_move_to_trash()
+          : m.sidebar_delete_permanently()}
       </Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Share Dialog -->
+{#if shareDialogState.docId}
+  <ShareDialog
+    bind:open={shareDialogState.open}
+    docId={shareDialogState.docId}
+    docName={shareDialogState.docName}
+    onOpenChange={(open) => {
+      if (!open) {
+        shareDialogState = {open: false, docId: "", docName: ""};
+      }
+    }}
+  />
+{/if}
+
+<!-- Join Share Dialog -->
+<JoinShareDialog bind:open={joinDialogOpen} onSuccess={() => loadDocuments()} />

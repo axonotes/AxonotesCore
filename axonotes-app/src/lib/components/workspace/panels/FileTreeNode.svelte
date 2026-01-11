@@ -7,8 +7,11 @@
     FolderPlus,
     Pencil,
     Trash2,
+    Share2,
   } from "@lucide/svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as m from "$lib/paraglide/messages.js";
+  import FileTreeNode from "./FileTreeNode.svelte";
   import {
     expandedFolders,
     toggleFolderExpanded,
@@ -39,6 +42,7 @@
     onCreateFolder: (parentPath: string) => void;
     onRename: (node: TreeNode) => void;
     onDelete: (node: TreeNode) => void;
+    onShare?: (node: TreeNode) => void;
     onDrop: (paths: string[], targetFolderPath: string) => void;
     onSelect: (node: TreeNode, event: MouseEvent) => void;
     onHover: (path: string | null) => void;
@@ -64,6 +68,7 @@
     onCreateFolder,
     onRename,
     onDelete,
+    onShare,
     onDrop,
     onSelect,
     onHover,
@@ -213,6 +218,9 @@
 <li>
   <div
     class="pb-0.5"
+    role="treeitem"
+    aria-selected={isSelected}
+    tabindex="-1"
     ondragover={handleDragOver}
     ondragleave={handleDragLeave}
     ondrop={handleDropEvent}
@@ -291,27 +299,36 @@
         <ContextMenu.Content class="w-48">
           <ContextMenu.Item onclick={() => onCreateDocument(getTargetFolder())}>
             <FilePlus class="mr-2 h-4 w-4" />
-            New Document
+            {m.sidebar_new_document()}
           </ContextMenu.Item>
 
           <ContextMenu.Item onclick={() => onCreateFolder(getTargetFolder())}>
             <FolderPlus class="mr-2 h-4 w-4" />
-            New Folder
+            {m.sidebar_new_folder()}
           </ContextMenu.Item>
 
           <ContextMenu.Separator />
 
           <ContextMenu.Item onclick={() => onRename(node)}>
             <Pencil class="mr-2 h-4 w-4" />
-            Rename
+            {m.sidebar_rename()}
           </ContextMenu.Item>
+
+          {#if node.type === "file" && onShare}
+            <ContextMenu.Item onclick={() => onShare(node)}>
+              <Share2 class="mr-2 h-4 w-4" />
+              {m.share_context_menu_share()}
+            </ContextMenu.Item>
+          {/if}
 
           <ContextMenu.Item
             class="text-destructive focus:text-destructive"
             onclick={() => onDelete(node)}
           >
             <Trash2 class="mr-2 h-4 w-4" />
-            {node.type === "folder" ? "Delete Folder" : "Delete"}
+            {node.type === "folder"
+              ? m.sidebar_delete_folder()
+              : m.sidebar_delete()}
           </ContextMenu.Item>
         </ContextMenu.Content>
       </ContextMenu.Root>
@@ -344,7 +361,7 @@
         </li>
       {/if}
       {#each node.children as child (child.path)}
-        <svelte:self
+        <FileTreeNode
           node={child}
           depth={depth + 1}
           {onFileClick}
@@ -352,6 +369,7 @@
           {onCreateFolder}
           {onRename}
           {onDelete}
+          {onShare}
           {onDrop}
           {onSelect}
           {onHover}

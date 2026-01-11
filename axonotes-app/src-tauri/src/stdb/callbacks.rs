@@ -2,14 +2,37 @@
 //!
 //! Handles real-time database change events from SpacetimeDB subscriptions.
 //!
-//! ## Callback Types
+//! ## Important: Subscription Callback Types
+//!
+//! SpacetimeDB uses different callbacks for different purposes:
+//! - `on_applied`: Fires **once** when subscription is first applied (initial data load)
+//! - `on_insert`: Fires for **each new row** inserted (real-time updates)
+//! - `on_delete`: Fires for **each row deleted** (real-time updates)
+//!
+//! Note: We subscribe to **views**, not tables. Views model updates as delete + insert,
+//! so `on_insert` and `on_delete` cover all changes (no `on_update` needed).
+//!
+//! For real-time sync, you MUST use `on_insert`/`on_delete` callbacks, not just `on_applied`.
+//!
+//! ## Registered Callbacks
 //!
 //! | Table | Event | Action |
 //! |-------|-------|--------|
 //! | `accessible_live_blocks` | insert | Emit `block-locked` event |
 //! | `accessible_live_blocks` | delete | Emit `block-unlocked` event |
-//! | `user_metadata` | insert | Emit `document-access-granted` |
-//! | `user_metadata` | delete | Emit `document-access-revoked` |
+//! | `user_metadata` | insert | Decrypt, save to local DB, emit `document-access-granted` |
+//! | `user_metadata` | delete | Delete from local DB, emit `document-access-revoked` |
+//! | `user_document_keys` | insert | Decrypt and save key to local DB |
+//! | `user_document_keys` | delete | Delete key from local DB |
+//! | `manageable_permissions` | insert | Save permission to local DB |
+//! | `manageable_permissions` | delete | Delete permission from local DB |
+//! | `accessible_documents` | insert | Save document to local DB |
+//! | `accessible_documents` | delete | Delete document from local DB |
+//! | `accessible_version_tags` | insert | Decrypt, save to local DB, emit event |
+//! | `accessible_version_tags` | delete | Delete from local DB, emit event |
+//! | `accessible_batches` | insert | Sync batch to local DB (in batch_handler/sync.rs) |
+//! | `my_pending_shares` | insert | Emit share code ready (in share/sync.rs) |
+//! | `pending_share_requests` | insert | Auto-accept joiner (in share/sync.rs) |
 //!
 //! ## Lock Expiry
 //!
@@ -24,11 +47,14 @@
 
 use super::*;
 use crate::encryption::document::DecryptDocumentMetaAndKeyVec;
+use crate::encryption::version_tag::DecryptVersionTagVec;
 use crate::events::{
     emit_block_lock_expired, emit_block_locked, emit_block_unlocked, emit_document_access_granted,
-    emit_document_access_revoked, emit_document_path_changed_by_sync,
+    emit_document_metadata_updated, emit_document_path_changed_by_sync, emit_live_block_released,
+    emit_live_block_updated, emit_version_tag_created, emit_version_tag_deleted,
 };
 use crate::stdb;
+use crate::stdb_bindings::{DocumentKey, DocumentPermission, DocumentVersionTag};
 use crate::utils::timestamp::timestamp;
 use once_cell::sync::OnceCell;
 use spacetimedb_sdk::Table;
@@ -116,32 +142,98 @@ fn signal_subscription_ready() {
 /// Called once during connection setup. Callbacks are triggered
 /// automatically by the SpacetimeDB SDK when subscribed data changes.
 pub fn register_callbacks(conn: &DbConnection) {
-    // Register live block insert callback (block locked)
+    // Register live block insert callback (block locked/updated)
+    // Decrypts the live block content and emits live-block-updated for real-time collaboration
     conn.db
         .accessible_live_blocks()
         .on_insert(|_ctx, live_block| {
-            // Only emit if the block is actually locked (has locked_at)
-            if let Some(locked_at) = live_block.locked_at {
-                emit_block_locked(
-                    live_block.doc_id.clone(),
-                    live_block.block_id,
-                    live_block.user_id.to_hex().to_string(),
-                    locked_at,
-                );
-            }
+            log::debug!(
+                "[callback:realtime] accessible_live_blocks on_insert - doc: {}, block: {}, user: {}",
+                live_block.doc_id,
+                live_block.block_id,
+                live_block.user_id.to_hex()
+            );
+
+            // Clone data for async task
+            let live_block = live_block.clone();
+            let lock_id = live_block.live_block_id.clone();
 
             // Remove from expired set if re-locked (sync, runs on STDB thread)
-            let lock_id = live_block.live_block_id.clone();
             let expired_locks = get_expired_locks();
             if let Ok(mut set) = expired_locks.lock() {
                 set.remove(&lock_id);
             };
+
+            // Spawn async task to decrypt and emit live-block-updated
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    // Get document keys for decryption
+                    let document_keys = match crate::database::get_document_keys_for_active_user().await {
+                        Ok(keys) => keys,
+                        Err(e) => {
+                            log::warn!("[callback] Failed to get document keys for live block decryption: {}", e);
+                            // Fall back to just emitting lock event without content
+                            if let Some(locked_at) = live_block.locked_at {
+                                emit_block_locked(
+                                    live_block.doc_id.clone(),
+                                    live_block.block_id,
+                                    live_block.user_id.to_hex().to_string(),
+                                    locked_at,
+                                );
+                            }
+                            return;
+                        }
+                    };
+
+                    // Decrypt the live block
+                    match live_block.decrypt(&document_keys) {
+                        Ok(decrypted) => {
+                            // Emit live-block-updated with decrypted content
+                            emit_live_block_updated(
+                                decrypted.live_block_id,
+                                decrypted.doc_id,
+                                decrypted.block_id,
+                                decrypted.user_id.to_hex().to_string(),
+                                decrypted.username,
+                                decrypted.locked_at,
+                                decrypted.content,
+                            );
+                        }
+                        Err(e) => {
+                            log::warn!("[callback] Failed to decrypt live block: {}", e);
+                            // Fall back to just emitting lock event without content
+                            if let Some(locked_at) = live_block.locked_at {
+                                emit_block_locked(
+                                    live_block.doc_id.clone(),
+                                    live_block.block_id,
+                                    live_block.user_id.to_hex().to_string(),
+                                    locked_at,
+                                );
+                            }
+                        }
+                    }
+                });
+            });
         });
 
-    // Register live block delete callback (block unlocked)
+    // Register live block delete callback (block unlocked/released)
+    // Emits live-block-released for frontend - frontend handles debouncing via sliding window
     conn.db
         .accessible_live_blocks()
         .on_delete(|_ctx, live_block| {
+            log::debug!(
+                "[callback:realtime] accessible_live_blocks on_delete - doc: {}, block: {}, user: {}",
+                live_block.doc_id,
+                live_block.block_id,
+                live_block.user_id.to_hex()
+            );
+
+            // Emit live-block-released for the frontend (clears liveInfo on the block)
+            // Frontend uses sliding window to handle DELETE+INSERT update cycles
+            emit_live_block_released(live_block.doc_id.clone(), live_block.block_id);
+
+            // Also emit block-unlocked for backwards compatibility
             emit_block_unlocked(
                 live_block.doc_id.clone(),
                 live_block.block_id,
@@ -156,18 +248,279 @@ pub fn register_callbacks(conn: &DbConnection) {
             };
         });
 
-    // Register user metadata insert callback (document access granted)
-    conn.db.user_metadata().on_insert(|_ctx, metadata| {
-        emit_document_access_granted(metadata.doc_id.clone());
+    // Register user metadata insert callback (sync to local DB + emit appropriate event)
+    // NOTE: In SpacetimeDB views, updates are DELETE + INSERT. We check if the doc
+    // already exists locally to determine if this is an update or a new grant.
+    conn.db.user_metadata().on_insert(|ctx, metadata| {
+        let metadata = metadata.clone();
+        let identity = ctx.identity();
+        let doc_id = metadata.doc_id.clone();
+
+        // Decrypt and save to local DB
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                // Check if this doc already exists locally (update vs new grant)
+                let is_new = crate::database::get_metadata_for_doc(identity, doc_id.clone())
+                    .await
+                    .map(|m| m.is_none())
+                    .unwrap_or(true);
+
+                if let Err(e) = sync_metadata_insert(identity, metadata).await {
+                    eprintln!("[callback] Failed to sync metadata: {e}");
+                    return;
+                }
+
+                // Only emit access-granted for truly new documents
+                if is_new {
+                    emit_document_access_granted(doc_id);
+                }
+                // For updates, sync_metadata_insert already emits metadata-updated
+            });
+        });
     });
 
-    // Register user metadata delete callback (document access revoked)
+    // Register user metadata delete callback
+    // NOTE: In SpacetimeDB views, updates are DELETE + INSERT. We DON'T delete from
+    // local DB or emit access-revoked here, because an INSERT might follow (for updates).
+    // True access revocation is handled when document keys are revoked.
     conn.db.user_metadata().on_delete(|_ctx, metadata| {
-        emit_document_access_revoked(metadata.doc_id.clone());
+        log::debug!(
+            "[callback] user_metadata on_delete for doc {} (no action - waiting for potential insert)",
+            metadata.doc_id
+        );
+        // Don't delete or emit here - let the document key revocation handle true access removal
+    });
+
+    // Register document key insert callback (new document key shared with user)
+    conn.db.user_document_keys().on_insert(|ctx, key| {
+        let key: DocumentKey = key.clone();
+        let identity = ctx.identity();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                if let Err(e) = sync_document_key(identity, key).await {
+                    eprintln!("[callback] Failed to sync document key: {e}");
+                }
+            });
+        });
+    });
+
+    // Register document key delete callback (key revoked, e.g., user removed from document)
+    conn.db.user_document_keys().on_delete(|ctx, key| {
+        let key_id = key.key_id.clone();
+        let identity = ctx.identity();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                if let Err(e) = crate::database::delete_document_key(identity, key_id).await {
+                    eprintln!("[callback] Failed to delete document key: {e}");
+                }
+            });
+        });
+    });
+
+    // Register permission insert callback (permission granted/changed)
+    conn.db
+        .manageable_permissions()
+        .on_insert(|ctx, permission| {
+            let permission: DocumentPermission = permission.clone();
+            let identity = ctx.identity();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    if let Err(e) = crate::database::save_permission(identity, permission).await {
+                        eprintln!("[callback] Failed to save permission: {e}");
+                    }
+                });
+            });
+        });
+
+    // Register permission delete callback (permission revoked)
+    conn.db
+        .manageable_permissions()
+        .on_delete(|ctx, permission| {
+            let permission_id = permission.permission_id.clone();
+            let identity = ctx.identity();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    if let Err(e) =
+                        crate::database::delete_permission(identity, permission_id).await
+                    {
+                        eprintln!("[callback] Failed to delete permission: {e}");
+                    }
+                });
+            });
+        });
+
+    // Register document insert callback (new document accessible)
+    // For shared documents, this also creates default metadata if none exists
+    conn.db.accessible_documents().on_insert(|ctx, document| {
+        let document = document.clone();
+        let identity = ctx.identity();
+        let doc_id = document.doc_id.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                // Save the document
+                if let Err(e) = crate::database::save_document(identity, document).await {
+                    eprintln!("[callback] Failed to save document: {e}");
+                    return;
+                }
+
+                // Check if this is a shared document without metadata
+                // (shared documents don't get user_metadata created automatically)
+                if let Err(e) = create_default_metadata_if_missing(&doc_id).await {
+                    // Non-fatal: metadata might already exist or be created later
+                    log::debug!(
+                        "[callback] Could not create default metadata for {}: {}",
+                        doc_id,
+                        e
+                    );
+                }
+            });
+        });
+    });
+
+    // Register document delete callback (document access removed)
+    conn.db.accessible_documents().on_delete(|ctx, document| {
+        let doc_id = document.doc_id.clone();
+        let identity = ctx.identity();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                if let Err(e) = crate::database::delete_document(identity, doc_id).await {
+                    eprintln!("[callback] Failed to delete document: {e}");
+                }
+            });
+        });
+    });
+
+    // Register version tag insert callback (new version tag created)
+    conn.db.accessible_version_tags().on_insert(|ctx, tag| {
+        let tag: DocumentVersionTag = tag.clone();
+        let identity = ctx.identity();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                if let Err(e) = sync_version_tag_created(identity, tag).await {
+                    eprintln!("[callback] Failed to sync version tag: {e}");
+                }
+            });
+        });
+    });
+
+    // Register version tag delete callback (version tag deleted)
+    conn.db.accessible_version_tags().on_delete(|ctx, tag| {
+        let tag_id = tag.tag_id.clone();
+        let doc_id = tag.doc_id.clone();
+        let identity = ctx.identity();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                // Delete from local DB
+                if let Err(e) = crate::database::delete_version_tag(identity, tag_id.clone()).await
+                {
+                    eprintln!("[callback] Failed to delete version tag: {e}");
+                }
+                // Emit event for frontend
+                emit_version_tag_deleted(tag_id, doc_id);
+            });
+        });
     });
 
     // Start the lock expiry checker background task
     start_lock_expiry_checker();
+}
+
+/// Decrypts and saves a single metadata entry to local database.
+async fn sync_metadata_insert(
+    identity: spacetimedb_sdk::Identity,
+    metadata: crate::stdb_bindings::DocumentMetadata,
+) -> Result<(), String> {
+    let doc_id = metadata.doc_id.clone();
+
+    // Get user's private key for decryption
+    let user_keys = crate::database::get_active_user_keys()
+        .await?
+        .ok_or("No user keys available for decryption")?;
+
+    let private_key: &[u8; 32] = user_keys
+        .private_encryption_key
+        .as_slice()
+        .try_into()
+        .map_err(|_| "Invalid private key length")?;
+
+    // Decrypt the metadata
+    let decrypted = metadata.decrypt(private_key)?;
+
+    // Save to local database
+    crate::database::save_metadata(identity, decrypted.clone()).await?;
+
+    // Emit event so frontend can update UI (e.g., file rename)
+    emit_document_metadata_updated(
+        doc_id.clone(),
+        decrypted.metadata.path,
+        decrypted.metadata.tags,
+    );
+
+    log::debug!("[callback] Metadata synced for doc {doc_id}");
+    Ok(())
+}
+
+/// Decrypts and saves a single document key to local database.
+async fn sync_document_key(
+    identity: spacetimedb_sdk::Identity,
+    key: DocumentKey,
+) -> Result<(), String> {
+    // Get user's private key for decryption
+    let user_keys = crate::database::get_active_user_keys()
+        .await?
+        .ok_or("No user keys available for decryption")?;
+
+    let private_key: &[u8; 32] = user_keys
+        .private_encryption_key
+        .as_slice()
+        .try_into()
+        .map_err(|_| "Invalid private key length")?;
+
+    // Decrypt the document key
+    let decrypted_key = key.decrypt(private_key)?;
+
+    // Save to local database
+    crate::database::save_document_key(identity, decrypted_key).await?;
+
+    log::debug!("[callback] Document key synced");
+    Ok(())
+}
+
+/// Decrypts a version tag, saves to local DB, and emits the created event.
+async fn sync_version_tag_created(
+    identity: spacetimedb_sdk::Identity,
+    tag: DocumentVersionTag,
+) -> Result<(), String> {
+    // Get document keys for decryption
+    let document_keys = crate::database::get_document_keys_for_active_user().await?;
+
+    // Decrypt the version tag
+    let decrypted = vec![tag].decrypt_all(&document_keys)?;
+
+    if let Some(decrypted_tag) = decrypted.into_iter().next() {
+        // Save to local DB
+        crate::database::save_version_tag(identity, decrypted_tag.clone()).await?;
+
+        // Emit event for frontend
+        emit_version_tag_created(
+            decrypted_tag.tag_id,
+            decrypted_tag.doc_id,
+            decrypted_tag.data.tag_name,
+            decrypted_tag.data.timestamp,
+        );
+        log::debug!("[callback] Version tag synced");
+    }
+
+    Ok(())
 }
 
 /// Start a background task that periodically checks for expired locks
@@ -237,6 +590,7 @@ fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
     let permissions: Vec<_> = ctx.db.manageable_permissions().iter().collect();
     let documents: Vec<_> = ctx.db.accessible_documents().iter().collect();
     let metadata: Vec<_> = ctx.db.user_metadata().iter().collect();
+    let version_tags: Vec<_> = ctx.db.accessible_version_tags().iter().collect();
 
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
@@ -320,22 +674,157 @@ fn sync_stdb_to_local_db(ctx: &SubscriptionEventContext) {
                 }
             }
 
+            // Decrypt and sync version tags (need document keys, not user private key)
+            let doc_keys = match crate::database::get_document_keys_for_active_user().await {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("[sync] Failed to get document keys for version tags: {e}");
+                    log::info!("[sync] ✓ STDB data synced to local SQLite (version tags skipped)");
+                    return;
+                }
+            };
+
+            let decrypted_tags: Vec<_> = version_tags
+                .into_iter()
+                .filter_map(|tag| tag.decrypt(&doc_keys).ok())
+                .collect();
+
+            if let Err(e) = crate::database::sync_version_tags(identity, decrypted_tags).await {
+                eprintln!("[sync] Failed to sync version tags: {e}");
+            } else {
+                log::debug!("[sync] Version tags synced");
+            }
+
             log::info!("[sync] ✓ STDB data synced to local SQLite");
         });
     });
 }
 
+/// Called when the initial user-only subscription is applied (phase 1).
+/// Does NOT sync documents - just signals that the user table is ready.
+pub fn on_initial_subscription_applied(_ctx: &SubscriptionEventContext) {
+    log::info!("✓ Initial subscription applied (user table only)");
+
+    // Signal that initial subscriptions are ready
+    // Document sync will happen after keys are synced via on_subscription_applied
+    signal_subscription_ready();
+}
+
+/// Called when document subscriptions are applied (phase 2, or all at once if keys exist).
 pub fn on_subscription_applied(ctx: &SubscriptionEventContext) {
     log::info!("✓ Subscriptions applied");
 
     // Sync all STDB data to local SQLite
     sync_stdb_to_local_db(ctx);
 
-    // Signal that initial subscriptions are ready (first callback wins)
+    // Signal that subscriptions are ready
     signal_subscription_ready();
 }
 
 #[allow(clippy::needless_pass_by_value)] // Signature constrained by SpacetimeDB callback API
 pub fn on_subscription_error(_ctx: &ErrorContext, err: Error) {
     log::error!("✗ Subscription error: {err}");
+}
+
+// ==========================================
+// Default Metadata for Shared Documents
+// ==========================================
+
+/// Creates default metadata for a document if the user doesn't have any yet.
+///
+/// This is used when a user joins a shared document - they get access to the
+/// document and keys, but need to create their own user_metadata entry with
+/// a default path so the document appears in their file tree.
+///
+/// Creates path like "/Shared/Shared Document.doc" with collision handling.
+async fn create_default_metadata_if_missing(doc_id: &str) -> Result<(), String> {
+    use crate::encryption::document::DecryptedMetadata;
+    use crate::utils::vec_array::ByteArrayConversion;
+
+    // Check if we already have metadata for this document in the STDB cache
+    // get_cached_metadata returns already-decrypted metadata entries
+    let existing_metadata = stdb::active_profile()
+        .get_cached_metadata()
+        .await
+        .unwrap_or_default();
+
+    let has_metadata = existing_metadata.iter().any(|m| m.doc_id == doc_id);
+    if has_metadata {
+        log::debug!(
+            "[callback] Document {} already has metadata, skipping default creation",
+            doc_id
+        );
+        return Ok(());
+    }
+
+    // Get user keys for encryption
+    let user_keys = crate::database::get_active_user_keys()
+        .await?
+        .ok_or("No active user keys")?;
+
+    let private_key = user_keys.private_encryption_key.as_array()?;
+    let public_key = user_keys.public_encryption_key.as_array()?;
+
+    // Get existing paths from the already-decrypted metadata
+    let existing_paths: Vec<_> = existing_metadata.iter().map(|m| &m.metadata).collect();
+
+    // Find a unique path in /Shared/ folder
+    let path = find_unique_shared_path(&existing_paths);
+
+    // Create default metadata
+    let default_metadata = DecryptedMetadata {
+        version: 1,
+        path: path.clone(),
+        tags: vec![],
+    };
+
+    // Encrypt for ourselves
+    let encrypted_blob = default_metadata.encrypt(private_key, public_key, public_key)?;
+
+    // Upload to server
+    stdb::active_profile()
+        .create_document_metadata(doc_id.to_string(), encrypted_blob)
+        .await?;
+
+    log::debug!(
+        "[callback] Created default metadata for shared document {} at path {}",
+        doc_id,
+        path
+    );
+
+    Ok(())
+}
+
+/// Finds a unique path for a shared document.
+/// Returns "/Shared/Shared Document.doc" or "/Shared/Shared Document (1).doc" etc.
+fn find_unique_shared_path(
+    existing_metadata: &[&crate::encryption::document::DecryptedMetadata],
+) -> String {
+    let base_name = "Shared Document";
+    let folder = "/Shared";
+    let extension = ".doc";
+
+    // Collect all existing paths in lowercase for case-insensitive comparison
+    let existing_paths: std::collections::HashSet<String> = existing_metadata
+        .iter()
+        .map(|m| m.path.to_lowercase())
+        .collect();
+
+    // Try the base name first
+    let first_path = format!("{}/{}{}", folder, base_name, extension);
+    if !existing_paths.contains(&first_path.to_lowercase()) {
+        return first_path;
+    }
+
+    // Try with incrementing numbers
+    for i in 1..1000 {
+        let path = format!("{}/{} ({}){}", folder, base_name, i, extension);
+        if !existing_paths.contains(&path.to_lowercase()) {
+            return path;
+        }
+    }
+
+    // Fallback with timestamp (should never happen)
+    let ts = crate::utils::timestamp::timestamp();
+    format!("{}/{} ({}){}", folder, base_name, ts, extension)
 }

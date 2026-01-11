@@ -114,7 +114,9 @@
       {value}
     />
     <button
-      aria-label={showPassword ? "Hide password" : "Show password"}
+      aria-label={showPassword
+        ? m.common_password_hide()
+        : m.common_password_show()}
       class="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
       onclick={() => (showPassword = !showPassword)}
       tabindex={-1}

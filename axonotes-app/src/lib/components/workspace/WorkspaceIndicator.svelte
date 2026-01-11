@@ -535,6 +535,7 @@
     style="left: {modal.position.x}px; top: {modal.position.y -
       12}px; transform: translateY(-100%);"
     role="menu"
+    tabindex="-1"
     data-workspace-modal
     onmouseenter={handleModalEnter}
     onmouseleave={handleModalLeave}
@@ -566,6 +567,8 @@
     class="bg-popover text-popover-foreground fixed z-[70] flex items-center gap-1 rounded-md border p-1 shadow-md"
     style="left: {modal.position.x}px; top: {modal.position.y -
       12}px; transform: translateY(-100%);"
+    role="dialog"
+    aria-label="Rename workspace"
     data-workspace-modal
     onmouseenter={handleModalEnter}
     onmouseleave={handleModalLeave}

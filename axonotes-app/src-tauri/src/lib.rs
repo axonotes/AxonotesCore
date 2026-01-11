@@ -71,6 +71,7 @@ pub fn run() {
             commands::profile_cmd::get_all_profiles,
             commands::profile_cmd::switch_profile,
             commands::profile_cmd::refresh_token,
+            commands::profile_cmd::get_current_identity,
             commands::encryption_cmd::create_stdb_user,
             commands::encryption_cmd::does_stdb_user_exist,
             commands::encryption_cmd::do_stdb_keys_need_sync,

@@ -16,6 +16,7 @@
 //! | `permissions` | Document permissions (synced from STDB) |
 //! | `documents` | Document metadata (synced from STDB) |
 //! | `document_metadata` | Document path/tags (synced from STDB, merge strategy) |
+//! | `version_tags` | Version tags (synced from STDB, stored decrypted) |
 //! | `pending_sync_conflicts` | Active conflicts awaiting UI resolution |
 //! | `sync_conflict_history` | Insert-only archive of lost batches |
 //!
@@ -287,6 +288,35 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_document_metadata_doc_id ON document_metadata(identity_id, doc_id)",
+        [],
+    )?;
+
+    // Version tags table (synced from STDB, stored DECRYPTED)
+    // identity_id = which user account this data belongs to (for multi-account support)
+    // Tags are decrypted during sync and stored in plaintext (SQLCipher encrypts the entire DB)
+    // pending = 1 for tags created offline (not yet uploaded to server)
+    // Sync preserves pending tags, only replacing confirmed (pending=0) server data
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS version_tags (
+            tag_id TEXT PRIMARY KEY,
+            identity_id BLOB NOT NULL,
+            doc_id TEXT NOT NULL,
+            tag_name TEXT NOT NULL,
+            timestamp BLOB NOT NULL,
+            created_by BLOB NOT NULL,
+            created_at BLOB NOT NULL,
+            pending INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_version_tags_identity ON version_tags(identity_id)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_version_tags_doc_id ON version_tags(identity_id, doc_id)",
         [],
     )?;
 

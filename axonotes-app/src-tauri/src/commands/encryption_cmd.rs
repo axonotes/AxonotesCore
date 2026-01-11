@@ -113,7 +113,8 @@ async fn get_user_or_error() -> Result<User, String> {
 
 /// Syncs encryption keys from SpacetimeDB using password.
 ///
-/// Decrypts keys from server and stores them in local database.
+/// Decrypts keys from server and stores them in local database,
+/// then applies document subscriptions to sync documents.
 #[tauri::command]
 pub async fn sync_stdb_keys_with_pwd(password: String) -> Result<(), String> {
     let user = get_user_or_error().await?;
@@ -129,12 +130,19 @@ pub async fn sync_stdb_keys_with_pwd(password: String) -> Result<(), String> {
     })
     .await?;
 
+    // Now that keys are available, apply document subscriptions (phase 2)
+    let profile = database::get_active_profile()
+        .await?
+        .ok_or("No active profile")?;
+    stdb::apply_document_subscriptions(&profile.id).await?;
+
     Ok(())
 }
 
 /// Syncs encryption keys from SpacetimeDB using mnemonic phrase.
 ///
 /// Use this for recovery when password is forgotten.
+/// After syncing keys, applies document subscriptions to sync documents.
 #[tauri::command]
 pub async fn sync_stdb_keys_with_mnemonic(mnemonic: String) -> Result<(), String> {
     let user = get_user_or_error().await?;
@@ -149,6 +157,12 @@ pub async fn sync_stdb_keys_with_mnemonic(mnemonic: String) -> Result<(), String
         private_signing_key: decrypted_keys.private_signing_key,
     })
     .await?;
+
+    // Now that keys are available, apply document subscriptions (phase 2)
+    let profile = database::get_active_profile()
+        .await?
+        .ok_or("No active profile")?;
+    stdb::apply_document_subscriptions(&profile.id).await?;
 
     Ok(())
 }

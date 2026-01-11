@@ -26,7 +26,7 @@
 use crate::crypto::ed25519::sign_message;
 use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
-use crate::encryption::version_tag::DecryptedVersionTagData;
+use crate::encryption::version_tag::{DecryptedVersionTag, DecryptedVersionTagData};
 use crate::events::{emit_version_tag_created, emit_version_tag_deleted};
 use crate::stdb;
 use crate::utils::timestamp::timestamp;
@@ -51,6 +51,9 @@ pub struct VersionTagInfo {
 ///
 /// Creates a named bookmark at a specific timestamp in the document's history.
 /// Only Owner or Editor can create tags.
+///
+/// Works offline: saves locally first, uploads when connected.
+/// If upload fails, tag is saved as pending for later upload.
 ///
 /// # Arguments
 /// * `doc_id` - The document ID
@@ -82,42 +85,73 @@ pub async fn create_version_tag(
 
     // Generate tag ID
     let tag_id = Uuid::new_v4().to_string();
+    let created_at = timestamp();
 
     // Create tag data
     let tag_data = DecryptedVersionTagData {
         tag_name: tag_name.clone(),
         timestamp: tag_timestamp,
         created_by: user_identity,
-        created_at: timestamp(),
+        created_at,
     };
 
-    // Encrypt tag data
-    let encrypted_blob = tag_data
-        .encrypt(&doc_key.key_data.encryption_key)
-        .map_err(|e| format!("Failed to encrypt tag: {e}"))?;
+    // Create the decrypted tag for local storage
+    let decrypted_tag = DecryptedVersionTag {
+        tag_id: tag_id.clone(),
+        doc_id: doc_id.clone(),
+        data: tag_data.clone(),
+    };
 
-    // Sign the create_version_tag message (must match server format)
-    let blob_hash = blake3::hash(&encrypted_blob);
-    let message = [
-        b"create_version_tag".as_slice(),
-        doc_id.as_bytes(),
-        tag_id.as_bytes(),
-        blob_hash.as_bytes(),
-    ]
-    .concat();
+    // Check if we're connected
+    let is_connected = stdb::active_profile().is_connected().await.unwrap_or(false);
 
-    let signature = sign_message(private_signing_key, &message)
-        .map_err(|e| format!("Failed to sign message: {e}"))?;
+    if is_connected {
+        // Try to upload to server
+        let encrypted_blob = tag_data
+            .encrypt(&doc_key.key_data.encryption_key)
+            .map_err(|e| format!("Failed to encrypt tag: {e}"))?;
 
-    // Call the reducer
-    stdb::active_profile()
-        .create_version_tag(
-            tag_id.clone(),
-            doc_id.clone(),
-            encrypted_blob,
-            signature.to_vec(),
-        )
-        .await?;
+        // Sign the create_version_tag message (must match server format)
+        let blob_hash = blake3::hash(&encrypted_blob);
+        let message = [
+            b"create_version_tag".as_slice(),
+            doc_id.as_bytes(),
+            tag_id.as_bytes(),
+            blob_hash.as_bytes(),
+        ]
+        .concat();
+
+        let signature = sign_message(private_signing_key, &message)
+            .map_err(|e| format!("Failed to sign message: {e}"))?;
+
+        match stdb::active_profile()
+            .create_version_tag(
+                tag_id.clone(),
+                doc_id.clone(),
+                encrypted_blob,
+                signature.to_vec(),
+            )
+            .await
+        {
+            Ok(_) => {
+                // Upload succeeded - on_insert callback will save with pending=0
+                // But save locally too for immediate availability
+                if let Err(e) =
+                    crate::database::save_version_tag(user_identity, decrypted_tag).await
+                {
+                    log::warn!("Failed to save version tag locally after upload: {e}");
+                }
+            }
+            Err(e) => {
+                // Upload failed - save as pending for later upload
+                log::warn!("Version tag upload failed, saving as pending: {e}");
+                crate::database::save_pending_version_tag(user_identity, decrypted_tag).await?;
+            }
+        }
+    } else {
+        // Offline - save as pending for later upload
+        crate::database::save_pending_version_tag(user_identity, decrypted_tag).await?;
+    }
 
     emit_version_tag_created(tag_id, doc_id, tag_name, tag_timestamp);
 
@@ -156,15 +190,20 @@ pub async fn delete_version_tag(tag_id: String, doc_id: String) -> Result<(), St
 /// List all version tags for a document
 ///
 /// Returns all version tags for the document, sorted by timestamp descending.
+/// Reads from local SQLite for offline support.
 ///
 /// # Arguments
 /// * `doc_id` - The document ID
 #[tauri::command]
 pub async fn list_version_tags(doc_id: String) -> Result<Vec<VersionTagInfo>, String> {
-    // Get decrypted version tags
-    let mut tags = stdb::active_profile()
-        .get_cached_version_tags(&doc_id)
-        .await?;
+    // Get identity for database query
+    let identity = stdb::active_profile()
+        .get_identity()
+        .await?
+        .ok_or("No identity available")?;
+
+    // Get version tags from local SQLite (works offline)
+    let mut tags = crate::database::get_version_tags_for_doc(identity, doc_id).await?;
 
     // Sort by timestamp descending (most recent first)
     tags.sort_by(|a, b| b.data.timestamp.cmp(&a.data.timestamp));

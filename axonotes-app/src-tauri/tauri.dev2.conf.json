@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "axonotes-app-dev2",
+  "identifier": "ch.axonotes.app.dev2",
+  "build": {
+    "beforeDevCommand": "bun run dev -- --port 1421",
+    "devUrl": "http://localhost:1421"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Axonotes (Dev2)"
+      }
+    ]
+  }
+}

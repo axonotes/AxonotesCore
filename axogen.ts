@@ -3,6 +3,7 @@ import {appConfigTarget} from "./axogen/targets/app/config-rs";
 import {dockerComposeTarget} from "./axogen/targets/storage/docker-compose";
 import {installCmd} from "./axogen/commands/install";
 import {devCmd} from "./axogen/commands/dev";
+import {dev2Cmd} from "./axogen/commands/dev2";
 import {fmtCmd} from "./axogen/commands/fmt";
 import {stdbCmd} from "./axogen/commands/stdb";
 import {testCmd} from "./axogen/commands/test";
@@ -16,6 +17,7 @@ export default defineConfig({
   commands: {
     install: installCmd,
     dev: devCmd,
+    dev2: dev2Cmd,
     fmt: fmtCmd,
     stdb: stdbCmd,
     test: testCmd,

@@ -8,6 +8,32 @@
 import {derived, get, writable} from "svelte/store";
 import {WorkspaceService, type Workspace} from "$lib/services/workspace";
 
+// ============================================================================
+// LocalStorage Keys
+// ============================================================================
+
+const ACTIVE_WORKSPACE_KEY = "axonotes:active-workspace-id";
+
+/**
+ * Load active workspace ID from localStorage.
+ */
+function loadActiveWorkspaceId(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  return localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+}
+
+/**
+ * Save active workspace ID to localStorage.
+ */
+function saveActiveWorkspaceId(id: string | null): void {
+  if (typeof localStorage === "undefined") return;
+  if (id) {
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
+  } else {
+    localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+  }
+}
+
 /**
  * Default dockview layout configuration.
  * Creates a sidebar (30%) + main panel (70%) layout.
@@ -78,6 +104,15 @@ export const activeWorkspace = derived(
 // Save timeout for debouncing
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// Track pending save state for beforeunload flush
+let pendingSaveConfig: string | null = null;
+let pendingSaveId: string | null = null;
+
+// Auto-save active workspace ID to localStorage when it changes
+activeWorkspaceIdStore.subscribe((id) => {
+  saveActiveWorkspaceId(id);
+});
+
 /**
  * Generate a unique workspace ID.
  */
@@ -125,9 +160,22 @@ export const workspaceStore = {
         // Create default workspace
         await this.createWorkspace();
       } else {
-        // Select the most recently updated workspace
-        const byDate = [...sorted].sort((a, b) => b.updated_at - a.updated_at);
-        activeWorkspaceIdStore.set(byDate[0].id);
+        // Try to restore the previously active workspace from localStorage
+        const savedActiveId = loadActiveWorkspaceId();
+        const savedWorkspace = savedActiveId
+          ? sorted.find((w) => w.id === savedActiveId)
+          : null;
+
+        if (savedWorkspace) {
+          // Restore to previously active workspace
+          activeWorkspaceIdStore.set(savedWorkspace.id);
+        } else {
+          // Fallback to most recently updated workspace
+          const byDate = [...sorted].sort(
+            (a, b) => b.updated_at - a.updated_at
+          );
+          activeWorkspaceIdStore.set(byDate[0].id);
+        }
       }
     } catch (error) {
       console.error("[Workspace] Failed to load workspaces:", error);
@@ -195,27 +243,62 @@ export const workspaceStore = {
     const activeId = get(activeWorkspaceIdStore);
     if (!activeId) return;
 
-    // Debounce saves to avoid excessive backend calls
+    // Track pending save for flush on beforeunload
+    pendingSaveConfig = config;
+    pendingSaveId = activeId;
+
+    // Minimal debounce - just coalesce rapid successive changes (e.g., during resize drag)
+    // Local SQLite is fast, no need for long delays
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
 
     saveTimeout = setTimeout(async () => {
-      try {
-        const updated = await WorkspaceService.updateWorkspace(
-          activeId,
-          config
-        );
+      await this._commitPendingSave();
+    }, 50);
+  },
 
-        workspacesStore.update((list) =>
-          list.map((w) => (w.id === activeId ? updated : w))
-        );
+  /**
+   * Internal: Commit the pending save to the backend.
+   */
+  async _commitPendingSave(): Promise<void> {
+    if (!pendingSaveConfig || !pendingSaveId) return;
 
-        console.log(`[Workspace] Layout saved for: ${activeId}`);
-      } catch (error) {
-        console.error("[Workspace] Failed to save layout:", error);
-      }
-    }, 500);
+    const config = pendingSaveConfig;
+    const id = pendingSaveId;
+
+    // Clear pending state before async operation
+    pendingSaveConfig = null;
+    pendingSaveId = null;
+    saveTimeout = null;
+
+    try {
+      const updated = await WorkspaceService.updateWorkspace(id, config);
+
+      workspacesStore.update((list) =>
+        list.map((w) => (w.id === id ? updated : w))
+      );
+
+      console.log(`[Workspace] Layout saved for: ${id}`);
+    } catch (error) {
+      console.error("[Workspace] Failed to save layout:", error);
+    }
+  },
+
+  /**
+   * Flush any pending layout save immediately.
+   * Call this on beforeunload or visibilitychange to prevent data loss.
+   */
+  flushPendingSave(): void {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+
+    // Trigger the save without awaiting (for synchronous beforeunload)
+    if (pendingSaveConfig && pendingSaveId) {
+      this._commitPendingSave();
+    }
   },
 
   /**

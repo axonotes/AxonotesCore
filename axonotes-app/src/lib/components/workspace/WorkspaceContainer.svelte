@@ -36,6 +36,7 @@
   let dockview: DockviewComponent | null = null;
   let dockviewApi: DockviewApi | null = $state(null);
   let isInitialized = $state(false);
+  let isLoadingLayout = $state(false); // Prevent saves during layout load
 
   // Store params for each panel since CreateComponentOptions doesn't include params
   const panelParamsMap = new SvelteMap<string, Parameters>();
@@ -81,10 +82,15 @@
 
       // Get stored params and merge with init params
       const storedParams = panelParamsMap.get(this._panelId) ?? {};
-      const props = {
+      const mergedParams = {
         ...storedParams,
         ...parameters.params,
+      };
+
+      // Pass params as a nested object (panels expect {panelId, params})
+      const props = {
         panelId: this._panelId,
+        params: mergedParams,
       };
 
       this._component = mount(Component, {
@@ -150,7 +156,7 @@
 
     // Listen for layout changes (includes resize)
     dockview.onDidLayoutChange(() => {
-      if (dockviewApi && isInitialized) {
+      if (dockviewApi && isInitialized && !isLoadingLayout) {
         const config = serializeLayout();
         if (config && onLayoutChange) {
           onLayoutChange(config);
@@ -175,7 +181,13 @@
       createDefaultLayout();
     }
 
-    isInitialized = true;
+    // Delay setting isInitialized to let dockview finish internal layout adjustments
+    // (dockview fires onDidLayoutChange asynchronously when fitting to window size)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        isInitialized = true;
+      });
+    });
   }
 
   /**
@@ -184,6 +196,9 @@
    */
   function loadLayout(configJson: string) {
     if (!dockview) return;
+
+    // Prevent saves during layout loading (dockview fires events during fromJSON)
+    isLoadingLayout = true;
 
     try {
       const config = JSON.parse(configJson);
@@ -209,6 +224,13 @@
       console.error("[Dockview] Failed to parse layout:", error);
       createDefaultLayout();
     }
+
+    // Allow saves again after dockview finishes internal layout adjustments
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        isLoadingLayout = false;
+      });
+    });
   }
 
   /**
@@ -243,6 +265,7 @@
   /**
    * Serialize the current layout to JSON.
    * Uses dockview's built-in toJSON for full state including panel sizes.
+   * Preserves workspace metadata (name, order) from the original config.
    */
   function serializeLayout(): string | null {
     if (!dockview) return null;
@@ -251,21 +274,24 @@
       // Get full serialized state from dockview (includes grid sizes)
       const serialized = dockview.toJSON();
 
-      // Get workspace name from current config
+      // Preserve workspace metadata from current config
       let name = "Workspace";
+      let order = 0;
       if (initialConfig) {
         try {
           const currentConfig = JSON.parse(initialConfig);
           name = currentConfig.name ?? name;
+          order = currentConfig.order ?? order;
         } catch {
           // Ignore parse errors
         }
       }
 
-      // Add name to the serialized config
+      // Add metadata to the serialized config
       return JSON.stringify({
         ...serialized,
         name,
+        order,
       });
     } catch (error) {
       console.error("[Dockview] Failed to serialize layout:", error);

@@ -12,6 +12,7 @@ use super::helpers::SqlU128;
 use crate::stdb_bindings::Document;
 use rusqlite::{params, Connection, Result};
 use spacetimedb_sdk::Identity;
+use std::collections::HashSet;
 
 /// Saves a single document, replacing if it already exists.
 pub fn save(conn: &Connection, identity_id: &Identity, document: &Document) -> Result<()> {
@@ -30,21 +31,56 @@ pub fn save(conn: &Connection, identity_id: &Identity, document: &Document) -> R
     Ok(())
 }
 
-/// Syncs documents for a specific identity.
-/// Deletes all existing documents for this identity and inserts the new ones.
-pub fn sync(conn: &Connection, identity_id: &Identity, documents: &[Document]) -> Result<()> {
-    // Delete all documents for this identity
-    conn.execute(
-        "DELETE FROM documents WHERE identity_id = ?1",
-        params![identity_id.to_byte_array().as_slice()],
-    )?;
+/// Gets all document IDs for a specific identity (for sync comparison).
+fn get_all_ids_for_identity(conn: &Connection, identity_id: &Identity) -> Result<HashSet<String>> {
+    let mut stmt = conn.prepare("SELECT doc_id FROM documents WHERE identity_id = ?1")?;
+    let rows = stmt.query_map(params![identity_id.to_byte_array().as_slice()], |row| {
+        row.get::<_, String>(0)
+    })?;
+    rows.collect()
+}
 
-    // Insert all new documents
-    for document in documents {
+/// Syncs documents for a specific identity.
+///
+/// Strategy to avoid race conditions with real-time callbacks:
+/// 1. Collect local document IDs and server document IDs
+/// 2. Delete documents that are NOT in server set
+/// 3. Upsert all server documents
+///
+/// This preserves documents inserted by real-time callbacks during sync.
+pub fn sync(
+    conn: &Connection,
+    identity_id: &Identity,
+    server_documents: &[Document],
+) -> Result<()> {
+    // Collect IDs
+    let local_ids = get_all_ids_for_identity(conn, identity_id)?;
+    let server_ids: HashSet<String> = server_documents.iter().map(|d| d.doc_id.clone()).collect();
+
+    // Delete documents that are not on server
+    for local_id in &local_ids {
+        if !server_ids.contains(local_id) {
+            conn.execute(
+                "DELETE FROM documents WHERE identity_id = ?1 AND doc_id = ?2",
+                params![identity_id.to_byte_array().as_slice(), local_id],
+            )?;
+        }
+    }
+
+    // Upsert all server documents
+    for document in server_documents {
         save(conn, identity_id, document)?;
     }
 
     Ok(())
+}
+
+/// Deletes a specific document by doc_id.
+pub fn delete(conn: &Connection, identity_id: &Identity, doc_id: &str) -> Result<usize> {
+    conn.execute(
+        "DELETE FROM documents WHERE identity_id = ?1 AND doc_id = ?2",
+        params![identity_id.to_byte_array().as_slice(), doc_id],
+    )
 }
 
 /// Deletes all documents for a specific identity.

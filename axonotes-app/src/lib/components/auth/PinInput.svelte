@@ -1,6 +1,7 @@
 <script lang="ts">
   import {Label} from "$lib/components/ui/label";
   import {Eye, EyeOff} from "@lucide/svelte";
+  import * as m from "$lib/paraglide/messages.js";
 
   interface Props {
     id: string;
@@ -171,7 +172,7 @@
       />
     {/each}
     <button
-      aria-label={showPin ? "Hide PIN" : "Show PIN"}
+      aria-label={showPin ? m.common_pin_hide() : m.common_pin_show()}
       class="text-muted-foreground hover:text-foreground ml-1 p-2 transition-colors"
       onclick={() => (showPin = !showPin)}
       tabindex={-1}

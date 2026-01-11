@@ -3,6 +3,7 @@
   import {Minus, Square, X} from "@lucide/svelte";
   import ViewMenu from "./workspace/ViewMenu.svelte";
   import {isReady} from "$lib/stores/app";
+  import * as m from "$lib/paraglide/messages.js";
 
   const appWindow = getCurrentWindow();
 
@@ -35,13 +36,13 @@
     {#if $isReady}
       <ViewMenu />
     {/if}
-    <span class="text-sm font-semibold">Axonotes</span>
+    <span class="text-sm font-semibold">{m.common_app_name()}</span>
   </div>
 
   <div class="flex items-center gap-1">
     <button
       onclick={minimize}
-      class="hover:bg-accent hover:text-accent-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      class="hover:bg-accent hover:text-accent-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150"
       style="-webkit-app-region: no-drag"
       aria-label="Minimize"
     >
@@ -50,7 +51,7 @@
 
     <button
       onclick={toggleMaximize}
-      class="hover:bg-accent hover:text-accent-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      class="hover:bg-accent hover:text-accent-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150"
       style="-webkit-app-region: no-drag"
       aria-label={isMaximized ? "Restore" : "Maximize"}
     >
@@ -59,7 +60,7 @@
 
     <button
       onclick={close}
-      class="hover:bg-destructive hover:text-destructive-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+      class="hover:bg-destructive hover:text-destructive-foreground flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150"
       style="-webkit-app-region: no-drag"
       aria-label="Close"
     >

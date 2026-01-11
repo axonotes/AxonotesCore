@@ -56,7 +56,7 @@
         >
           {m.auth_setup_step({current: 2, total: 3})}
         </p>
-        <h1 class="text-xl font-semibold tracking-tight">
+        <h1 class="text-3xl font-semibold tracking-tight">
           {m.auth_setup_mnemonic_title()}
         </h1>
       </div>

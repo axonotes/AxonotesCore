@@ -59,7 +59,7 @@
         <Key class="text-muted-foreground h-5 w-5" />
       </div>
       <div class="space-y-2">
-        <h1 class="text-xl font-semibold tracking-tight">
+        <h1 class="text-3xl font-semibold tracking-tight">
           {m.auth_recovery_newmnemonic_title()}
         </h1>
       </div>

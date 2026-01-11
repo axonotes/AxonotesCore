@@ -21,6 +21,22 @@
     (p) => p.id !== "settings" && p.id !== "editor"
   );
 
+  // Get translated panel name
+  function getPanelName(id: string): string {
+    switch (id) {
+      case "sidebar":
+        return m.panel_explorer();
+      case "editor":
+        return m.panel_editor();
+      case "welcome":
+        return m.panel_welcome();
+      case "settings":
+        return m.panel_settings();
+      default:
+        return id;
+    }
+  }
+
   let creating = $state(false);
 
   async function handleCreateDocument() {
@@ -68,18 +84,18 @@
     {/snippet}
   </DropdownMenu.Trigger>
   <DropdownMenu.Content align="start" class="w-48">
-    <DropdownMenu.Label>Panels</DropdownMenu.Label>
+    <DropdownMenu.Label>{m.view_menu_panels()}</DropdownMenu.Label>
     <DropdownMenu.Separator />
     <DropdownMenu.Item onclick={handleCreateDocument} disabled={creating}>
       <FilePlus class="mr-2 h-4 w-4" />
-      Create Document
+      {m.view_menu_create_document()}
     </DropdownMenu.Item>
 
     {#each contentPanels as panel (panel.id)}
       {@const Icon = panel.icon}
       <DropdownMenu.Item onclick={() => handleAddPanel(panel)}>
         <Icon class="mr-2 h-4 w-4" />
-        {panel.name}
+        {getPanelName(panel.id)}
       </DropdownMenu.Item>
     {/each}
 
@@ -93,10 +109,10 @@
     <DropdownMenu.Item onclick={toggleMode}>
       {#if mode.current === "dark"}
         <Sun class="mr-2 h-4 w-4" />
-        Light mode
+        {m.view_menu_light_mode()}
       {:else}
         <Moon class="mr-2 h-4 w-4" />
-        Dark mode
+        {m.view_menu_dark_mode()}
       {/if}
     </DropdownMenu.Item>
 

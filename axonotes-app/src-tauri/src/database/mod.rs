@@ -56,6 +56,7 @@ pub(crate) mod permissions;
 pub(crate) mod profiles;
 pub(crate) mod schema;
 pub(crate) mod snapshots;
+pub(crate) mod version_tags;
 pub(crate) mod workspaces;
 
 use crate::batch_handler::block_getter::{invalidate_block_cache, invalidate_doc_cache};
@@ -64,6 +65,7 @@ use crate::crypto;
 use crate::database::keys::Keys;
 pub use crate::database::workspaces::Workspace;
 use crate::encryption::batch::DecryptedBatch;
+use crate::encryption::version_tag::DecryptedVersionTag;
 use crate::storage;
 use crate::workos_auth;
 use crate::workos_auth::Profile;
@@ -609,6 +611,15 @@ pub async fn save_batches(batches_list: Vec<DecryptedBatch>) -> Result<(), Strin
     Ok(())
 }
 
+pub async fn get_batch_by_id(batch_id: String) -> Result<Option<DecryptedBatch>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        batches::get_by_id(&conn, batch_id.as_str()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub async fn get_batches_by_doc(doc_id: String) -> Result<Vec<DecryptedBatch>, String> {
     tokio::task::spawn_blocking(move || {
         let conn = get_conn()?;
@@ -1130,6 +1141,18 @@ pub async fn save_document_key(
     .map_err(|e| e.to_string())?
 }
 
+/// Delete a specific document key by key_id.
+pub async fn delete_document_key(identity: Identity, key_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        document_keys::delete(&conn, &identity, &key_id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Sync permissions for a specific identity - clear and replace all.
 pub async fn sync_permissions(
     identity: Identity,
@@ -1148,6 +1171,123 @@ pub async fn sync_documents(identity: Identity, docs: Vec<Document>) -> Result<(
     tokio::task::spawn_blocking(move || {
         let conn = get_conn()?;
         documents::sync(&conn, &identity, &docs).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Save a single permission for a specific identity.
+pub async fn save_permission(
+    identity: Identity,
+    permission: DocumentPermission,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        permissions::save(&conn, &identity, &permission).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete a single permission by permission_id.
+pub async fn delete_permission(identity: Identity, permission_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        permissions::delete(&conn, &identity, &permission_id).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Save a single document for a specific identity.
+pub async fn save_document(identity: Identity, document: Document) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        documents::save(&conn, &identity, &document).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete a single document by doc_id.
+pub async fn delete_document(identity: Identity, doc_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        documents::delete(&conn, &identity, &doc_id).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Sync version tags for a specific identity - clear and replace all.
+pub async fn sync_version_tags(
+    identity: Identity,
+    tags: Vec<DecryptedVersionTag>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        version_tags::sync(&conn, &identity, &tags).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Save a single version tag for a specific identity.
+pub async fn save_version_tag(identity: Identity, tag: DecryptedVersionTag) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        version_tags::save(&conn, &identity, &tag).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Save a pending version tag (created offline, not yet uploaded).
+pub async fn save_pending_version_tag(
+    identity: Identity,
+    tag: DecryptedVersionTag,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        version_tags::save_pending(&conn, &identity, &tag).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete a single version tag by tag_id.
+pub async fn delete_version_tag(identity: Identity, tag_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        version_tags::delete(&conn, &identity, &tag_id).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all version tags for a specific identity.
+pub async fn get_version_tags_for_identity(
+    identity: Identity,
+) -> Result<Vec<DecryptedVersionTag>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        version_tags::get_all_for_identity(&conn, &identity).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get version tags for a specific document and identity.
+pub async fn get_version_tags_for_doc(
+    identity: Identity,
+    doc_id: String,
+) -> Result<Vec<DecryptedVersionTag>, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        version_tags::get_by_doc_id(&conn, &identity, &doc_id).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

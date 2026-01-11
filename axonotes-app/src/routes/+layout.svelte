@@ -3,6 +3,7 @@
   import {ModeWatcher} from "mode-watcher";
   import LightSwitch from "$lib/components/LightSwitch.svelte";
   import TitleBar from "$lib/components/TitleBar.svelte";
+  import {Spinner} from "$lib/components/ui/spinner";
   import {onMount} from "svelte";
   import {goto} from "$app/navigation";
   import {resolve} from "$app/paths";
@@ -135,9 +136,7 @@
       <!-- Loading state -->
       <div class="flex min-h-full items-center justify-center">
         <div class="text-center">
-          <div
-            class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
-          ></div>
+          <Spinner size="lg" />
           <p class="text-muted-foreground mt-4">{m.common_loading()}</p>
         </div>
       </div>

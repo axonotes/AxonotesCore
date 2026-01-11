@@ -101,8 +101,40 @@ pub async fn get_share_code_for_doc(doc_id: &str) -> Option<String> {
 /// - `my_pending_shares`: Shares created by this user (to get share codes)
 /// - `pending_share_requests`: Join requests to auto-accept
 ///
+/// Uses `on_insert` callbacks for real-time updates in addition to `on_applied`
+/// for initial data load.
+///
 /// This should be called after the main connection is established.
 pub fn setup_share_sync(conn: &DbConnection) -> Result<(), String> {
+    // Register on_insert for my_pending_shares (real-time share code discovery)
+    conn.db.my_pending_shares().on_insert(|_ctx, share| {
+        let share = share.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                if let Err(e) = process_share_updates(vec![share], vec![]).await {
+                    eprintln!("Share sync error (on_insert pending_share): {e}");
+                }
+            });
+        });
+    });
+
+    // Register on_insert for pending_share_requests (real-time join request processing)
+    conn.db.pending_share_requests().on_insert(|ctx, request| {
+        // Get current pending shares to map share_code -> doc_id
+        let pending_shares: Vec<PendingShare> = ctx.db.my_pending_shares().iter().collect();
+        let request = request.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+            rt.block_on(async move {
+                if let Err(e) = process_share_updates(pending_shares, vec![request]).await {
+                    eprintln!("Share sync error (on_insert share_request): {e}");
+                }
+            });
+        });
+    });
+
+    // Subscribe and process initial data load
     conn.subscription_builder()
         .on_applied(|ctx| {
             // Get all pending shares and requests

@@ -10,6 +10,8 @@
   } from "$lib/stores/workspace";
   import WorkspaceContainer from "$lib/components/workspace/WorkspaceContainer.svelte";
   import WorkspaceIndicator from "$lib/components/workspace/WorkspaceIndicator.svelte";
+  import {Spinner} from "$lib/components/ui/spinner";
+  import * as m from "$lib/paraglide/messages.js";
 
   let workspaceContainer: WorkspaceContainer;
 
@@ -25,11 +27,29 @@
 
     // Set up keyboard shortcuts for workspace switching
     window.addEventListener("keydown", handleKeydown);
+
+    // Flush pending saves before page unload (reload, close, navigate away)
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Flush pending saves when tab becomes hidden (handles F5 reload better)
+    document.addEventListener("visibilitychange", handleVisibilityChange);
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown);
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
   });
+
+  function handleBeforeUnload() {
+    workspaceStore.flushPendingSave();
+  }
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === "hidden") {
+      workspaceStore.flushPendingSave();
+    }
+  }
 
   function handleKeydown(event: KeyboardEvent) {
     // Ctrl/Cmd + number to switch workspaces
@@ -66,9 +86,7 @@
   <div class="bg-background relative h-full w-full">
     {#if $isLoading}
       <div class="flex h-full items-center justify-center">
-        <div
-          class="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
-        ></div>
+        <Spinner size="lg" />
       </div>
     {:else if $activeWorkspace}
       <WorkspaceContainer
@@ -78,7 +96,7 @@
       />
     {:else}
       <div class="flex h-full items-center justify-center">
-        <p class="text-muted-foreground text-sm">No workspace found</p>
+        <p class="text-muted-foreground text-sm">{m.app_no_workspace()}</p>
       </div>
     {/if}
 
