@@ -6,6 +6,7 @@
     LockKeyhole,
     Settings,
     FilePlus,
+    FileCode,
   } from "@lucide/svelte";
   import {Button} from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -15,10 +16,10 @@
   import {createDocument} from "$lib/stores/documents";
   import * as m from "$lib/paraglide/messages.js";
 
-  // Filter out settings and editor from main panels list
-  // Editor is opened via "Create Document" or sidebar, not directly
+  // Filter out settings and editors from main panels list
+  // Editors are opened via "Create Document" or sidebar, not directly
   const contentPanels = PANELS.filter(
-    (p) => p.id !== "settings" && p.id !== "editor"
+    (p) => p.id !== "settings" && p.id !== "editor" && p.id !== "typst-editor"
   );
 
   // Get translated panel name
@@ -56,6 +57,25 @@
     }
   }
 
+  let creatingTypst = $state(false);
+
+  async function handleCreateTypstDocument() {
+    if (creatingTypst) return;
+    creatingTypst = true;
+    try {
+      const docId = await createDocument(undefined, undefined, "typst");
+      addPanel("typst-editor", {
+        id: `typst-editor-${docId}`,
+        params: {docId, fileName: "Default.typst"},
+        title: "Default.typst",
+      });
+    } catch (error) {
+      console.error("[ViewMenu] Failed to create typst document:", error);
+    } finally {
+      creatingTypst = false;
+    }
+  }
+
   function handleAddPanel(panel: PanelDefinition) {
     addPanel(panel.id);
   }
@@ -89,6 +109,13 @@
     <DropdownMenu.Item onclick={handleCreateDocument} disabled={creating}>
       <FilePlus class="mr-2 h-4 w-4" />
       {m.view_menu_create_document()}
+    </DropdownMenu.Item>
+    <DropdownMenu.Item
+      onclick={handleCreateTypstDocument}
+      disabled={creatingTypst}
+    >
+      <FileCode class="mr-2 h-4 w-4" />
+      {m.view_menu_create_typst()}
     </DropdownMenu.Item>
 
     {#each contentPanels as panel (panel.id)}

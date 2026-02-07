@@ -70,11 +70,23 @@ export interface HeadingV1 {
 }
 
 /**
+ * Typst block content — raw Typst markup source.
+ * Formatting is expressed in Typst syntax, not as separate spans.
+ */
+export interface TypstV1 {
+  author: string;
+  group_id: string;
+  group_row: string;
+  text: string;
+}
+
+/**
  * Block content union type
  */
 export type BlockContent =
   | ({block_type: "paragraph"; block_type_version: 1} & ParagraphV1)
-  | ({block_type: "heading"; block_type_version: 1} & HeadingV1);
+  | ({block_type: "heading"; block_type_version: 1} & HeadingV1)
+  | ({block_type: "typst"; block_type_version: 1} & TypstV1);
 
 /**
  * Full block with metadata
@@ -321,4 +333,37 @@ export function isParagraph(block: Block): boolean {
  */
 export function isHeading(block: Block): boolean {
   return block.block_type === "heading";
+}
+
+/**
+ * Creates a new Typst block with default values.
+ * @param id - Block ID (use 0 for auto-generation)
+ * @param text - Initial Typst source text
+ * @param groupId - Group ID for ordering (default "main")
+ * @param groupRow - Row within group for ordering
+ */
+export async function createTypstBlock(
+  id: number,
+  text: string,
+  groupId = "main",
+  groupRow = "0"
+): Promise<Block> {
+  const author = await getCurrentIdentity();
+  return {
+    id,
+    timestamp: Date.now(),
+    block_type: "typst",
+    block_type_version: 1,
+    author,
+    group_id: groupId,
+    group_row: groupRow,
+    text,
+  };
+}
+
+/**
+ * Checks if a block is a Typst block
+ */
+export function isTypst(block: Block): boolean {
+  return block.block_type === "typst";
 }

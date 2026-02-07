@@ -75,8 +75,20 @@ const SUBSCRIPTION_TIMEOUT_MS: u64 = 10_000;
 /// is released or re-acquired.
 static EXPIRED_LOCKS: OnceCell<Arc<Mutex<HashSet<String>>>> = OnceCell::new();
 
+/// Track shared documents whose `doc_type` couldn't be resolved at metadata
+/// creation time (batches hadn't synced yet). When batches arrive for these
+/// doc_ids, we read the MetadataV1 blocks to determine the real doc_type and
+/// update the user's per-user metadata accordingly.
+static PENDING_DOC_TYPE_CHECKS: OnceCell<Arc<Mutex<HashSet<String>>>> = OnceCell::new();
+
 fn get_expired_locks() -> Arc<Mutex<HashSet<String>>> {
     EXPIRED_LOCKS
+        .get_or_init(|| Arc::new(Mutex::new(HashSet::new())))
+        .clone()
+}
+
+fn get_pending_doc_type_checks() -> Arc<Mutex<HashSet<String>>> {
+    PENDING_DOC_TYPE_CHECKS
         .get_or_init(|| Arc::new(Mutex::new(HashSet::new())))
         .clone()
 }
@@ -463,6 +475,7 @@ async fn sync_metadata_insert(
         doc_id.clone(),
         decrypted.metadata.path,
         decrypted.metadata.tags,
+        decrypted.metadata.doc_type,
     );
 
     log::debug!("[callback] Metadata synced for doc {doc_id}");
@@ -768,14 +781,40 @@ async fn create_default_metadata_if_missing(doc_id: &str) -> Result<(), String> 
     // Get existing paths from the already-decrypted metadata
     let existing_paths: Vec<_> = existing_metadata.iter().map(|m| &m.metadata).collect();
 
-    // Find a unique path in /Shared/ folder
-    let path = find_unique_shared_path(&existing_paths);
+    // Try to determine the document type from block content.
+    // The creator writes a MetadataV1 block with field="doc_type".
+    let doc_type = match read_doc_type_from_blocks(doc_id).await {
+        Some(dt) => dt,
+        None => {
+            // Batches haven't synced yet — defer the check.
+            // When batches arrive for this doc_id, resolve_pending_doc_type()
+            // will re-read the blocks and update the metadata.
+            log::debug!(
+                "[callback] Batches not available yet for {}, deferring doc_type resolution",
+                doc_id
+            );
+            if let Ok(mut pending) = get_pending_doc_type_checks().lock() {
+                pending.insert(doc_id.to_string());
+            }
+            crate::encryption::document::DOC_TYPE_DOC.to_string()
+        }
+    };
+
+    // Pick correct extension for the default path
+    let extension = match doc_type.as_str() {
+        crate::encryption::document::DOC_TYPE_TYPST => ".typst",
+        _ => ".doc",
+    };
+
+    // Re-generate path with the correct extension
+    let path = find_unique_shared_path_with_ext(&existing_paths, extension);
 
     // Create default metadata
     let default_metadata = DecryptedMetadata {
         version: 1,
         path: path.clone(),
         tags: vec![],
+        doc_type,
     };
 
     // Encrypt for ourselves
@@ -795,14 +834,14 @@ async fn create_default_metadata_if_missing(doc_id: &str) -> Result<(), String> 
     Ok(())
 }
 
-/// Finds a unique path for a shared document.
-/// Returns "/Shared/Shared Document.doc" or "/Shared/Shared Document (1).doc" etc.
-fn find_unique_shared_path(
+/// Finds a unique path for a shared document with the given file extension.
+/// Returns e.g. "/Shared/Shared Document.typst" or "/Shared/Shared Document (1).doc" etc.
+fn find_unique_shared_path_with_ext(
     existing_metadata: &[&crate::encryption::document::DecryptedMetadata],
+    extension: &str,
 ) -> String {
     let base_name = "Shared Document";
     let folder = "/Shared";
-    let extension = ".doc";
 
     // Collect all existing paths in lowercase for case-insensitive comparison
     let existing_paths: std::collections::HashSet<String> = existing_metadata
@@ -827,4 +866,158 @@ fn find_unique_shared_path(
     // Fallback with timestamp (should never happen)
     let ts = crate::utils::timestamp::timestamp();
     format!("{}/{} ({}){}", folder, base_name, ts, extension)
+}
+
+/// Tries to read the `doc_type` from a document's MetadataV1 blocks.
+///
+/// Returns `Some("typst")` or `Some("doc")` if a MetadataV1 block with
+/// `field: "doc_type"` is found in local storage, or `None` if batches
+/// haven't been synced yet.
+async fn read_doc_type_from_blocks(doc_id: &str) -> Option<String> {
+    use crate::batch_handler::block_getter;
+    use crate::batch_handler::block_types::BlockContent;
+
+    // Get all block IDs for this document from local DB
+    let batches = crate::database::get_batches_by_doc(doc_id.to_string())
+        .await
+        .ok()?;
+
+    if batches.is_empty() {
+        return None;
+    }
+
+    let block_ids: std::collections::HashSet<u64> =
+        batches.iter().map(|b| b.batch_data.block_id).collect();
+    let block_ids: Vec<u64> = block_ids.into_iter().collect();
+
+    // Reconstruct all blocks at latest timestamp
+    let doc_data = block_getter::get_blocks(doc_id.to_string(), block_ids, u128::MAX)
+        .await
+        .ok()?;
+
+    // Look for a MetadataV1 block with field="doc_type"
+    for block_data in &doc_data.blocks {
+        if let BlockContent::MetadataV1(meta) = &block_data.block.content {
+            if meta.field == "doc_type" {
+                if let Some(dt) = meta.value.as_str() {
+                    return Some(dt.to_string());
+                }
+            }
+        }
+    }
+
+    // Batches exist but no doc_type block found — this is a pre-existing
+    // document created before doc_type was introduced. Default to "doc".
+    Some(crate::encryption::document::DOC_TYPE_DOC.to_string())
+}
+
+/// Called after a batch is synced for a document. If that document has a
+/// pending doc_type check, resolves the type and updates per-user metadata.
+pub async fn resolve_pending_doc_type(doc_id: &str) {
+    use crate::encryption::document::DecryptedMetadata;
+    use crate::utils::vec_array::ByteArrayConversion;
+
+    // Check if this doc_id is in the pending set
+    let is_pending = match get_pending_doc_type_checks().lock() {
+        Ok(set) => set.contains(doc_id),
+        Err(_) => return,
+    };
+    if !is_pending {
+        return;
+    }
+
+    // Try to read the doc_type now that batches may be available
+    let Some(doc_type) = read_doc_type_from_blocks(doc_id).await else {
+        return; // Still no batches — will retry on next batch sync
+    };
+
+    // Remove from pending set
+    if let Ok(mut set) = get_pending_doc_type_checks().lock() {
+        set.remove(doc_id);
+    }
+
+    // If it resolved to "doc" (the default we already set), nothing to update
+    if doc_type == crate::encryption::document::DOC_TYPE_DOC {
+        return;
+    }
+
+    // Need to update the metadata with the real doc_type and correct extension
+    let identity = match stdb::active_profile().get_identity().await {
+        Ok(Some(id)) => id,
+        _ => return,
+    };
+
+    let current_meta =
+        match crate::database::get_metadata_for_doc(identity, doc_id.to_string()).await {
+            Ok(Some(m)) => m,
+            _ => return,
+        };
+
+    // Update path extension from .doc to the correct one
+    let extension = match doc_type.as_str() {
+        crate::encryption::document::DOC_TYPE_TYPST => ".typst",
+        _ => return, // Unknown type, leave as-is
+    };
+    let new_path = if current_meta.metadata.path.ends_with(".doc") {
+        format!(
+            "{}{}",
+            &current_meta.metadata.path[..current_meta.metadata.path.len() - 4],
+            extension
+        )
+    } else {
+        current_meta.metadata.path.clone()
+    };
+
+    let updated_metadata = DecryptedMetadata {
+        version: current_meta.metadata.version,
+        path: new_path.clone(),
+        tags: current_meta.metadata.tags.clone(),
+        doc_type,
+    };
+
+    // Encrypt and save locally + push to server
+    let user_keys = match crate::database::get_active_user_keys().await {
+        Ok(Some(keys)) => keys,
+        _ => return,
+    };
+    let Ok(private_key) = user_keys.private_encryption_key.as_array() else {
+        return;
+    };
+    let Ok(public_key) = user_keys.public_encryption_key.as_array() else {
+        return;
+    };
+
+    let updated = crate::encryption::document::DecryptedDocumentMetadata {
+        meta_id: current_meta.meta_id,
+        user_id: current_meta.user_id,
+        doc_id: doc_id.to_string(),
+        metadata: updated_metadata.clone(),
+    };
+
+    if let Err(e) = crate::database::save_metadata(identity, updated).await {
+        log::warn!("[callback] Failed to update metadata for deferred doc_type: {e}");
+        return;
+    }
+
+    emit_document_metadata_updated(
+        doc_id.to_string(),
+        new_path,
+        updated_metadata.tags.clone(),
+        updated_metadata.doc_type.clone(),
+    );
+
+    // Push to server
+    if let Ok(encrypted_blob) = updated_metadata.encrypt(private_key, public_key, public_key) {
+        if let Err(e) = stdb::active_profile()
+            .update_document_metadata(doc_id.to_string(), encrypted_blob)
+            .await
+        {
+            log::warn!("[callback] Failed to push deferred doc_type to server: {e}");
+        }
+    }
+
+    log::debug!(
+        "[callback] Resolved deferred doc_type for document {}",
+        doc_id
+    );
 }

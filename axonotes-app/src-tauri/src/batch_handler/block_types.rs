@@ -19,6 +19,7 @@
 //! - **`ParagraphV1`**: Rich text paragraph with formatting spans
 //! - **`HeadingV1`**: Heading with level (h1-h6)
 //! - **`MetadataV1`**: Key-value metadata fields
+//! - **`TypstV1`**: Raw Typst markup block
 
 use crate::define_blocks;
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,7 @@ define_blocks! {
     ParagraphV1 => ParagraphV1, "paragraph", 1;
     HeadingV1   => HeadingV1,   "heading",   1;
     MetadataV1  => MetadataV1,  "metadata",  1;
+    TypstV1     => TypstV1,     "typst",     1;
 }
 
 // ============ Shared Types ============
@@ -106,4 +108,20 @@ pub struct MetadataV1 {
     pub field: String,
     /// The metadata value (can be any JSON type)
     pub value: Value,
+}
+
+/// A Typst block containing raw Typst markup source.
+///
+/// Unlike paragraphs, Typst blocks store plain source text without
+/// separate formatting spans — all formatting is expressed in Typst syntax.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TypstV1 {
+    /// The user who last modified this block
+    pub author: Identity,
+    /// Group identifier for fractional indexing
+    pub group_id: String,
+    /// Row within group for fractional indexing
+    pub group_row: String,
+    /// Raw Typst source text
+    pub text: String,
 }

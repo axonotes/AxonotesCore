@@ -255,6 +255,7 @@
 
   "view_menu_panels": "Panels",
   "view_menu_create_document": "Create Document",
+  "view_menu_create_typst": "New Typst",
   "view_menu_light_mode": "Light mode",
   "view_menu_dark_mode": "Dark mode",
 
@@ -263,8 +264,9 @@
   "panel_welcome": "Welcome",
   "panel_settings": "Settings",
 
-  "sidebar_empty_state": "No documents yet. Click + or right-click to create.",
+  "sidebar_empty_state": "Right click to create files",
   "sidebar_new_document": "New Document",
+  "sidebar_new_typst": "New Typst",
   "sidebar_new_folder": "New Folder",
   "sidebar_rename": "Rename",
   "sidebar_delete": "Delete",

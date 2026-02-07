@@ -58,6 +58,7 @@ pub struct DocumentMetadataUpdatedPayload {
     pub doc_id: String,
     pub path: String,
     pub tags: Vec<String>,
+    pub doc_type: String,
 }
 
 /// Emitted when access to a document is granted (e.g., via share)
@@ -102,8 +103,18 @@ pub fn emit_document_deleted(doc_id: String) {
     }
 }
 
-pub fn emit_document_metadata_updated(doc_id: String, path: String, tags: Vec<String>) {
-    let payload = DocumentMetadataUpdatedPayload { doc_id, path, tags };
+pub fn emit_document_metadata_updated(
+    doc_id: String,
+    path: String,
+    tags: Vec<String>,
+    doc_type: String,
+) {
+    let payload = DocumentMetadataUpdatedPayload {
+        doc_id,
+        path,
+        tags,
+        doc_type,
+    };
     if let Err(e) = app_handle::emit(EVENT_DOCUMENT_METADATA_UPDATED, &payload) {
         eprintln!("Failed to emit {EVENT_DOCUMENT_METADATA_UPDATED}: {e}");
     }

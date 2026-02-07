@@ -23,6 +23,7 @@ use crate::database::get_active_user_keys;
 use crate::database::keys::Keys;
 use crate::encryption::document::{
     DecryptedDocumentKey, DecryptedDocumentMetadata, DecryptedKeyData, DecryptedMetadata,
+    DOC_TYPE_DOC, DOC_TYPE_TYPST,
 };
 use crate::events::{emit_document_created, emit_document_deleted, emit_document_metadata_updated};
 use crate::stdb;
@@ -37,6 +38,7 @@ use uuid::Uuid;
 ///
 /// * `title` - Optional document title (defaults to "Default")
 /// * `folder_path` - Optional folder path (defaults to "/")
+/// * `doc_type` - Optional document type: "doc" (default) or "typst"
 ///
 /// # Returns
 ///
@@ -54,6 +56,7 @@ use uuid::Uuid;
 pub async fn create_document(
     title: Option<String>,
     folder_path: Option<String>,
+    doc_type: Option<String>,
 ) -> Result<String, String> {
     let user_keys: Option<Keys> = get_active_user_keys().await?;
     if let Some(user_keys) = user_keys {
@@ -73,6 +76,14 @@ pub async fn create_document(
             "Default".to_string()
         };
 
+        // Determine document type and file extension
+        let doc_type_value = doc_type.unwrap_or_else(|| DOC_TYPE_DOC.to_string());
+        let extension = match doc_type_value.as_str() {
+            DOC_TYPE_DOC => ".doc",
+            DOC_TYPE_TYPST => ".typst",
+            _ => return Err(format!("Unknown document type: {doc_type_value}")),
+        };
+
         // Normalize folder path
         let folder = folder_path.unwrap_or_else(|| "/".to_string());
         let folder = if folder.is_empty() || folder == "/" {
@@ -88,13 +99,13 @@ pub async fn create_document(
         };
 
         // Generate unique path within the folder
-        let base_filename = format!("{document_title}.doc");
+        let base_filename = format!("{document_title}{extension}");
         let mut path = format!("{folder}/{base_filename}");
         let mut counter = 1;
 
         // Check if path already exists in the same folder and increment counter if needed
         while document_metadata.iter().any(|m| m.metadata.path == path) {
-            path = format!("{folder}/{document_title} ({counter}).doc");
+            path = format!("{folder}/{document_title} ({counter}){extension}");
             counter += 1;
         }
 
@@ -116,6 +127,7 @@ pub async fn create_document(
             version: 1,
             path,
             tags: vec![],
+            doc_type: doc_type_value,
         };
         let encrypted_meta_blob = meta_data.encrypt(
             private_encryption_key,
@@ -193,6 +205,23 @@ pub async fn create_document(
                     group_row: "main".to_string(),
                     field: "title".to_string(),
                     value: document_title.into(),
+                }),
+            },
+        );
+
+        update_block(
+            doc_id.clone(),
+            None,
+            Block {
+                id: 0,
+                timestamp: 0,
+                deleted: None,
+                content: BlockContent::MetadataV1(MetadataV1 {
+                    author: user_identity,
+                    group_id: "main".to_string(),
+                    group_row: "doc_type".to_string(),
+                    field: "doc_type".to_string(),
+                    value: meta_data.doc_type.clone().into(),
                 }),
             },
         );
@@ -295,17 +324,23 @@ pub async fn update_document_metadata(
             .await?
             .ok_or("No identity available")?;
 
-        // Get current metadata to preserve meta_id
+        // Get current metadata to preserve meta_id and doc_type
         let current = crate::database::get_metadata_for_doc(identity, doc_id.clone())
             .await?
             .ok_or("Document metadata not found")?;
+
+        // Preserve immutable doc_type from existing metadata
+        let preserved_metadata = DecryptedMetadata {
+            doc_type: current.metadata.doc_type.clone(),
+            ..metadata
+        };
 
         // Create updated metadata record
         let updated = DecryptedDocumentMetadata {
             meta_id: current.meta_id,
             user_id: current.user_id,
             doc_id: doc_id.clone(),
-            metadata: metadata.clone(),
+            metadata: preserved_metadata.clone(),
         };
 
         // Update local SQLite immediately
@@ -314,12 +349,13 @@ pub async fn update_document_metadata(
         // Emit event for UI update
         emit_document_metadata_updated(
             doc_id.clone(),
-            metadata.path.clone(),
-            metadata.tags.clone(),
+            preserved_metadata.path.clone(),
+            preserved_metadata.tags.clone(),
+            preserved_metadata.doc_type.clone(),
         );
 
         // Try to push to server (non-blocking, fails silently if offline)
-        let encrypted_blob = metadata.encrypt(
+        let encrypted_blob = preserved_metadata.encrypt(
             private_encryption_key,
             public_encryption_key,
             public_encryption_key,

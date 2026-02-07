@@ -10,12 +10,13 @@
 
 import type {Component} from "svelte";
 import {writable, get} from "svelte/store";
-import {Sidebar, FileText, Home, Settings} from "@lucide/svelte";
+import {Sidebar, FileText, FileCode, Home, Settings} from "@lucide/svelte";
 import type {DockviewApi, Parameters} from "dockview-core";
 
 // Import panel components
 import SidebarPanel from "$lib/components/workspace/panels/SidebarPanel.svelte";
 import EditorPanel from "$lib/components/workspace/panels/EditorPanel.svelte";
+import TypstEditorPanel from "$lib/components/workspace/panels/TypstEditorPanel.svelte";
 import WelcomePanel from "$lib/components/workspace/panels/WelcomePanel.svelte";
 import SettingsPanel from "$lib/components/workspace/panels/SettingsPanel.svelte";
 
@@ -55,6 +56,13 @@ export const PANELS: PanelDefinition[] = [
     name: "Editor",
     icon: FileText,
     component: EditorPanel,
+    defaultPosition: "center",
+  },
+  {
+    id: "typst-editor",
+    name: "Typst Editor",
+    icon: FileCode,
+    component: TypstEditorPanel,
     defaultPosition: "center",
   },
   {

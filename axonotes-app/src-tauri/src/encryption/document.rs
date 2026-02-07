@@ -42,6 +42,15 @@ pub trait EncryptDocumentMetadataVec {
     ) -> Result<Self::Output, String>;
 }
 
+/// Known document type values.
+pub const DOC_TYPE_DOC: &str = "doc";
+pub const DOC_TYPE_TYPST: &str = "typst";
+
+/// Default document type for backward compatibility with existing documents.
+fn default_doc_type() -> String {
+    DOC_TYPE_DOC.to_string()
+}
+
 /// Decrypted document metadata payload.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptedMetadata {
@@ -51,6 +60,10 @@ pub struct DecryptedMetadata {
     pub path: String,
     /// User-defined tags for organization
     pub tags: Vec<String>,
+    /// Document type: "doc" (rich text) or "typst" (Typst markup).
+    /// Defaults to "doc" for backward compatibility with existing documents.
+    #[serde(default = "default_doc_type")]
+    pub doc_type: String,
 }
 
 /// Complete decrypted document metadata with identifiers.
@@ -326,6 +339,7 @@ mod tests {
             version: 1,
             path: "/test/document.doc".to_string(),
             tags: vec!["tag1".to_string(), "tag2".to_string()],
+            doc_type: "doc".to_string(),
         };
 
         let encrypted = original
@@ -353,6 +367,7 @@ mod tests {
                 version: 1,
                 path: "/test.doc".to_string(),
                 tags: vec!["important".to_string()],
+                doc_type: "doc".to_string(),
             },
         };
 
@@ -383,6 +398,7 @@ mod tests {
                     version: 1,
                     path: "/doc1.doc".to_string(),
                     tags: vec![],
+                    doc_type: "doc".to_string(),
                 },
             },
             DecryptedDocumentMetadata {
@@ -393,6 +409,7 @@ mod tests {
                     version: 1,
                     path: "/doc2.doc".to_string(),
                     tags: vec!["tag1".to_string()],
+                    doc_type: "doc".to_string(),
                 },
             },
         ];

@@ -85,10 +85,13 @@ pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), Str
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
             rt.block_on(async move {
+                let doc_id = batch.doc_id.clone();
                 // Use realtime sync - no timestamp filtering to avoid race conditions
                 if let Err(e) = sync_realtime_batch(batch).await {
                     eprintln!("Batch sync error (on_insert): {e}");
                 }
+                // Check if this document has a pending doc_type resolution
+                crate::stdb::callbacks::resolve_pending_doc_type(&doc_id).await;
             });
         });
     });

@@ -1,9 +1,9 @@
 <script lang="ts">
   import {onMount, onDestroy, tick} from "svelte";
   import {
-    Plus,
     Loader2,
     FilePlus,
+    FileCode,
     FolderPlus,
     Folder,
     Trash2,
@@ -248,12 +248,27 @@
     }
   }
 
-  // Helper to extract name without .doc extension
+  // Known document file extensions
+  const KNOWN_EXTENSIONS = [".typst", ".doc"];
+
+  // Helper to extract name without known extension
   function getNameWithoutExtension(filename: string): string {
-    if (filename.endsWith(".doc")) {
-      return filename.slice(0, -4);
+    for (const ext of KNOWN_EXTENSIONS) {
+      if (filename.endsWith(ext)) {
+        return filename.slice(0, -ext.length);
+      }
     }
     return filename;
+  }
+
+  // Helper to extract the extension from a filename
+  function getExtension(filename: string): string {
+    for (const ext of KNOWN_EXTENSIONS) {
+      if (filename.endsWith(ext)) {
+        return ext;
+      }
+    }
+    return "";
   }
 
   // Helper to wait for a document to appear in the store
@@ -294,14 +309,36 @@
     }
   }
 
+  async function handleCreateTypstDocument(inFolder: string = "/") {
+    creating = true;
+    try {
+      const docId = await createDocument(undefined, inFolder, "typst");
+
+      const doc = await waitForDocument(docId);
+      if (!doc) return;
+
+      await tick();
+      const newTree = buildTree($documents, $temporaryFolders);
+      const node = findNodeByPath(newTree, doc.path);
+      if (node) {
+        startRename(node);
+      }
+    } catch (error) {
+      console.error("[Sidebar] Failed to create typst document:", error);
+    } finally {
+      creating = false;
+    }
+  }
+
   function handleFileClick(node: TreeNode) {
     if (!node.docId) return;
     openDocument(node.docId, node.name);
   }
 
   function openDocument(docId: string, fileName: string) {
-    addPanel("editor", {
-      id: `editor-${docId}`,
+    const panelType = fileName.endsWith(".typst") ? "typst-editor" : "editor";
+    addPanel(panelType, {
+      id: `${panelType}-${docId}`,
       params: {docId, fileName},
       title: fileName,
     });
@@ -335,8 +372,9 @@
     const node = renameState.node;
 
     if (node.type === "file") {
-      // File rename - append .doc extension
-      const newName = `${baseName}.doc`;
+      // File rename - preserve original extension
+      const ext = getExtension(node.name) || ".doc";
+      const newName = `${baseName}${ext}`;
 
       if (newName === node.name) {
         cancelRename();
@@ -350,9 +388,11 @@
 
       try {
         await renameDocument(node.docId, newName);
-        // Update open panel title if exists
+        // Update open panel title if exists (could be either editor type)
         const api = get(dockviewApi);
-        const panel = api?.getPanel(`editor-${node.docId}`);
+        const panel =
+          api?.getPanel(`editor-${node.docId}`) ??
+          api?.getPanel(`typst-editor-${node.docId}`);
         if (panel) {
           panel.api.setTitle(newName);
         }
@@ -534,20 +574,6 @@
     >
       <UserPlus class="h-4 w-4" />
     </Button>
-    <Button
-      variant="ghost"
-      size="sm"
-      class="h-6 w-6 p-0"
-      onclick={() => handleCreateDocument()}
-      disabled={creating || $documentsLoading}
-      aria-label="Create new document"
-    >
-      {#if creating}
-        <Loader2 class="h-4 w-4 animate-spin" />
-      {:else}
-        <Plus class="h-4 w-4" />
-      {/if}
-    </Button>
   </div>
 
   <ContextMenu.Root>
@@ -599,6 +625,7 @@
                 {node}
                 onFileClick={handleFileClick}
                 onCreateDocument={handleCreateDocument}
+                onCreateTypstDocument={handleCreateTypstDocument}
                 onCreateFolder={startNewFolder}
                 onRename={startRename}
                 onDelete={handleDelete}
@@ -629,6 +656,11 @@
       <ContextMenu.Item onclick={() => handleCreateDocument("/")}>
         <FilePlus class="mr-2 h-4 w-4" />
         {m.sidebar_new_document()}
+      </ContextMenu.Item>
+
+      <ContextMenu.Item onclick={() => handleCreateTypstDocument("/")}>
+        <FileCode class="mr-2 h-4 w-4" />
+        {m.sidebar_new_typst()}
       </ContextMenu.Item>
 
       <ContextMenu.Item onclick={() => startNewFolder("/")}>

@@ -34,8 +34,8 @@ pub fn save(
 
     conn.execute(
         "INSERT OR REPLACE INTO document_metadata
-        (meta_id, identity_id, doc_id, path, tags, version)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        (meta_id, identity_id, doc_id, path, tags, version, doc_type)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             meta.meta_id,
             identity_id.to_byte_array().as_slice(),
@@ -43,6 +43,7 @@ pub fn save(
             meta.metadata.path,
             tags_json,
             meta.metadata.version,
+            meta.metadata.doc_type,
         ],
     )?;
     Ok(())
@@ -55,7 +56,7 @@ pub fn get_by_doc_id(
     doc_id: &str,
 ) -> Result<Option<DecryptedDocumentMetadata>> {
     let mut stmt = conn.prepare(
-        "SELECT meta_id, doc_id, path, tags, version
+        "SELECT meta_id, doc_id, path, tags, version, doc_type
          FROM document_metadata
          WHERE identity_id = ?1 AND doc_id = ?2",
     )?;
@@ -65,6 +66,9 @@ pub fn get_by_doc_id(
     if let Some(row) = rows.next()? {
         let tags_json: String = row.get(3)?;
         let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        let doc_type: String = row
+            .get::<_, String>(5)
+            .unwrap_or_else(|_| "doc".to_string());
 
         Ok(Some(DecryptedDocumentMetadata {
             meta_id: row.get(0)?,
@@ -74,6 +78,7 @@ pub fn get_by_doc_id(
                 version: row.get(4)?,
                 path: row.get(2)?,
                 tags,
+                doc_type,
             },
         }))
     } else {
@@ -87,7 +92,7 @@ pub fn get_all_for_identity(
     identity_id: &Identity,
 ) -> Result<Vec<DecryptedDocumentMetadata>> {
     let mut stmt = conn.prepare(
-        "SELECT meta_id, doc_id, path, tags, version
+        "SELECT meta_id, doc_id, path, tags, version, doc_type
          FROM document_metadata
          WHERE identity_id = ?1",
     )?;
@@ -95,6 +100,9 @@ pub fn get_all_for_identity(
     let rows = stmt.query_map(params![identity_id.to_byte_array().as_slice()], |row| {
         let tags_json: String = row.get(3)?;
         let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+        let doc_type: String = row
+            .get::<_, String>(5)
+            .unwrap_or_else(|_| "doc".to_string());
 
         Ok(DecryptedDocumentMetadata {
             meta_id: row.get(0)?,
@@ -104,6 +112,7 @@ pub fn get_all_for_identity(
                 version: row.get(4)?,
                 path: row.get(2)?,
                 tags,
+                doc_type,
             },
         })
     })?;
@@ -162,7 +171,7 @@ fn merge_single(
                 None
             };
 
-            // Build merged metadata (server path wins)
+            // Build merged metadata (server path and doc_type win)
             let merged = DecryptedDocumentMetadata {
                 meta_id: server_meta.meta_id.clone(),
                 user_id: server_meta.user_id,
@@ -171,6 +180,7 @@ fn merge_single(
                     version: server_meta.metadata.version,
                     path: server_meta.metadata.path.clone(),
                     tags: merged_tags,
+                    doc_type: server_meta.metadata.doc_type.clone(),
                 },
             };
 

@@ -189,13 +189,15 @@ export async function loadDocuments(): Promise<void> {
  * Create a new document and reload the list
  * @param title Optional title for the document
  * @param folderPath Optional folder path (defaults to "/")
+ * @param docType Optional document type: "doc" (default) or "typst"
  * @returns The new document's ID
  */
 export async function createDocument(
   title?: string,
-  folderPath?: string
+  folderPath?: string,
+  docType?: string
 ): Promise<string> {
-  const docId = await DocumentService.create(title, folderPath);
+  const docId = await DocumentService.create(title, folderPath, docType);
   // Backend emits event, which triggers reload
   return docId;
 }
@@ -260,12 +262,15 @@ function getUniquePath(basePath: string, existingPaths: string[]): string {
   const folder = basePath.substring(0, lastSlash);
   const fullName = basePath.substring(lastSlash + 1);
 
-  // Handle .doc extension
+  // Handle known extensions
   let name: string;
   let ext: string;
   if (fullName.endsWith(".doc")) {
     name = fullName.slice(0, -4);
     ext = ".doc";
+  } else if (fullName.endsWith(".typst")) {
+    name = fullName.slice(0, -6);
+    ext = ".typst";
   } else {
     name = fullName;
     ext = "";
@@ -295,7 +300,8 @@ export async function moveDocument(
   if (!doc) throw new Error("Document not found");
 
   // Get just the filename
-  const fileName = doc.path.split("/").pop() || "Untitled.doc";
+  const ext = doc.docType === "typst" ? ".typst" : ".doc";
+  const fileName = doc.path.split("/").pop() || `Untitled${ext}`;
 
   // Construct new path
   const basePath =
@@ -614,13 +620,19 @@ export async function setupDocumentListeners(): Promise<void> {
     docId: string;
     path: string;
     tags: string[];
+    docType: string;
   }>("document-metadata-updated", async (event) => {
     console.log("[documents] Metadata updated event received:", event.payload);
     // Update local state immediately
     documents.update((docs) => {
       const newDocs = docs.map((d) =>
         d.docId === event.payload.docId
-          ? {...d, path: event.payload.path, tags: event.payload.tags}
+          ? {
+              ...d,
+              path: event.payload.path,
+              tags: event.payload.tags,
+              docType: event.payload.docType ?? d.docType,
+            }
           : d
       );
       console.log(

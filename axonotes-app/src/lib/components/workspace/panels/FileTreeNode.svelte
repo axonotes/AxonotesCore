@@ -2,6 +2,7 @@
   import {
     Folder,
     FileText,
+    FileCode,
     ChevronRight,
     FilePlus,
     FolderPlus,
@@ -39,6 +40,7 @@
     depth?: number;
     onFileClick: (node: TreeNode) => void;
     onCreateDocument: (folderPath: string) => void;
+    onCreateTypstDocument: (folderPath: string) => void;
     onCreateFolder: (parentPath: string) => void;
     onRename: (node: TreeNode) => void;
     onDelete: (node: TreeNode) => void;
@@ -65,6 +67,7 @@
     depth = 0,
     onFileClick,
     onCreateDocument,
+    onCreateTypstDocument,
     onCreateFolder,
     onRename,
     onDelete,
@@ -92,6 +95,16 @@
   let isRenaming = $derived(
     renameState?.active && renameState?.node?.path === node.path
   );
+
+  // Extract the file extension for display in the rename input
+  const KNOWN_EXTENSIONS = [".typst", ".doc"];
+  let fileExtension = $derived.by(() => {
+    if (node.type !== "file") return "";
+    for (const ext of KNOWN_EXTENSIONS) {
+      if (node.name.endsWith(ext)) return ext;
+    }
+    return "";
+  });
 
   // Auto-expand when creating a subfolder inside this folder
   $effect(() => {
@@ -253,7 +266,7 @@
           onblur={onRenameBlur}
           class="h-5 min-w-0 flex-1 bg-transparent text-sm focus:outline-none"
         />{#if node.type === "file"}<span class="text-muted-foreground text-sm"
-            >.doc</span
+            >{fileExtension}</span
           >{/if}
       </div>
     {:else}
@@ -300,6 +313,13 @@
           <ContextMenu.Item onclick={() => onCreateDocument(getTargetFolder())}>
             <FilePlus class="mr-2 h-4 w-4" />
             {m.sidebar_new_document()}
+          </ContextMenu.Item>
+
+          <ContextMenu.Item
+            onclick={() => onCreateTypstDocument(getTargetFolder())}
+          >
+            <FileCode class="mr-2 h-4 w-4" />
+            {m.sidebar_new_typst()}
           </ContextMenu.Item>
 
           <ContextMenu.Item onclick={() => onCreateFolder(getTargetFolder())}>
@@ -366,6 +386,7 @@
           depth={depth + 1}
           {onFileClick}
           {onCreateDocument}
+          {onCreateTypstDocument}
           {onCreateFolder}
           {onRename}
           {onDelete}

@@ -11,6 +11,7 @@ interface DocumentMetadataResponse {
     version: number;
     path: string;
     tags: string[];
+    doc_type: string; // "doc" or "typst"
   };
 }
 
@@ -21,10 +22,13 @@ export interface DocumentMetadata {
   docId: string;
   path: string;
   tags: string[];
+  docType: string; // "doc" or "typst"
 }
 
 /**
- * Metadata update payload
+ * Metadata update payload.
+ * Note: doc_type is intentionally omitted — it is immutable after creation.
+ * The backend preserves the existing doc_type on every update.
  */
 export interface MetadataUpdate {
   version: number;
@@ -46,6 +50,7 @@ export class DocumentService {
       docId: doc.doc_id,
       path: doc.metadata.path,
       tags: doc.metadata.tags,
+      docType: doc.metadata.doc_type ?? "doc",
     }));
   }
 
@@ -53,10 +58,15 @@ export class DocumentService {
    * Create a new document
    * @param title Optional title for the document (defaults to "Default")
    * @param folderPath Optional folder path (defaults to "/")
+   * @param docType Optional document type: "doc" (default) or "typst"
    * @returns The new document's ID
    */
-  static async create(title?: string, folderPath?: string): Promise<string> {
-    return invoke<string>("create_document", {title, folderPath});
+  static async create(
+    title?: string,
+    folderPath?: string,
+    docType?: string
+  ): Promise<string> {
+    return invoke<string>("create_document", {title, folderPath, docType});
   }
 
   /**
@@ -74,6 +84,7 @@ export class DocumentService {
       docId: response.doc_id,
       path: response.metadata.path,
       tags: response.metadata.tags,
+      docType: response.metadata.doc_type ?? "doc",
     };
   }
 

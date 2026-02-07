@@ -53,7 +53,7 @@ use tokio::sync::Mutex;
 // Module Organization
 // ==========================================
 
-mod callbacks;
+pub(crate) mod callbacks;
 pub(crate) mod context;
 mod reducer_helper;
 

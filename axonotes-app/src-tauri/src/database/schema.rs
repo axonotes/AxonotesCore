@@ -276,10 +276,19 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             doc_id TEXT NOT NULL,
             path TEXT NOT NULL,
             tags TEXT NOT NULL,
-            version INTEGER NOT NULL DEFAULT 1
+            version INTEGER NOT NULL DEFAULT 1,
+            doc_type TEXT NOT NULL DEFAULT 'doc'
         )",
         [],
     )?;
+
+    // Migration: add doc_type column for existing databases
+    // ALTER TABLE ... ADD COLUMN is a no-op if the column already exists in SQLite >= 3.35
+    // For older versions we catch the error silently.
+    let _ = conn.execute(
+        "ALTER TABLE document_metadata ADD COLUMN doc_type TEXT NOT NULL DEFAULT 'doc'",
+        [],
+    );
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_document_metadata_identity ON document_metadata(identity_id)",
