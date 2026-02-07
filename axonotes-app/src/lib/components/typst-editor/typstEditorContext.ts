@@ -36,6 +36,13 @@ const PERSIST_DEBOUNCE = 300;
 const RELEASE_WINDOW_MS = 50;
 
 /**
+ * How long (ms) a lock is held without any local edits before it is
+ * automatically released.  Prevents stale locks when the user walks away
+ * or switches to another window without explicitly blurring the editor.
+ */
+const LOCK_INACTIVITY_MS = 60_000;
+
+/**
  * Grace period (ms) after the last live block update during which we trust the
  * local content over the persisted server data.  Sync updates will skip blocks
  * that were live-updated within this window, preventing stale persisted data
@@ -164,10 +171,13 @@ export function createTypstEditorContext(): TypstEditorContext {
   // Locking
   let lockedBlockId: number | null = null;
   let lockGeneration: number = 0; // Incremented on each tryLockLine call
+  let lockInactivityTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Throttle / debounce
   let liveUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let liveUpdateBlockId: number | null = null;
+  let liveUpdateInFlight = false; // True while an updateLiveBlock call is awaiting
+  let liveUpdateQueued = false; // True if edits arrived during an in-flight call
   let persistTimeout: ReturnType<typeof setTimeout> | null = null;
   let pendingPersist: {docId: string; blockId: number; block: Block} | null =
     null;
@@ -265,6 +275,10 @@ export function createTypstEditorContext(): TypstEditorContext {
       liveUpdateTimeout = null;
     }
     liveUpdateBlockId = null;
+    liveUpdateQueued = false;
+    // Note: we don't reset liveUpdateInFlight here — if a call is already
+    // in flight it will finish on its own and check liveUpdateQueued (now
+    // false) so it won't start a follow-up.
   }
 
   async function flushPendingPersist(): Promise<void> {
@@ -284,6 +298,15 @@ export function createTypstEditorContext(): TypstEditorContext {
     }
   }
 
+  /**
+   * Schedule a live update broadcast for the given block.
+   *
+   * Throttled at LIVE_UPDATE_THROTTLE ms.  Only one network call is in
+   * flight at a time — if edits arrive while a call is pending, we set a
+   * flag and fire a follow-up immediately after the current call completes.
+   * This prevents out-of-order delivery which would cause the receiver to
+   * see content flip-flop between old and new states.
+   */
   function scheduleLiveUpdate(
     docId: string,
     blockId: number,
@@ -292,27 +315,60 @@ export function createTypstEditorContext(): TypstEditorContext {
     // Skip temp IDs — block doesn't exist on backend yet
     if (blockId < 0) return;
 
+    // If we switched blocks, cancel any pending timer for the old block.
     if (liveUpdateTimeout && liveUpdateBlockId !== blockId) {
       clearTimeout(liveUpdateTimeout);
       liveUpdateTimeout = null;
     }
+
+    // If a call is currently in flight, just flag that we need a follow-up
+    // once it completes.  The follow-up will read the latest blockData.
+    if (liveUpdateInFlight) {
+      liveUpdateQueued = true;
+      liveUpdateBlockId = blockId;
+      return;
+    }
+
     if (liveUpdateTimeout) return; // Already scheduled for this block
 
     liveUpdateBlockId = blockId;
-    liveUpdateTimeout = setTimeout(async () => {
+    liveUpdateTimeout = setTimeout(() => {
       liveUpdateTimeout = null;
       liveUpdateBlockId = null;
-      if (lockedBlockId !== blockId) return;
-      // Read the LATEST content when the timeout fires, not the stale
-      // content from when scheduleLiveUpdate was first called.
-      const managed = blockData.get(blockId);
-      if (!managed) return;
-      try {
-        await BlockService.updateLiveBlock(docId, blockId, managed.block);
-      } catch (err) {
-        console.error("[typst] Failed to update live block:", err);
-      }
+      sendLiveUpdate(docId, blockId);
     }, LIVE_UPDATE_THROTTLE);
+  }
+
+  /**
+   * Actually send the live update.  Serialised: only one call at a time.
+   * If edits arrived while we were in flight (liveUpdateQueued), we
+   * immediately send another update with the latest content on completion.
+   */
+  async function sendLiveUpdate(docId: string, blockId: number): Promise<void> {
+    if (lockedBlockId !== blockId) return;
+    const managed = blockData.get(blockId);
+    if (!managed) return;
+
+    liveUpdateInFlight = true;
+    try {
+      await BlockService.updateLiveBlock(docId, blockId, managed.block);
+    } catch (err) {
+      console.error("[typst] Failed to update live block:", err);
+    } finally {
+      liveUpdateInFlight = false;
+    }
+
+    // If edits came in while we were in flight, send a follow-up immediately
+    // with the latest content (no throttle delay — the in-flight wait already
+    // served as a natural rate limit).
+    if (liveUpdateQueued) {
+      liveUpdateQueued = false;
+      // The block may have changed while we were in flight (user moved to
+      // a different line).  Re-check that we still hold the lock for it.
+      const currentBlock = liveUpdateBlockId ?? blockId;
+      liveUpdateBlockId = null;
+      sendLiveUpdate(docId, currentBlock);
+    }
   }
 
   function schedulePersist(docId: string, blockId: number, block: Block): void {
@@ -329,10 +385,33 @@ export function createTypstEditorContext(): TypstEditorContext {
 
   // ===== Lock management =====
 
+  /**
+   * (Re)start the inactivity timer.  Called on every local edit so the lock
+   * stays alive while the user is typing.  When the timer fires (after
+   * LOCK_INACTIVITY_MS of silence), the lock is released automatically.
+   */
+  function resetLockInactivityTimer(): void {
+    if (lockInactivityTimer) clearTimeout(lockInactivityTimer);
+    if (lockedBlockId === null) return; // Nothing to time out
+    lockInactivityTimer = setTimeout(() => {
+      lockInactivityTimer = null;
+      releaseCurrentLock();
+    }, LOCK_INACTIVITY_MS);
+  }
+
+  /** Cancel the inactivity timer (lock was released or context is cleaning up). */
+  function clearLockInactivityTimer(): void {
+    if (lockInactivityTimer) {
+      clearTimeout(lockInactivityTimer);
+      lockInactivityTimer = null;
+    }
+  }
+
   async function releaseCurrentLock(): Promise<void> {
     if (lockedBlockId === null || !currentDocId) return;
     const lockId = lockedBlockId;
 
+    clearLockInactivityTimer();
     cancelPendingLiveUpdate();
     await flushPendingPersist();
     lockedBlockId = null;
@@ -355,6 +434,10 @@ export function createTypstEditorContext(): TypstEditorContext {
    * Try to acquire a lock on the block at the given 0-based line index.
    * Returns true if the lock was acquired (or we already held it).
    *
+   * Only works with real (positive) block IDs.  Temp IDs (negative, pending
+   * creation) are skipped — the lock will be acquired naturally on the next
+   * keystroke after createBlockAsync resolves and swaps the temp→real ID.
+   *
    * Uses a generation counter to handle rapid consecutive calls: after each
    * await, if a newer tryLockLine call has started, this one aborts.
    */
@@ -366,7 +449,7 @@ export function createTypstEditorContext(): TypstEditorContext {
 
     if (lockedBlockId === blockId) return true; // Already locked
 
-    // Check if locked by another user (sync check)
+    // Check if locked by another user
     const live = liveInfo.get(blockId);
     if (live?.state === "locked") {
       return false;
@@ -518,6 +601,35 @@ export function createTypstEditorContext(): TypstEditorContext {
       blockData.delete(tempId);
       pendingCreations.delete(tempId);
 
+      // --- Auto-lock and broadcast after temp→real swap ---
+      // If the user's cursor is currently on this newly-resolved line and
+      // we don't already hold a lock on it, immediately acquire the lock
+      // and broadcast the current content as a live update.  Without this,
+      // keystrokes that landed while the block was still a temp ID would
+      // only be persisted (above) but never live-broadcast — the other
+      // user wouldn't see them until the next sync cycle.
+      if (editorView && currentDocId === docId) {
+        const resolvedLineIdx = lineMap.getLineIndex(realId);
+        if (resolvedLineIdx !== undefined) {
+          const mainSel = editorView.state.selection.main;
+          const cursorLineIdx =
+            editorView.state.doc.lineAt(mainSel.head).number - 1;
+
+          if (cursorLineIdx === resolvedLineIdx && lockedBlockId !== realId) {
+            // Fire-and-forget: acquire lock, then broadcast current content.
+            // The lockGeneration counter handles races with concurrent
+            // tryLockLine calls from handleDocChanged.
+            tryLockLine(resolvedLineIdx).then((acquired) => {
+              if (!acquired) return;
+              const latestManaged = blockData.get(realId);
+              if (latestManaged && currentDocId) {
+                scheduleLiveUpdate(currentDocId, realId, latestManaged.block);
+              }
+            });
+          }
+        }
+      }
+
       return realId;
     })();
 
@@ -574,21 +686,29 @@ export function createTypstEditorContext(): TypstEditorContext {
       applyChangeRegion(region);
     }
 
-    // After processing changes, try to lock the cursor's line.
-    // Only acquire a lock if we don't hold ANY lock yet. If we already have
-    // a lock on a different line, keep it — the user is still editing and
-    // the lock will naturally move on the next change to a different line.
-    if (lockedBlockId === null) {
-      const mainSel = update.state.selection.main;
-      const cursorLine = update.state.doc.lineAt(mainSel.head).number;
-      const cursorLineIdx = cursorLine - 1;
-      const cursorBlockId = lineMap.getBlockId(cursorLineIdx);
+    // After processing changes, ensure the cursor's line is locked.
+    // If the user moved to a different line and started typing, release the
+    // old lock and acquire on the new line.  tryLockLine handles releasing
+    // the previous lock internally via releaseCurrentLock.
+    const mainSel = update.state.selection.main;
+    const cursorLine = update.state.doc.lineAt(mainSel.head).number;
+    const cursorLineIdx = cursorLine - 1;
+    const cursorBlockId = lineMap.getBlockId(cursorLineIdx);
 
-      if (cursorBlockId !== undefined && cursorBlockId > 0) {
-        // Fire and forget — lock acquisition is best-effort
-        tryLockLine(cursorLineIdx);
-      }
+    if (
+      cursorBlockId !== undefined &&
+      cursorBlockId > 0 &&
+      cursorBlockId !== lockedBlockId
+    ) {
+      // Fire and forget — lock acquisition is best-effort.
+      // Skip temp IDs (negative) — tryLockLine would reject them anyway,
+      // but this avoids the overhead of an unnecessary async call.
+      tryLockLine(cursorLineIdx);
     }
+
+    // Reset the inactivity timer on every local edit so the lock stays
+    // alive while the user is actively typing.
+    resetLockInactivityTimer();
   }
 
   /**
@@ -905,8 +1025,11 @@ export function createTypstEditorContext(): TypstEditorContext {
         liveBlockTouched.delete(id);
       }
 
-      // Apply to CM6: replace entire document content in a single transaction.
-      // This is the safest approach — no concerns about change ordering.
+      // Apply to CM6 using a minimal diff so only actually-changed ranges
+      // are dispatched.  This avoids a full-document re-render which causes
+      // visible flickering on lines receiving live updates (the grace period
+      // preserves the correct text, but the nuclear replace still triggers
+      // CM6 to re-render every line).
       if (!editorView) {
         lineMap.initialize(newBlockIds);
         return;
@@ -917,10 +1040,45 @@ export function createTypstEditorContext(): TypstEditorContext {
       const currentText = doc.toString();
 
       if (desiredText !== currentText) {
-        editorView.dispatch({
-          changes: {from: 0, to: doc.length, insert: desiredText},
-          annotations: isRemoteChange.of(true),
-        });
+        // Find common prefix
+        const minLen = Math.min(currentText.length, desiredText.length);
+        let prefixLen = 0;
+        while (
+          prefixLen < minLen &&
+          currentText[prefixLen] === desiredText[prefixLen]
+        ) {
+          prefixLen++;
+        }
+
+        // Find common suffix (must not overlap with the prefix)
+        let suffixLen = 0;
+        const maxSuffix = Math.min(
+          currentText.length - prefixLen,
+          desiredText.length - prefixLen
+        );
+        while (
+          suffixLen < maxSuffix &&
+          currentText[currentText.length - 1 - suffixLen] ===
+            desiredText[desiredText.length - 1 - suffixLen]
+        ) {
+          suffixLen++;
+        }
+
+        const from = prefixLen;
+        const to = currentText.length - suffixLen;
+        const insert = desiredText.slice(
+          prefixLen,
+          desiredText.length - suffixLen
+        );
+
+        // Only dispatch if there is an actual change (the diff may be empty
+        // if the grace period preserved identical text for every block).
+        if (from !== to || insert.length > 0) {
+          editorView.dispatch({
+            changes: {from, to, insert},
+            annotations: isRemoteChange.of(true),
+          });
+        }
       }
 
       // Update lineMap atomically
@@ -1067,6 +1225,7 @@ export function createTypstEditorContext(): TypstEditorContext {
 
   async function cleanup(): Promise<void> {
     await releaseCurrentLock();
+    clearLockInactivityTimer();
     teardownEventListeners();
 
     if (liveUpdateTimeout) {
