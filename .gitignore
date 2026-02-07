@@ -14,6 +14,7 @@ ehthumbs.db
 .settings/
 
 # --- Temporary Files ---
+tmp/
 *.tmp
 *.temp
 *.swp

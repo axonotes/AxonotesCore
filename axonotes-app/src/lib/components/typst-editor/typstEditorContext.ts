@@ -13,7 +13,7 @@
  */
 
 import {getContext, setContext} from "svelte";
-import {Annotation} from "@codemirror/state";
+import {Annotation, StateEffect} from "@codemirror/state";
 import type {EditorView, ViewUpdate} from "@codemirror/view";
 import {listen, type UnlistenFn} from "@tauri-apps/api/event";
 import {
@@ -35,8 +35,36 @@ const LIVE_UPDATE_THROTTLE = 100;
 const PERSIST_DEBOUNCE = 300;
 const RELEASE_WINDOW_MS = 50;
 
+/**
+ * Grace period (ms) after the last live block update during which we trust the
+ * local content over the persisted server data.  Sync updates will skip blocks
+ * that were live-updated within this window, preventing stale persisted data
+ * from overwriting the fresher live content.
+ *
+ * 60 seconds is conservative — the persist debounce is 300 ms and the final
+ * persist fires synchronously on lock release, so the server usually catches up
+ * within a second.  The long grace period just adds safety margin.
+ */
+const LIVE_BLOCK_GRACE_MS = 60_000;
+
 /** CM6 annotation to mark transactions dispatched by remote sync. */
 export const isRemoteChange = Annotation.define<boolean>();
+
+// ========== CM6 Effects for Lock Decorations ==========
+
+/** Per-line lock/focus info pushed into CM6 for decoration rendering. */
+export interface LineLockState {
+  lineIndex: number; // 0-based
+  color: string;
+  username: string;
+  kind: "other-locked" | "other-focused" | "own-locked" | "own-focused";
+}
+
+/** Effect to update the set of locked/focused lines in the CM6 state. */
+export const setLineLocks = StateEffect.define<LineLockState[]>();
+
+/** Effect to flash a set of lines (rejected edit feedback). */
+export const flashLines = StateEffect.define<number[]>(); // 0-based line indices
 
 // ========== Types ==========
 
@@ -63,6 +91,7 @@ export interface TypstEditorContext {
   handleBlur: () => Promise<void>;
   isLineLockedByOther: (lineIndex: number) => boolean;
   getLineLockInfo: (lineIndex: number) => LiveBlockInfo | null;
+  flashLockedLines: (lineIndices: number[]) => void;
 }
 
 // ========== Fractional Indexing ==========
@@ -125,6 +154,13 @@ export function createTypstEditorContext(): TypstEditorContext {
   const blockData = new Map<number, ManagedBlock>();
   const liveInfo = new Map<number, LiveBlockInfo>();
 
+  /**
+   * Tracks when each block last received a live block update (timestamp).
+   * While a block is within the grace period, applySyncUpdate will use the
+   * local blockData content instead of the (potentially stale) server data.
+   */
+  const liveBlockTouched = new Map<number, number>();
+
   // Locking
   let lockedBlockId: number | null = null;
   let lockGeneration: number = 0; // Incremented on each tryLockLine call
@@ -147,7 +183,63 @@ export function createTypstEditorContext(): TypstEditorContext {
   // Cancelled temp IDs (creation should be a no-op on resolve)
   const cancelledCreations = new Set<number>();
 
+  // Current focused line (0-based), tracked for focus indicator
+  let focusedLineIndex: number | null = null;
+
   // ===== CM6 helpers =====
+
+  /**
+   * Push the current lock/focus state into CM6 via a StateEffect.
+   * Called whenever liveInfo, lockedBlockId, or focusedLineIndex changes.
+   */
+  function pushLockDecorations(): void {
+    if (!editorView) return;
+
+    const states: LineLockState[] = [];
+
+    // Other users' locks/focuses from liveInfo
+    for (const [blockId, info] of liveInfo) {
+      const lineIdx = lineMap.getLineIndex(blockId);
+      if (lineIdx === undefined) continue;
+      states.push({
+        lineIndex: lineIdx,
+        color: info.color,
+        username: info.username,
+        kind: info.state === "locked" ? "other-locked" : "other-focused",
+      });
+    }
+
+    // Own locked line
+    if (lockedBlockId !== null) {
+      const lineIdx = lineMap.getLineIndex(lockedBlockId);
+      if (lineIdx !== undefined) {
+        states.push({
+          lineIndex: lineIdx,
+          color: "var(--primary)",
+          username: "",
+          kind: "own-locked",
+        });
+      }
+    }
+
+    // Own focused line (only if not already locked)
+    if (
+      focusedLineIndex !== null &&
+      (lockedBlockId === null ||
+        lineMap.getLineIndex(lockedBlockId) !== focusedLineIndex)
+    ) {
+      states.push({
+        lineIndex: focusedLineIndex,
+        color: "var(--primary)",
+        username: "",
+        kind: "own-focused",
+      });
+    }
+
+    editorView.dispatch({
+      effects: setLineLocks.of(states),
+    });
+  }
 
   /**
    * Dispatch a remote text change for a single line into CM6.
@@ -244,6 +336,7 @@ export function createTypstEditorContext(): TypstEditorContext {
     cancelPendingLiveUpdate();
     await flushPendingPersist();
     lockedBlockId = null;
+    pushLockDecorations();
 
     // Don't try to release temp IDs (block doesn't exist on backend)
     if (lockId < 0) return;
@@ -291,10 +384,12 @@ export function createTypstEditorContext(): TypstEditorContext {
     if (myGen !== lockGeneration) return false;
 
     lockedBlockId = blockId;
+    pushLockDecorations();
 
     const managed = blockData.get(blockId);
     if (!managed) {
       lockedBlockId = null;
+      pushLockDecorations();
       return false;
     }
 
@@ -319,6 +414,7 @@ export function createTypstEditorContext(): TypstEditorContext {
       // Only clear if we're still the active generation
       if (myGen === lockGeneration) {
         lockedBlockId = null;
+        pushLockDecorations();
       }
       return false;
     }
@@ -617,7 +713,25 @@ export function createTypstEditorContext(): TypstEditorContext {
           if (lineIdx !== undefined) {
             remoteSetLineText(lineIdx + 1, lb.content.text);
           }
+
+          // Keep blockData in sync with the live content so that
+          // applySyncUpdate can use the local value instead of the
+          // (potentially stale) persisted server data.
+          const managed = blockData.get(lb.block_id);
+          if (managed) {
+            blockData.set(lb.block_id, {
+              id: lb.block_id,
+              block: {...managed.block, text: lb.content.text},
+            });
+          }
+
+          // Mark this block as recently live-updated.  applySyncUpdate
+          // will defer to the local content while the grace period is active.
+          liveBlockTouched.set(lb.block_id, Date.now());
         }
+
+        // Update decorations to reflect the new lock state
+        pushLockDecorations();
       }
     );
 
@@ -636,6 +750,7 @@ export function createTypstEditorContext(): TypstEditorContext {
         const timeout = setTimeout(() => {
           pendingReleases.delete(blockId);
           liveInfo.delete(blockId);
+          pushLockDecorations();
         }, RELEASE_WINDOW_MS);
 
         pendingReleases.set(blockId, timeout);
@@ -725,6 +840,18 @@ export function createTypstEditorContext(): TypstEditorContext {
         }
       }
 
+      // Prune expired entries and build a set of blocks still in the grace
+      // period so we can skip them below in O(1).
+      const now = Date.now();
+      const graceBlockIds = new Set<number>();
+      for (const [blockId, touchedAt] of liveBlockTouched) {
+        if (now - touchedAt >= LIVE_BLOCK_GRACE_MS) {
+          liveBlockTouched.delete(blockId);
+        } else {
+          graceBlockIds.add(blockId);
+        }
+      }
+
       // Build the new text lines array
       const newTexts: string[] = newBlockIds.map((id) => {
         if (id === lockedBlockId) {
@@ -737,23 +864,45 @@ export function createTypstEditorContext(): TypstEditorContext {
           const managed = blockData.get(id);
           return managed?.block.text ?? "";
         }
+        if (graceBlockIds.has(id)) {
+          // Block was recently live-updated — trust the local content
+          // (kept up-to-date by the live-block-updated handler) rather
+          // than the potentially stale persisted data from the server.
+          const managed = blockData.get(id);
+          if (managed) return managed.block.text ?? "";
+        }
         const fresh = freshMap.get(id);
         return fresh?.block.text ?? "";
       });
 
-      // Update blockData for all fresh blocks (except locked)
+      // Update blockData for all fresh blocks, but skip:
+      // - our own locked block (we hold the authoritative text)
+      // - blocks in the live grace period (live content is fresher)
       for (const fb of freshBlocks) {
         if (fb.id === lockedBlockId) continue;
+        if (graceBlockIds.has(fb.id)) {
+          // Merge non-text metadata (group_row, author, etc.) from the
+          // server while preserving the local live-updated text.
+          const managed = blockData.get(fb.id);
+          if (managed) {
+            blockData.set(fb.id, {
+              id: fb.id,
+              block: {...fb.block, text: managed.block.text},
+            });
+            continue;
+          }
+        }
         blockData.set(fb.id, fb);
       }
 
-      // Remove blockData entries for blocks no longer present
+      // Remove blockData entries for blocks no longer present on the server
       const removedIds = currentAllIds.filter(
         (id) => id > 0 && !freshIdSet.has(id) && id !== lockedBlockId
       );
       for (const id of removedIds) {
         blockData.delete(id);
         liveInfo.delete(id);
+        liveBlockTouched.delete(id);
       }
 
       // Apply to CM6: replace entire document content in a single transaction.
@@ -789,6 +938,9 @@ export function createTypstEditorContext(): TypstEditorContext {
         "[typst] Sync applied:",
         `+${addedCount} -${removedCount} ~${keptCount}`
       );
+
+      // Refresh decorations after lineMap changes
+      pushLockDecorations();
     } catch (err) {
       console.error("[typst] Failed to apply sync update:", err);
     }
@@ -906,6 +1058,10 @@ export function createTypstEditorContext(): TypstEditorContext {
       "chars"
     );
 
+    // Push initial lock decorations (other users' locks loaded from liveLocks)
+    // Deferred slightly so the CM6 view is ready
+    setTimeout(() => pushLockDecorations(), 0);
+
     return initialText;
   }
 
@@ -939,6 +1095,7 @@ export function createTypstEditorContext(): TypstEditorContext {
     lineMap.clear();
     blockData.clear();
     liveInfo.clear();
+    liveBlockTouched.clear();
     lockedBlockId = null;
   }
 
@@ -948,11 +1105,15 @@ export function createTypstEditorContext(): TypstEditorContext {
 
   /**
    * Handle cursor moving to a new line (1-based CM6 line number).
-   * Currently a no-op — lock acquisition is driven by handleDocChanged.
-   * Kept in the API for future use (e.g. focus-based locking).
+   * Updates the focus indicator (dotted border on the cursor's line).
+   * Lock acquisition is still driven by handleDocChanged — this only
+   * tracks focus for the visual indicator.
    */
-  function handleCursorLine(_lineNumber: number): void {
-    // No-op: lock acquisition happens in handleDocChanged when user edits
+  function handleCursorLine(lineNumber: number): void {
+    const newIdx = lineNumber - 1; // Convert to 0-based
+    if (newIdx === focusedLineIndex) return; // No change
+    focusedLineIndex = newIdx;
+    pushLockDecorations();
   }
 
   async function handleBlur(): Promise<void> {
@@ -972,6 +1133,17 @@ export function createTypstEditorContext(): TypstEditorContext {
     return liveInfo.get(blockId) ?? null;
   }
 
+  /**
+   * Flash the given lines to indicate a rejected edit.
+   * Dispatches a StateEffect that the decoration extension picks up.
+   */
+  function flashLockedLines(lineIndices: number[]): void {
+    if (!editorView || lineIndices.length === 0) return;
+    editorView.dispatch({
+      effects: flashLines.of(lineIndices),
+    });
+  }
+
   // ===== Build context =====
 
   const context: TypstEditorContext = {
@@ -983,6 +1155,7 @@ export function createTypstEditorContext(): TypstEditorContext {
     handleBlur,
     isLineLockedByOther,
     getLineLockInfo,
+    flashLockedLines,
   };
 
   setContext(TYPST_CONTEXT_KEY, context);
