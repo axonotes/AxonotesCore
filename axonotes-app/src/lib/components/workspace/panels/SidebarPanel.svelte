@@ -193,7 +193,7 @@
       const path = selected[0];
       const node = findNodeByPath(tree, path);
       if (node?.type === "file" && node.docId) {
-        openDocument(node.docId, node.name);
+        openDocument(node.docId, node.name, node.docType);
       } else if (node?.type === "folder") {
         toggleFolderExpanded(node.path);
       }
@@ -332,11 +332,18 @@
 
   function handleFileClick(node: TreeNode) {
     if (!node.docId) return;
-    openDocument(node.docId, node.name);
+    openDocument(node.docId, node.name, node.docType);
   }
 
-  function openDocument(docId: string, fileName: string) {
-    const panelType = fileName.endsWith(".typst") ? "typst-editor" : "editor";
+  function openDocument(docId: string, fileName: string, docType?: string) {
+    // Use docType from store metadata as primary source of truth.
+    // Fall back to file extension only when docType is unavailable.
+    let panelType: string;
+    if (docType) {
+      panelType = docType === "typst" ? "typst-editor" : "editor";
+    } else {
+      panelType = fileName.endsWith(".typst") ? "typst-editor" : "editor";
+    }
     addPanel(panelType, {
       id: `${panelType}-${docId}`,
       params: {docId, fileName},

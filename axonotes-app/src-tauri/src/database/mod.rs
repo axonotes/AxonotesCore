@@ -1589,6 +1589,77 @@ pub async fn get_conflict_history_by_doc(
 }
 
 // ========================================
+// Pending Doc Type Check Operations
+// ========================================
+
+/// Add a doc_id to the pending doc type check set (persisted to SQLite).
+pub async fn add_pending_doc_type_check(doc_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conn.execute(
+            "INSERT OR IGNORE INTO pending_doc_type_checks (doc_id) VALUES (?)",
+            rusqlite::params![doc_id],
+        )
+        .map_err(|e| format!("Failed to insert pending doc type check: {e}"))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Remove a doc_id from the pending doc type check set.
+pub async fn remove_pending_doc_type_check(doc_id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        conn.execute(
+            "DELETE FROM pending_doc_type_checks WHERE doc_id = ?",
+            rusqlite::params![doc_id],
+        )
+        .map_err(|e| format!("Failed to delete pending doc type check: {e}"))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Check if a doc_id is in the pending doc type check set.
+pub async fn is_pending_doc_type_check(doc_id: String) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = get_conn()?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pending_doc_type_checks WHERE doc_id = ?",
+                rusqlite::params![doc_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to query pending doc type check: {e}"))?;
+        Ok(count > 0)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Get all doc_ids that have pending doc type checks.
+pub async fn get_all_pending_doc_type_checks() -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(|| {
+        let conn = get_conn()?;
+        let mut stmt = conn
+            .prepare("SELECT doc_id FROM pending_doc_type_checks")
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+
+        let doc_ids = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("Failed to query pending doc type checks: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("Failed to collect doc_ids: {e}"))?;
+
+        Ok(doc_ids)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ========================================
 // Internal Helpers
 // ========================================
 

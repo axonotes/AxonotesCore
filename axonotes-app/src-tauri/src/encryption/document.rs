@@ -125,9 +125,27 @@ impl DecryptDocumentMetaAndKeyVec for Vec<DocumentMetadata> {
     type Output = Vec<DecryptedDocumentMetadata>;
 
     fn decrypt_all(self, private_key: &[u8; 32]) -> Result<Self::Output, String> {
-        self.into_iter()
-            .map(|meta| meta.decrypt(private_key))
-            .collect()
+        // Decrypt per-item, skipping entries that fail (e.g. old metadata
+        // encrypted before the `doc_type` field was added — postcard binary
+        // format can't deserialize them and would otherwise abort the entire
+        // batch). Each skipped entry is logged as a warning so it's visible
+        // but non-fatal.
+        let mut results = Vec::with_capacity(self.len());
+        for meta in self {
+            let doc_id = meta.doc_id.clone();
+            match meta.decrypt(private_key) {
+                Ok(decrypted) => results.push(decrypted),
+                Err(e) => {
+                    log::warn!(
+                        "[decrypt_all] Skipping metadata for doc {}: {} \
+                         (likely old format without doc_type field)",
+                        doc_id,
+                        e
+                    );
+                }
+            }
+        }
+        Ok(results)
     }
 }
 

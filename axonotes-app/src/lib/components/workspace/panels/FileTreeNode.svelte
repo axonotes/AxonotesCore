@@ -252,7 +252,11 @@
           <Folder class="text-muted-foreground h-4 w-4 shrink-0" />
         {:else}
           <span class="w-3 shrink-0"></span>
-          <FileText class="text-muted-foreground h-4 w-4 shrink-0" />
+          {#if node.docType === "typst"}
+            <FileCode class="text-muted-foreground h-4 w-4 shrink-0" />
+          {:else}
+            <FileText class="text-muted-foreground h-4 w-4 shrink-0" />
+          {/if}
         {/if}
         <input
           type="text"
@@ -299,7 +303,11 @@
               />
             {:else}
               <span class="w-3 shrink-0"></span>
-              <FileText class="text-muted-foreground h-4 w-4 shrink-0" />
+              {#if node.docType === "typst"}
+                <FileCode class="text-muted-foreground h-4 w-4 shrink-0" />
+              {:else}
+                <FileText class="text-muted-foreground h-4 w-4 shrink-0" />
+              {/if}
             {/if}
             <span
               class="truncate {node.isTemporary

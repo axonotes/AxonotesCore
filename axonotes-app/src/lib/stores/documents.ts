@@ -695,6 +695,7 @@ export interface TreeNode {
   type: "folder" | "file";
   path: string;
   docId?: string; // Only for files
+  docType?: string; // Only for files: "doc" or "typst"
   isTemporary?: boolean; // Only for temporary folders
   children: TreeNode[];
 }
@@ -779,6 +780,7 @@ export function buildTree(
       type: "file",
       path: doc.path,
       docId: doc.docId,
+      docType: doc.docType,
       children: [],
     };
     nodeMap.set(doc.path, fileNode);

@@ -122,6 +122,49 @@ pub fn setup_batch_sync(conn: &DbConnection, start_time: u128) -> Result<(), Str
     Ok(())
 }
 
+/// Subscribes to ALL batches (no timestamp filter) for specific documents.
+///
+/// Used when a shared document's batches were missed by the initial
+/// timestamp-filtered subscription. The on_insert callback (already
+/// registered by `setup_batch_sync`) handles decrypting and saving
+/// incoming batches, so this only needs to subscribe.
+///
+/// # Arguments
+///
+/// * `conn` - Active SpacetimeDB connection
+/// * `doc_ids` - Document IDs to fetch all batches for
+pub fn subscribe_all_batches_for_docs(
+    conn: &DbConnection,
+    doc_ids: &[String],
+) -> Result<(), String> {
+    if doc_ids.is_empty() {
+        return Ok(());
+    }
+
+    // Build per-doc subscription queries with no timestamp filter.
+    // SpacetimeDB subscriptions are additive — this won't replace the
+    // existing timestamp-filtered subscription.
+    let queries: Vec<String> = doc_ids
+        .iter()
+        .map(|doc_id| format!("SELECT * FROM accessible_batches WHERE doc_id = '{doc_id}'"))
+        .collect();
+
+    let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
+
+    conn.subscription_builder()
+        .on_applied(|_ctx| {
+            log::debug!(
+                "[batch_sync] Supplemental batch subscription applied (unfiltered by timestamp)"
+            );
+        })
+        .on_error(|_error_ctx, error| {
+            log::warn!("[batch_sync] Supplemental batch subscription error: {error:?}");
+        })
+        .subscribe(query_refs);
+
+    Ok(())
+}
+
 // ==========================================
 // Public API
 // ==========================================

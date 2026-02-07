@@ -330,6 +330,21 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     )?;
 
     // ========================================
+    // Pending Doc Type Checks
+    // ========================================
+
+    // Tracks shared documents whose doc_type couldn't be resolved at metadata
+    // creation time (batches hadn't synced yet). Persisted to survive app restarts.
+    // When batches arrive for these doc_ids, the real doc_type is read from
+    // MetadataV1 blocks and the user's per-user metadata is updated.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS pending_doc_type_checks (
+            doc_id TEXT PRIMARY KEY
+        )",
+        [],
+    )?;
+
+    // ========================================
     // Sync Conflict Tables
     // ========================================
 

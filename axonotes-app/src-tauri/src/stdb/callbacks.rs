@@ -75,20 +75,12 @@ const SUBSCRIPTION_TIMEOUT_MS: u64 = 10_000;
 /// is released or re-acquired.
 static EXPIRED_LOCKS: OnceCell<Arc<Mutex<HashSet<String>>>> = OnceCell::new();
 
-/// Track shared documents whose `doc_type` couldn't be resolved at metadata
-/// creation time (batches hadn't synced yet). When batches arrive for these
-/// doc_ids, we read the MetadataV1 blocks to determine the real doc_type and
-/// update the user's per-user metadata accordingly.
-static PENDING_DOC_TYPE_CHECKS: OnceCell<Arc<Mutex<HashSet<String>>>> = OnceCell::new();
+// Pending doc type checks are now persisted to SQLite instead of being held
+// in-memory. See database::add_pending_doc_type_check and friends.
+// This ensures they survive app restarts.
 
 fn get_expired_locks() -> Arc<Mutex<HashSet<String>>> {
     EXPIRED_LOCKS
-        .get_or_init(|| Arc::new(Mutex::new(HashSet::new())))
-        .clone()
-}
-
-fn get_pending_doc_type_checks() -> Arc<Mutex<HashSet<String>>> {
-    PENDING_DOC_TYPE_CHECKS
         .get_or_init(|| Arc::new(Mutex::new(HashSet::new())))
         .clone()
 }
@@ -732,6 +724,16 @@ pub fn on_subscription_applied(ctx: &SubscriptionEventContext) {
 
     // Signal that subscriptions are ready
     signal_subscription_ready();
+
+    // Retry any pending doc_type checks that survived from a previous session.
+    // These are documents whose doc_type couldn't be determined at metadata
+    // creation time because batches hadn't synced yet.
+    std::thread::spawn(|| {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        rt.block_on(async {
+            resolve_all_pending_doc_type_checks().await;
+        });
+    });
 }
 
 #[allow(clippy::needless_pass_by_value)] // Signature constrained by SpacetimeDB callback API
@@ -784,17 +786,24 @@ async fn create_default_metadata_if_missing(doc_id: &str) -> Result<(), String> 
     // Try to determine the document type from block content.
     // The creator writes a MetadataV1 block with field="doc_type".
     let doc_type = match read_doc_type_from_blocks(doc_id).await {
-        Some(dt) => dt,
-        None => {
-            // Batches haven't synced yet — defer the check.
+        DocTypeFromBlocks::Found(dt) => dt,
+        DocTypeFromBlocks::NoBatches | DocTypeFromBlocks::NotFound => {
+            // Either no batches yet, or batches exist but the doc_type block
+            // hasn't been saved to local SQLite yet (race condition with
+            // parallel batch sync). Defer the check.
             // When batches arrive for this doc_id, resolve_pending_doc_type()
             // will re-read the blocks and update the metadata.
+            // Persisted to SQLite so it survives app restarts.
             log::debug!(
-                "[callback] Batches not available yet for {}, deferring doc_type resolution",
+                "[callback] doc_type not resolvable yet for {}, deferring resolution",
                 doc_id
             );
-            if let Ok(mut pending) = get_pending_doc_type_checks().lock() {
-                pending.insert(doc_id.to_string());
+            if let Err(e) = crate::database::add_pending_doc_type_check(doc_id.to_string()).await {
+                log::warn!(
+                    "[callback] Failed to persist pending doc_type check for {}: {}",
+                    doc_id,
+                    e
+                );
             }
             crate::encryption::document::DOC_TYPE_DOC.to_string()
         }
@@ -868,22 +877,32 @@ fn find_unique_shared_path_with_ext(
     format!("{}/{} ({}){}", folder, base_name, ts, extension)
 }
 
+/// Result of reading doc_type from a document's block data.
+enum DocTypeFromBlocks {
+    /// No batches in local storage yet — can't determine doc_type.
+    NoBatches,
+    /// Batches exist but no MetadataV1 block with field="doc_type" was found.
+    /// This could mean:
+    ///   - Only partial batches have been saved (the doc_type block is still in flight)
+    ///   - A pre-existing document created before doc_type was introduced
+    NotFound,
+    /// Explicit doc_type found in a MetadataV1 block.
+    Found(String),
+}
+
 /// Tries to read the `doc_type` from a document's MetadataV1 blocks.
-///
-/// Returns `Some("typst")` or `Some("doc")` if a MetadataV1 block with
-/// `field: "doc_type"` is found in local storage, or `None` if batches
-/// haven't been synced yet.
-async fn read_doc_type_from_blocks(doc_id: &str) -> Option<String> {
+async fn read_doc_type_from_blocks(doc_id: &str) -> DocTypeFromBlocks {
     use crate::batch_handler::block_getter;
     use crate::batch_handler::block_types::BlockContent;
 
     // Get all block IDs for this document from local DB
-    let batches = crate::database::get_batches_by_doc(doc_id.to_string())
-        .await
-        .ok()?;
+    let batches = match crate::database::get_batches_by_doc(doc_id.to_string()).await {
+        Ok(b) => b,
+        Err(_) => return DocTypeFromBlocks::NoBatches,
+    };
 
     if batches.is_empty() {
-        return None;
+        return DocTypeFromBlocks::NoBatches;
     }
 
     let block_ids: std::collections::HashSet<u64> =
@@ -891,50 +910,185 @@ async fn read_doc_type_from_blocks(doc_id: &str) -> Option<String> {
     let block_ids: Vec<u64> = block_ids.into_iter().collect();
 
     // Reconstruct all blocks at latest timestamp
-    let doc_data = block_getter::get_blocks(doc_id.to_string(), block_ids, u128::MAX)
-        .await
-        .ok()?;
+    let doc_data = match block_getter::get_blocks(doc_id.to_string(), block_ids, u128::MAX).await {
+        Ok(d) => d,
+        Err(_) => return DocTypeFromBlocks::NoBatches,
+    };
 
-    // Look for a MetadataV1 block with field="doc_type"
+    // Look for a MetadataV1 block with field="doc_type".
+    // Also track if we find a "title" block — both "title" and "doc_type"
+    // are created together in create_document. If "title" exists but
+    // "doc_type" doesn't, it's a pre-existing document from before
+    // doc_type was introduced (not a partial-sync race condition).
+    let mut found_title = false;
     for block_data in &doc_data.blocks {
         if let BlockContent::MetadataV1(meta) = &block_data.block.content {
-            if meta.field == "doc_type" {
-                if let Some(dt) = meta.value.as_str() {
-                    return Some(dt.to_string());
+            match meta.field.as_str() {
+                "doc_type" => {
+                    if let Some(dt) = meta.value.as_str() {
+                        return DocTypeFromBlocks::Found(dt.to_string());
+                    }
                 }
+                "title" => {
+                    found_title = true;
+                }
+                _ => {}
             }
         }
     }
 
-    // Batches exist but no doc_type block found — this is a pre-existing
-    // document created before doc_type was introduced. Default to "doc".
-    Some(crate::encryption::document::DOC_TYPE_DOC.to_string())
+    if found_title {
+        // Title block exists but doc_type block doesn't → pre-existing
+        // document created before doc_type was introduced. Default to "doc".
+        DocTypeFromBlocks::Found(crate::encryption::document::DOC_TYPE_DOC.to_string())
+    } else {
+        // Neither title nor doc_type found — batches are still partial
+        // (the MetadataV1 blocks haven't been saved yet).
+        DocTypeFromBlocks::NotFound
+    }
+}
+
+/// Resolves all pending doc_type checks that were persisted to SQLite.
+/// Called on subscription applied to handle checks that survived app restarts.
+///
+/// For documents where batches haven't arrived yet (e.g. the timestamp-filtered
+/// subscription missed them), subscribes to those documents' batches without
+/// a timestamp filter. The existing `on_insert` callback will then pick up
+/// the batches and call `resolve_pending_doc_type` for each.
+async fn resolve_all_pending_doc_type_checks() {
+    let pending = match crate::database::get_all_pending_doc_type_checks().await {
+        Ok(ids) => ids,
+        Err(e) => {
+            log::warn!("[callback] Failed to load pending doc_type checks: {}", e);
+            return;
+        }
+    };
+
+    if pending.is_empty() {
+        return;
+    }
+
+    log::info!(
+        "[callback] Retrying {} pending doc_type checks from previous session",
+        pending.len()
+    );
+
+    // First pass: try to resolve with locally available batches
+    let mut still_pending = Vec::new();
+    for doc_id in &pending {
+        resolve_pending_doc_type(doc_id).await;
+
+        // Check if it's still pending (couldn't resolve — batches not available)
+        match crate::database::is_pending_doc_type_check(doc_id.clone()).await {
+            Ok(true) => still_pending.push(doc_id.clone()),
+            _ => {} // Resolved or error checking — either way, skip
+        }
+    }
+
+    // Second pass: for documents whose batches are still missing, subscribe
+    // to ALL their batches (no timestamp filter) so they arrive via on_insert.
+    // The on_insert callback will call resolve_pending_doc_type for each batch.
+    if !still_pending.is_empty() {
+        log::info!(
+            "[callback] {} pending doc_type checks still unresolved, subscribing to their batches",
+            still_pending.len()
+        );
+
+        // Get active profile to find the connection
+        let profile_id = match crate::database::get_active_profile().await {
+            Ok(Some(p)) => p.id,
+            _ => {
+                log::warn!("[callback] No active profile, can't subscribe to pending doc batches");
+                return;
+            }
+        };
+
+        let conn_arc = match stdb::get_connection_for_profile(&profile_id).await {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!(
+                    "[callback] Can't get STDB connection for pending batch fetch: {}",
+                    e
+                );
+                return;
+            }
+        };
+
+        let conn = conn_arc.lock().await;
+        if let Err(e) =
+            crate::batch_handler::sync::subscribe_all_batches_for_docs(&conn, &still_pending)
+        {
+            log::warn!(
+                "[callback] Failed to subscribe to pending doc batches: {}",
+                e
+            );
+        }
+    }
 }
 
 /// Called after a batch is synced for a document. If that document has a
 /// pending doc_type check, resolves the type and updates per-user metadata.
+///
+/// There are three possible outcomes from `read_doc_type_from_blocks`:
+///
+/// - `Found("typst")` — explicit doc_type block found. Update metadata,
+///   remove pending check.
+/// - `Found("doc")` — explicit doc_type block found with value "doc".
+///   Already correct, just remove pending check.
+/// - `NotFound` — batches exist but the doc_type MetadataV1 block hasn't
+///   been saved yet (race condition: only partial batches in local SQLite).
+///   Keep the pending check so the next batch sync retries.
+/// - `NoBatches` — no batches at all. Keep pending for later.
 pub async fn resolve_pending_doc_type(doc_id: &str) {
     use crate::encryption::document::DecryptedMetadata;
     use crate::utils::vec_array::ByteArrayConversion;
 
-    // Check if this doc_id is in the pending set
-    let is_pending = match get_pending_doc_type_checks().lock() {
-        Ok(set) => set.contains(doc_id),
-        Err(_) => return,
-    };
+    // Check if this doc_id is in the pending set (persisted in SQLite)
+    let is_pending = crate::database::is_pending_doc_type_check(doc_id.to_string())
+        .await
+        .unwrap_or(false);
     if !is_pending {
         return;
     }
 
     // Try to read the doc_type now that batches may be available
-    let Some(doc_type) = read_doc_type_from_blocks(doc_id).await else {
-        return; // Still no batches — will retry on next batch sync
+    let doc_type = match read_doc_type_from_blocks(doc_id).await {
+        DocTypeFromBlocks::Found(dt) => dt,
+        DocTypeFromBlocks::NoBatches => {
+            // Still no batches at all — will retry on next batch sync
+            log::debug!(
+                "[callback] resolve_pending_doc_type({}): still no batches, keeping pending",
+                doc_id
+            );
+            return;
+        }
+        DocTypeFromBlocks::NotFound => {
+            // Batches exist but the doc_type MetadataV1 block wasn't found.
+            // This is likely a race condition — only some batches have been
+            // saved to local SQLite, and the doc_type block is in another
+            // batch that hasn't been saved yet. Keep the pending check.
+            log::debug!(
+                "[callback] resolve_pending_doc_type({}): batches exist but doc_type block not found yet, keeping pending",
+                doc_id
+            );
+            return;
+        }
     };
 
-    // Remove from pending set
-    if let Ok(mut set) = get_pending_doc_type_checks().lock() {
-        set.remove(doc_id);
+    // We found an explicit doc_type. Remove from pending set.
+    if let Err(e) = crate::database::remove_pending_doc_type_check(doc_id.to_string()).await {
+        log::warn!(
+            "[callback] Failed to remove pending doc_type check for {}: {}",
+            doc_id,
+            e
+        );
     }
+
+    log::info!(
+        "[callback] resolve_pending_doc_type({}): resolved to \"{}\"",
+        doc_id,
+        doc_type
+    );
 
     // If it resolved to "doc" (the default we already set), nothing to update
     if doc_type == crate::encryption::document::DOC_TYPE_DOC {
@@ -952,6 +1106,16 @@ pub async fn resolve_pending_doc_type(doc_id: &str) {
             Ok(Some(m)) => m,
             _ => return,
         };
+
+    // If metadata already has the correct doc_type, no update needed
+    if current_meta.metadata.doc_type == doc_type {
+        log::debug!(
+            "[callback] resolve_pending_doc_type({}): metadata already has correct doc_type \"{}\"",
+            doc_id,
+            doc_type
+        );
+        return;
+    }
 
     // Update path extension from .doc to the correct one
     let extension = match doc_type.as_str() {
@@ -972,7 +1136,7 @@ pub async fn resolve_pending_doc_type(doc_id: &str) {
         version: current_meta.metadata.version,
         path: new_path.clone(),
         tags: current_meta.metadata.tags.clone(),
-        doc_type,
+        doc_type: doc_type.clone(),
     };
 
     // Encrypt and save locally + push to server
@@ -1001,7 +1165,7 @@ pub async fn resolve_pending_doc_type(doc_id: &str) {
 
     emit_document_metadata_updated(
         doc_id.to_string(),
-        new_path,
+        new_path.clone(),
         updated_metadata.tags.clone(),
         updated_metadata.doc_type.clone(),
     );
@@ -1016,8 +1180,10 @@ pub async fn resolve_pending_doc_type(doc_id: &str) {
         }
     }
 
-    log::debug!(
-        "[callback] Resolved deferred doc_type for document {}",
-        doc_id
+    log::info!(
+        "[callback] Resolved deferred doc_type for document {} → \"{}\" (path: {})",
+        doc_id,
+        doc_type,
+        new_path,
     );
 }
