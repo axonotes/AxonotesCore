@@ -26,6 +26,7 @@ mod batch_handler;
 mod commands;
 mod config;
 mod crypto;
+mod document_state;
 mod encryption;
 mod events;
 mod share;
@@ -126,6 +127,12 @@ pub fn run() {
             commands::storage_cmd::delete_cached_blobs_for_document,
             commands::storage_cmd::get_media_type_from_extension,
             commands::storage_cmd::get_mime_type,
+            commands::document_state_cmd::open_document,
+            commands::document_state_cmd::close_document,
+            commands::document_state_cmd::set_time,
+            commands::document_state_cmd::ds_update_block,
+            commands::document_state_cmd::ds_create_block,
+            commands::document_state_cmd::ds_delete_block,
             commands::workspace_cmd::create_workspace,
             commands::workspace_cmd::get_workspace,
             commands::workspace_cmd::list_workspaces,
@@ -151,6 +158,21 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                // Close all open documents to release locks and flush pending data.
+                // We use a blocking approach here because the app is shutting down
+                // and we need to ensure cleanup completes before exit.
+                let rt = tokio::runtime::Runtime::new().ok();
+                if let Some(rt) = rt {
+                    rt.block_on(async {
+                        if let Err(e) = document_state::handle::close_all_documents().await {
+                            eprintln!("Failed to close documents on exit: {e}");
+                        }
+                    });
+                }
+            }
+        });
 }

@@ -37,4 +37,5 @@ pub(crate) mod share_cmd;
 pub(crate) mod storage_cmd;
 pub(crate) mod sync_cmd;
 pub(crate) mod version_tag_cmd;
+pub(crate) mod document_state_cmd;
 pub(crate) mod workspace_cmd;

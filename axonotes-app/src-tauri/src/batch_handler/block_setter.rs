@@ -314,6 +314,34 @@ async fn run_finalization_task() {
 }
 
 // ==========================================
+// Public Utilities
+// ==========================================
+
+/// Force-flush any pending or in-progress data for a specific block.
+///
+/// This first processes any pending block through the throttle pipeline,
+/// then immediately finalizes the resulting batch. Used by `create_block`
+/// to ensure brand-new blocks are synced instantly — a new block is a single
+/// initial patch with nothing to coalesce, so the 500ms throttle window
+/// just adds latency for no benefit.
+pub async fn flush_block(doc_id: &str, block_id: u64) -> Result<(), String> {
+    let key = (doc_id.to_string(), block_id);
+
+    // Process any pending block first (skip the throttle timer)
+    if let Some((_, block)) = PENDING_BLOCKS.remove(&key) {
+        process_pending_block(&key, block).await?;
+    }
+
+    // Now finalize whatever is in the in-progress batch
+    finalize_batch(&key).await?;
+
+    // Clean up the active timer if one was started by update_block
+    ACTIVE_TIMERS.remove(&key);
+
+    Ok(())
+}
+
+// ==========================================
 // Testing Utilities
 // ==========================================
 

@@ -195,14 +195,17 @@ pub fn register_callbacks(conn: &DbConnection) {
                         Ok(decrypted) => {
                             // Emit live-block-updated with decrypted content
                             emit_live_block_updated(
-                                decrypted.live_block_id,
-                                decrypted.doc_id,
+                                decrypted.live_block_id.clone(),
+                                decrypted.doc_id.clone(),
                                 decrypted.block_id,
                                 decrypted.user_id.to_hex().to_string(),
-                                decrypted.username,
+                                decrypted.username.clone(),
                                 decrypted.locked_at,
-                                decrypted.content,
+                                decrypted.content.clone(),
                             );
+
+                            // Forward to document state system
+                            crate::document_state::handle::on_live_block_updated(decrypted).await;
                         }
                         Err(e) => {
                             log::warn!("[callback] Failed to decrypt live block: {}", e);
@@ -243,6 +246,20 @@ pub fn register_callbacks(conn: &DbConnection) {
                 live_block.block_id,
                 live_block.user_id.to_hex().to_string(),
             );
+
+            // Forward to document state system
+            let release_doc_id = live_block.doc_id.clone();
+            let release_block_id = live_block.block_id;
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+                rt.block_on(async move {
+                    crate::document_state::handle::on_live_block_released(
+                        release_doc_id,
+                        release_block_id,
+                    )
+                    .await;
+                });
+            });
 
             // Remove from expired set when deleted (sync, runs on STDB thread)
             let lock_id = live_block.live_block_id.clone();
@@ -569,6 +586,17 @@ async fn check_expired_locks() -> Result<(), String> {
                         block.block_id,
                         block.user_id.to_hex().to_string(),
                     );
+
+                    // Forward to document state system
+                    let expired_doc_id = block.doc_id.clone();
+                    let expired_block_id = block.block_id;
+                    tokio::spawn(async move {
+                        crate::document_state::handle::on_lock_expired(
+                            expired_doc_id,
+                            expired_block_id,
+                        )
+                        .await;
+                    });
                 }
             }
         }

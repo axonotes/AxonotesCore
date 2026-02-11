@@ -278,7 +278,13 @@ async fn sync_realtime_batch(stdb_batch: DocumentBatch) -> Result<(), String> {
     invalidate_block_cache(doc_id.clone(), block_id).await;
 
     // Emit sync completed event for frontend to refresh
-    emit_sync_completed(doc_id, 1);
+    emit_sync_completed(doc_id.clone(), 1);
+
+    // Forward to document state system
+    let sync_doc_id = doc_id;
+    tokio::spawn(async move {
+        crate::document_state::handle::on_sync_completed(sync_doc_id, 1).await;
+    });
 
     Ok(())
 }
@@ -430,7 +436,15 @@ async fn sync_batches_with_data(stdb_batches_unfiltered: Vec<DocumentBatch>) -> 
 
         // Emit sync completed for each document
         for doc_id in doc_ids {
-            emit_sync_completed(doc_id, batch_count);
+            emit_sync_completed(doc_id.clone(), batch_count);
+
+            // Forward to document state system
+            let sync_doc_id = doc_id;
+            let sync_batch_count = batch_count;
+            tokio::spawn(async move {
+                crate::document_state::handle::on_sync_completed(sync_doc_id, sync_batch_count)
+                    .await;
+            });
         }
     }
 
